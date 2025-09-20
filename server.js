@@ -1,7 +1,6 @@
-// server.js
 require('dotenv').config({ path: '.env.local' });
 
-const http = require('http');
+const https = require('https');
 const express = require('express');
 const { createProxyServer } = require('http-proxy');
 const { createClient } = require('@supabase/supabase-js');
@@ -20,71 +19,119 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const app = express();
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-const server = http.createServer(app);
+// Render handles SSL, so we use HTTPS
+const server = https.createServer(app);
 
-// http-proxy for websocketsa
 const proxy = createProxyServer({ ws: true, secure: false });
 
 proxy.on('error', (err, req, res) => {
-  console.error('Proxy error', err && err.message);
+  console.error('Proxy error for URL:', req.url, 'Error:', err.message, 'Stack:', err.stack);
   try {
     if (res && !res.headersSent) {
       res.writeHead && res.writeHead(502);
       res.end && res.end('Bad Gateway');
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('Error responding to proxy error:', e.message);
+  }
 });
 
-// upgrade handler
 server.on('upgrade', (req, socket, head) => {
   try {
-    if (!req.url || !req.url.startsWith('/ws/console/')) {
+    if (!req.url) {
+      console.warn('Invalid WebSocket URL:', req.url);
       socket.destroy();
       return;
     }
 
-    const parts = req.url.split('/');
-    const serverId = parts[parts.length - 1];
+    let target;
+    let serverId;
+
+    if (req.url.startsWith('/ws/console/')) {
+      const parts = req.url.split('/');
+      serverId = parts[parts.length - 1];
+      target = async () => {
+        const { data, error } = await supabaseAdmin
+          .from('servers')
+          .select('ipv4')
+          .eq('id', serverId)
+          .single();
+        if (error || !data || !data.ipv4) {
+          console.warn('Proxy: missing server IP for', serverId, 'Error:', error?.message);
+          socket.destroy();
+          return null;
+        }
+        return `ws://${data.ipv4}:3002`; // Internal connection
+      };
+    } else if (req.url.startsWith('/ws/status/')) {
+      const parts = req.url.split('/');
+      serverId = parts[parts.length - 1];
+      target = async () => {
+        const { data, error } = await supabaseAdmin
+          .from('servers')
+          .select('ipv4')
+          .eq('id', serverId)
+          .single();
+        if (error || !data || !data.ipv4) {
+          console.warn('Proxy: missing server IP for', serverId, 'Error:', error?.message);
+          socket.destroy();
+          return null;
+        }
+        return `ws://${data.ipv4}:3006`; // Internal connection
+      };
+    } else if (req.url.startsWith('/ws/metrics/')) {
+      const parts = req.url.split('/');
+      serverId = parts[parts.length - 1];
+      target = async () => {
+        const { data, error } = await supabaseAdmin
+          .from('servers')
+          .select('ipv4')
+          .eq('id', serverId)
+          .single();
+        if (error || !data || !data.ipv4) {
+          console.warn('Proxy: missing server IP for', serverId, 'Error:', error?.message);
+          socket.destroy();
+          return null;
+        }
+        return `ws://${data.ipv4}:3004`; // Internal connection
+      };
+    } else {
+      console.warn('Unknown WebSocket path:', req.url);
+      socket.destroy();
+      return;
+    }
+
     if (!serverId) {
+      console.warn('No serverId in WebSocket URL:', req.url);
       socket.destroy();
       return;
     }
 
     (async () => {
       try {
-        // lookup server ip from Supabase
-        const { data, error } = await supabaseAdmin
-          .from('servers')
-          .select('ipv4')
-          .eq('id', serverId)
-          .single();
-
-        if (error || !data || !data.ipv4) {
-          console.warn('Proxy: missing server IP for', serverId, error);
-          socket.destroy();
-          return;
-        }
-
-        const target = `wss://${data.ipv4}:3002`;
-        console.log(`Proxying WS ${req.url} -> ${target}`);
-        proxy.ws(req, socket, head, { target }, (err) => {
+        const targetUrl = await target();
+        if (!targetUrl) return;
+        console.log(`Proxying WS ${req.url} -> ${targetUrl}`);
+        proxy.ws(req, socket, head, { target: targetUrl }, (err) => {
           if (err) {
-            console.error('Proxy.ws failed', err && err.message);
+            console.error('Proxy.ws failed for serverId:', serverId, 'Target:', targetUrl, 'Error:', err.message);
             try { socket.destroy(); } catch (_) {}
           }
         });
       } catch (err) {
-        console.error('Proxy lookup error', err && err.message);
+        console.error('Proxy lookup error for serverId:', serverId, 'Error:', err.message, 'Stack:', err.stack);
         try { socket.destroy(); } catch (_) {}
       }
     })();
   } catch (err) {
-    console.error('Upgrade handler error', err && err.message);
+    console.error('Upgrade handler error for URL:', req.url, 'Error:', err.message, 'Stack:', err.stack);
     try { socket.destroy(); } catch (_) {}
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`Proxy server listening on http://localhost:${PORT}`);
-  console.log('/ws/console/:serverId -> looks up supabase and proxies to server:3002');
+  console.log(`Proxy server listening on https://localhost:${PORT}`);
+  console.log('/ws/console/:serverId -> proxies to server:3002');
+  console.log('/ws/status/:serverId -> proxies to server:3006');
+  console.log('/ws/metrics/:serverId -> proxies to server:3004');
 });
