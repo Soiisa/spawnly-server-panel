@@ -555,7 +555,7 @@ write_files:
                 exit 1
               fi
             fi
-          } else
+          else
             echo "[startup] No DOWNLOAD_URL provided, cannot reinstall Forge"
             exit 1
           fi
@@ -580,10 +580,10 @@ write_files:
                 exit 1
               fi
             fi
-          } else
+          else
             mv server-installer.jar server.jar
           fi
-        } else
+        else
           echo "[startup] NO DOWNLOAD_URL PROVIDED"
           exit 1
         fi
