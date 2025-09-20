@@ -657,49 +657,16 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  - path: /opt/minecraft/status-reporter.js
+- path: /opt/minecraft/status-reporter.js
     permissions: '0755'
     owner: minecraft:minecraft
     defer: true
     content: |
-      const WebSocket = require('ws');
       const { execSync } = require('child_process');
 
       const SERVER_ID = '${serverId}';
       const RCON_PASSWORD = '${escapedRconPassword}';
-      const NEXTJS_API_URL = '${process.env.APP_BASE_URL || "http://localhost:3000"}';
-      const STATUS_WS_URL = 'ws://0.0.0.0:3006';
-
-      let ws = null;
-      let reconnectInterval = null;
-
-      function connect() {
-        console.log('Connecting to status WebSocket...');
-        ws = new WebSocket(STATUS_WS_URL);
-
-        ws.onopen = () => {
-          console.log('Status WebSocket connected');
-          clearInterval(reconnectInterval);
-        };
-
-        ws.onmessage = (event) => {
-          console.log('Status update received:', event.data);
-        };
-
-        ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-        };
-
-        ws.onclose = () => {
-          console.log('Status WebSocket disconnected, attempting to reconnect...');
-          scheduleReconnect();
-        };
-      }
-
-      function scheduleReconnect() {
-        if (reconnectInterval) clearInterval(reconnectInterval);
-        reconnectInterval = setInterval(connect, 5000);
-      }
+      const NEXTJS_API_URL = '${process.env.APP_BASE_URL || "https://your-app.onrender.com"}';
 
       function getServerStatus() {
         try {
@@ -756,36 +723,9 @@ write_files:
 
       function broadcastStatus() {
         const status = getServerStatus();
-        
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          try {
-            ws.send(JSON.stringify(status));
-          } catch (error) {
-            console.error('Error sending status via WebSocket:', error);
-          }
-        }
-        
         updateStatusInSupabase(status);
       }
 
-      const wss = new WebSocket.Server({ port: 3006 }, () => {
-        console.log('Status WebSocket server listening on port 3006');
-      });
-
-      wss.on('connection', (clientWs) => {
-        console.log('Status client connected');
-        clientWs.send(JSON.stringify(getServerStatus()));
-        
-        clientWs.on('close', () => {
-          console.log('Status client disconnected');
-        });
-
-        wss.on('error', (err) => {
-          console.log('Status WebSocket client error', err && err.message);
-        });
-      });
-
-      connect();
       setInterval(broadcastStatus, 30000);
 
       process.on('SIGINT', () => process.exit(0));
