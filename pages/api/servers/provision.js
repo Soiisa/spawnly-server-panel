@@ -1,5 +1,4 @@
 // pages/api/servers/provision.js
-
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 
@@ -556,7 +555,7 @@ write_files:
                 exit 1
               fi
             fi
-          else
+          } else
             echo "[startup] No DOWNLOAD_URL provided, cannot reinstall Forge"
             exit 1
           fi
@@ -581,10 +580,10 @@ write_files:
                 exit 1
               fi
             fi
-          else
+          } else
             mv server-installer.jar server.jar
           fi
-        else
+        } else
           echo "[startup] NO DOWNLOAD_URL PROVIDED"
           exit 1
         fi
@@ -657,7 +656,7 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-- path: /opt/minecraft/status-reporter.js
+  - path: /opt/minecraft/status-reporter.js
     permissions: '0755'
     owner: minecraft:minecraft
     defer: true
@@ -666,7 +665,7 @@ write_files:
 
       const SERVER_ID = '${serverId}';
       const RCON_PASSWORD = '${escapedRconPassword}';
-      const NEXTJS_API_URL = '${process.env.APP_BASE_URL || "https://your-app.onrender.com"}';
+      const NEXTJS_API_URL = '${process.env.APP_BASE_URL || "https://www.spawnly.net"}';
 
       function getServerStatus() {
         try {
@@ -734,7 +733,7 @@ write_files:
     permissions: '0644'
     content: |
       [Unit]
-      Description=Minecraft Status WebSocket Server
+      Description=Minecraft Status Reporter
       After=network.target minecraft.service
 
       [Service]
@@ -1207,7 +1206,6 @@ runcmd:
   - ufw allow 3003
   - ufw allow 3004
   - ufw allow 3005
-  - ufw allow 3006
   - ufw --force enable
   - echo "[DEBUG] running quick startup checks"
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":25565\\b"; then echo "PORT 25565 OPEN"; break; fi; sleep 2; done;'
@@ -1446,11 +1444,11 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     console.log('Server provisioned successfully, updated row:', updatedRow.id);
     return res.status(200).json({ 
-  server: updatedRow, 
-  hetznerServer: finalServer,
-  subdomain: serverRow.subdomain, // Bare subdomain
-  fullDomain: subdomain // Full domain with `.spawnly.net`
-});
+      server: updatedRow, 
+      hetznerServer: finalServer,
+      subdomain: serverRow.subdomain, // Bare subdomain
+      fullDomain: subdomain // Full domain with `.spawnly.net`
+    });
   } catch (err) {
     console.error('provisionServer error:', err.message, err.stack);
     return res.status(500).json({ 

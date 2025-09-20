@@ -1,3 +1,4 @@
+// server.js
 require('dotenv').config({ path: '.env.local' });
 
 const https = require('https');
@@ -63,22 +64,6 @@ server.on('upgrade', (req, socket, head) => {
         }
         return `ws://${data.ipv4}:3002`; // Internal connection
       };
-    } else if (req.url.startsWith('/ws/status/')) {
-      const parts = req.url.split('/');
-      serverId = parts[parts.length - 1];
-      target = async () => {
-        const { data, error } = await supabaseAdmin
-          .from('servers')
-          .select('ipv4')
-          .eq('id', serverId)
-          .single();
-        if (error || !data || !data.ipv4) {
-          console.warn('Proxy: missing server IP for', serverId, 'Error:', error?.message);
-          socket.destroy();
-          return null;
-        }
-        return `ws://${data.ipv4}:3006`; // Internal connection
-      };
     } else if (req.url.startsWith('/ws/metrics/')) {
       const parts = req.url.split('/');
       serverId = parts[parts.length - 1];
@@ -132,6 +117,5 @@ server.on('upgrade', (req, socket, head) => {
 server.listen(PORT, () => {
   console.log(`Proxy server listening on https://localhost:${PORT}`);
   console.log('/ws/console/:serverId -> proxies to server:3002');
-  console.log('/ws/status/:serverId -> proxies to server:3006');
   console.log('/ws/metrics/:serverId -> proxies to server:3004');
 });

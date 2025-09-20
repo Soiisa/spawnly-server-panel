@@ -1,3 +1,4 @@
+// pages/api/servers/status.js
 import WebSocket from 'ws';
 import { createClient } from '@supabase/supabase-js';
 
