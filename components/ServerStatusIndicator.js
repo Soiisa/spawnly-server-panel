@@ -16,7 +16,7 @@ export default function ServerStatusIndicator({ server }) {
     }
 
     const connectToStatusServer = () => {
-      const wsUrl = `ws://${server.ipv4}:3006`;
+      const wsUrl = `wss://${server.ipv4}:3006`;
       setDebug(`Connecting to: ${wsUrl}`);
       console.log('Connecting to status WebSocket:', wsUrl);
       
