@@ -1,0 +1,44 @@
+{
+  "name": "spawnly-website",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.879.0",
+    "@supabase/supabase-js": "^2.55.0",
+    "adm-zip": "^0.5.16",
+    "archiver": "^7.0.1",
+    "aws": "^0.0.3-2",
+    "aws-sdk": "^2.1692.0",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "formidable-serverless": "^1.1.1",
+    "hcloud-js": "^1.4.1",
+    "http-proxy": "^1.18.1",
+    "md5": "^2.3.0",
+    "minecraft-rcon-client": "^3.0.0",
+    "nbtify": "^2.2.0",
+    "next": "^15.4.6",
+    "node-fetch": "^3.3.2",
+    "node-ssh": "^13.2.1",
+    "rcon-client": "^4.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "ssh2": "^1.16.0",
+    "ws": "^8.18.3",
+    "xmldom": "^0.6.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17"
+  }
+}
