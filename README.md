@@ -1,0 +1,2 @@
+# spawnly-server-panel
+spawnly
