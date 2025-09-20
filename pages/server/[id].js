@@ -286,7 +286,7 @@ export default function ServerDetailPage({ initialServer }) {
     if (!server?.ipv4 || metricsWsRef.current) return;
 
     try {
-      const wsUrl = `ws://${server.ipv4}:3004`;
+      const wsUrl = `wss://${server.ipv4}:3004`;
       console.log('Connecting to metrics WebSocket:', wsUrl);
 
       const ws = new WebSocket(wsUrl);
