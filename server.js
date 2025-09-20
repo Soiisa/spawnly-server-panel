@@ -65,7 +65,7 @@ server.on('upgrade', (req, socket, head) => {
           return;
         }
 
-        const target = `ws://${data.ipv4}:3002`;
+        const target = `wss://${data.ipv4}:3002`;
         console.log(`Proxying WS ${req.url} -> ${target}`);
         proxy.ws(req, socket, head, { target }, (err) => {
           if (err) {
