@@ -369,10 +369,10 @@ export default function FileManager({ server, token, initialPath = '', autoOpenF
     setUploadProgress(0);
     setError(null);
     const formData = new FormData();
-    formData.append('fileName', file.name);
-    formData.append('fileContent', file);
+    formData.append('file', file);
+    formData.append('path', currentPath);
     try {
-      await axios.post(`${apiBase}/files?path=${currentPath}`, formData, {
+      await axios.post(`${apiBase}/file`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',

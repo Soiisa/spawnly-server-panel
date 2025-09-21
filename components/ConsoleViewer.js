@@ -1,10 +1,9 @@
 // components/ConsoleViewer.js
 import { useEffect, useRef, useState } from 'react';
-import io from 'socket.io-client';
 
 export default function ConsoleViewer({ server }) {
   const logRef = useRef(null);
-  const socketRef = useRef(null);
+  const esRef = useRef(null);
   const [lines, setLines] = useState([]);
   const [connected, setConnected] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -24,26 +23,22 @@ export default function ConsoleViewer({ server }) {
     }
 
     const connectToServer = () => {
-      const socket = io(`http://${server.ipv4}:3002`, {
-        transports: ['websocket'], // Use WebSocket transport only
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 3000,
-      });
-      socketRef.current = socket;
+      const es = new EventSource(`http://${server.ipv4}:3002/console`);
+      esRef.current = es;
 
-      socket.on('connect', () => {
+      es.onopen = () => {
         setConnected(true);
-        setLines([]); // Clear lines on connect to load server-provided history
+        setLines([]); // Clear lines on connect
         setStatusMsg(`Connected to ${server.ipv4}:3002`);
-      });
+      };
 
-      socket.on('console', (data) => {
+      es.onmessage = (e) => {
         if (pausedRef.current) return;
 
-        const text = String(data || '');
+        const text = String(e.data || '');
+        if (!text.trim()) return;
+
         const newLines = text.split(/\r?\n/).filter(Boolean);
-        if (newLines.length === 0) return;
 
         const processedLines = newLines.map(line => {
           const timestampMatch = line.match(/\[(\d{2}:\d{2}:\d{2})\]/);
@@ -55,24 +50,21 @@ export default function ConsoleViewer({ server }) {
         });
 
         setLines((prev) => prev.concat(processedLines));
-      });
+      };
 
-      socket.on('connect_error', (err) => {
-        console.warn('Console Socket.IO error:', err.message);
+      es.onerror = (err) => {
+        console.warn('Console SSE error:', err);
         setStatusMsg('Connection error, retrying...');
         setConnected(false);
-      });
-
-      socket.on('disconnect', () => {
-        setConnected(false);
-        setStatusMsg('Disconnected, attempting to reconnect...');
-      });
+        es.close();
+        setTimeout(connectToServer, 3000);
+      };
     };
 
     connectToServer();
 
     return () => {
-      socketRef.current?.disconnect();
+      esRef.current?.close();
     };
   }, [server]);
 

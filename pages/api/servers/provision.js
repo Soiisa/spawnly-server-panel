@@ -752,81 +752,63 @@ write_files:
     owner: minecraft:minecraft
     defer: true
     content: |
-      const { execSync, spawn } = require('child_process');
+      const { exec } = require('child_process');
       const http = require('http');
-      const { Server } = require('socket.io');
 
-      const PORT = process.env.CONSOLE_PORT ? parseInt(process.env.CONSOLE_PORT, 10) : 3002;
+      const PORT = process.env.CONSOLE_PORT || 3002;
       const MAX_HISTORY_LINES = 2000;
 
-      const server = http.createServer();
-      const io = new Server(server, {
-        cors: {
-          origin: '*',
-          methods: ['GET', 'POST'],
-        },
-      });
+      const server = http.createServer((req, res) => {
+        if (req.url === '/console') {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST',
+          });
 
-      let history = [];
-      let lineBuffer = '';
+          // Send history
+          exec(\`journalctl -u minecraft -n \${MAX_HISTORY_LINES} -o cat\`, (err, stdout) => {
+            if (err) {
+              res.write(\`data: [server] Failed to load historical logs: \${err.message}\\n\\n\`);
+            } else {
+              const lines = stdout.split('\\n').filter(line => line.trim());
+              lines.forEach(line => {
+                res.write(\`data: \${line}\\n\\n\`);
+              });
+            }
 
-      try {
-        const pastLogs = execSync(\`journalctl -u minecraft -n \${MAX_HISTORY_LINES} -o cat\`).toString().trim();
-        history = pastLogs.split('\\n').filter(line => line.trim());
-      } catch (e) {
-        console.error('Failed to load historical logs:', e.message);
-      }
+            res.write('data: [server] Connected to console stream\\n\\n');
 
-      const tail = spawn('journalctl', ['-u', 'minecraft', '-f', '-n', '0', '-o', 'cat'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
+            // Tail live logs
+            const tail = exec('journalctl -u minecraft -f -n 0 -o cat');
 
-      tail.on('error', (err) => {
-        console.error('journalctl spawn error:', err);
-      });
+            tail.stdout.on('data', (chunk) => {
+              const lines = chunk.toString().split('\\n').filter(line => line.trim());
+              lines.forEach(line => {
+                res.write(\`data: \${line}\\n\\n\`);
+              });
+            });
 
-      tail.stderr.on('data', (d) => {
-        console.error('journalctl stderr:', d.toString());
-      });
+            tail.on('error', (err) => {
+              console.error('journalctl error:', err);
+              res.write(\`data: [ERROR] Log stream error: \${err.message}\\n\\n\`);
+            });
 
-      tail.stdout.on('data', (chunk) => {
-        lineBuffer += chunk.toString();
-        const lines = lineBuffer.split('\\n');
-        lineBuffer = lines.pop() || '';
-        const validLines = lines.filter(line => line.trim());
-
-        if (validLines.length > 0) {
-          history.push(...validLines);
-          if (history.length > MAX_HISTORY_LINES) {
-            history = history.slice(-MAX_HISTORY_LINES);
-          }
-
-          io.emit('console', validLines.join('\\n') + '\\n');
+            req.on('close', () => {
+              tail.kill();
+              res.end();
+            });
+          });
+        } else {
+          res.writeHead(404);
+          res.end('Not found');
         }
-      });
-
-      tail.on('close', () => {
-        if (lineBuffer.trim()) {
-          history.push(lineBuffer);
-          if (history.length > MAX_HISTORY_LINES) {
-            history = history.slice(-MAX_HISTORY_LINES);
-          }
-          io.emit('console', lineBuffer + '\\n');
-        }
-      });
-
-      io.on('connection', (socket) => {
-        console.log('Console client connected:', socket.id);
-        socket.emit('console', history.join('\\n') + (history.length ? '\\n' : ''));
-        socket.emit('console', '[server] Connected to console stream\\n');
-
-        socket.on('disconnect', () => {
-          console.log('Console client disconnected:', socket.id);
-        });
       });
 
       server.listen(PORT, () => {
-        console.log('Console Socket.IO server listening on port', PORT);
+        console.log('Console SSE server listening on port', PORT);
       });
 
       process.on('SIGINT', () => {
@@ -839,7 +821,7 @@ write_files:
     permissions: '0644'
     content: |
       [Unit]
-      Description=Minecraft Console WebSocket
+      Description=Minecraft Console SSE
       After=network.target minecraft.service
 
       [Service]
@@ -927,48 +909,50 @@ write_files:
     defer: true
     content: |
       const http = require('http');
-      const { Server } = require('socket.io');
       const os = require('os');
 
-      const PORT = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT, 10) : 3004;
+      const PORT = process.env.METRICS_PORT || 3004;
 
-      const server = http.createServer();
-      const io = new Server(server, {
-        cors: {
-          origin: '*',
-          methods: ['GET', 'POST'],
-        },
-      });
+      const server = http.createServer((req, res) => {
+        if (req.url === '/metrics') {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST',
+          });
 
-      function getSystemMetrics() {
-        const load = os.loadavg()[0];
-        const cpuCount = os.cpus().length;
-        const cpuUsage = (load / cpuCount) * 100;
-        const totalMem = os.totalmem();
-        const freeMem = os.freemem();
-        const usedMem = totalMem - freeMem;
-        const ramUsage = (usedMem / totalMem) * 100;
-        return {
-          cpu: Math.min(100, Math.max(0, cpuUsage.toFixed(2))),
-          ram: ramUsage.toFixed(2),
-          timestamp: new Date().toISOString(),
-        };
-      }
+          res.write('data: [server] Connected to metrics stream\\n\\n');
 
-      io.on('connection', (socket) => {
-        console.log('Metrics client connected:', socket.id);
-        const interval = setInterval(() => {
-          socket.emit('metrics', getSystemMetrics());
-        }, 2000);
+          const interval = setInterval(() => {
+            const load = os.loadavg()[0];
+            const cpuCount = os.cpus().length;
+            const cpuUsage = (load / cpuCount) * 100;
+            const totalMem = os.totalmem();
+            const freeMem = os.freemem();
+            const usedMem = totalMem - freeMem;
+            const ramUsage = (usedMem / totalMem) * 100;
+            const metrics = {
+              cpu: Math.min(100, Math.max(0, cpuUsage.toFixed(2))),
+              ram: ramUsage.toFixed(2),
+              timestamp: new Date().toISOString(),
+            };
+            res.write(\`data: \${JSON.stringify(metrics)}\\n\\n\`);
+          }, 2000);
 
-        socket.on('disconnect', () => {
-          console.log('Metrics client disconnected:', socket.id);
-          clearInterval(interval);
-        });
+          req.on('close', () => {
+            clearInterval(interval);
+            res.end();
+          });
+        } else {
+          res.writeHead(404);
+          res.end('Not found');
+        }
       });
 
       server.listen(PORT, () => {
-        console.log('Metrics Socket.IO server listening on port', PORT);
+        console.log('Metrics SSE server listening on port', PORT);
       });
 
       process.on('SIGINT', () => {
@@ -981,7 +965,7 @@ write_files:
     permissions: '0644'
     content: |
       [Unit]
-      Description=Minecraft Metrics WebSocket
+      Description=Minecraft Metrics SSE
       After=network.target minecraft.service
 
       [Service]
@@ -1183,7 +1167,7 @@ runcmd:
   - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
   - apt-get install -y nodejs awscli || true
   - cd /opt/minecraft || true
-  - sudo -u minecraft npm install --no-audit --no-fund socket.io ws express multer archiver cors || true
+  - sudo -u minecraft npm install --no-audit --no-fund express multer archiver cors || true
   - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
   - systemctl daemon-reload
   - systemctl enable mc-sync.service || true

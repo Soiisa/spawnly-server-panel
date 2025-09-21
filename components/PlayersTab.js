@@ -1,3 +1,4 @@
+// components/PlayersTab.js
 import { useState, useEffect } from 'react';
 import md5 from 'md5';
 
@@ -481,7 +482,7 @@ export default function PlayersTab({ server, token }) {
       )}
       
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Player Management</h2>
+        <h2 className="text-xl font-bold text-gray-800">Player Management</h2>
         <button
           onClick={fetchAllData}
           disabled={loading}

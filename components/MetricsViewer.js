@@ -1,9 +1,8 @@
 // components/MetricsViewer.js
 import { useEffect, useRef, useState } from 'react';
-import io from 'socket.io-client';
 
 export default function MetricsViewer({ server }) {
-  const socketRef = useRef(null);
+  const esRef = useRef(null);
   const [metrics, setMetrics] = useState({
     cpu: 0,
     ram: 0,
@@ -18,44 +17,41 @@ export default function MetricsViewer({ server }) {
     }
 
     const connectToServer = () => {
-      const socket = io(`http://${server.ipv4}:3004`, {
-        transports: ['websocket'], // Use WebSocket transport only
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 3000,
-      });
-      socketRef.current = socket;
+      const es = new EventSource(`http://${server.ipv4}:3004/metrics`);
+      esRef.current = es;
 
-      socket.on('connect', () => {
+      es.onopen = () => {
         setConnected(true);
         setStatusMsg(`Connected to ${server.ipv4}:3004`);
-      });
+      };
 
-      socket.on('metrics', (data) => {
-        if (data.cpu !== undefined && data.ram !== undefined) {
-          setMetrics({
-            cpu: parseFloat(data.cpu) || 0,
-            ram: parseFloat(data.ram) || 0,
-          });
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.cpu !== undefined && data.ram !== undefined) {
+            setMetrics({
+              cpu: parseFloat(data.cpu) || 0,
+              ram: parseFloat(data.ram) || 0,
+            });
+          }
+        } catch (err) {
+          console.warn('Metrics parse error:', err);
         }
-      });
+      };
 
-      socket.on('connect_error', (err) => {
-        console.warn('Metrics Socket.IO error:', err.message);
+      es.onerror = (err) => {
+        console.warn('Metrics SSE error:', err);
         setStatusMsg('Connection error, retrying...');
         setConnected(false);
-      });
-
-      socket.on('disconnect', () => {
-        setConnected(false);
-        setStatusMsg('Disconnected, attempting to reconnect...');
-      });
+        es.close();
+        setTimeout(connectToServer, 3000);
+      };
     };
 
     connectToServer();
 
     return () => {
-      socketRef.current?.disconnect();
+      esRef.current?.close();
     };
   }, [server]);
 
