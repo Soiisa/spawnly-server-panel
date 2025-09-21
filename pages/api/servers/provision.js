@@ -747,7 +747,7 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-- path: /opt/minecraft/console-server.js
+  - path: /opt/minecraft/console-server.js
     permissions: '0755'
     owner: minecraft:minecraft
     defer: true
@@ -921,7 +921,7 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-- path: /opt/minecraft/metrics-server.js
+  - path: /opt/minecraft/metrics-server.js
     permissions: '0755'
     owner: minecraft:minecraft
     defer: true
