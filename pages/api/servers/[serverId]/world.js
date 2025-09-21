@@ -6,7 +6,6 @@ import path from 'path';
 import formidable from 'formidable-serverless';
 import archiver from 'archiver';
 import AdmZip from 'adm-zip';
-import fetch from 'node-fetch';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -130,30 +129,30 @@ export default async function handler(req, res) {
         }
       }
 
-      // Update server.properties
+      // Update server.properties with only necessary fields
       const propsKey = path.join(s3Prefix, 'server.properties').replace(/\\/g, '/');
-      let propsText;
+      let propsText = '';
       try {
         const propsObj = await s3.getObject({ Bucket: S3_BUCKET, Key: propsKey }).promise();
         propsText = propsObj.Body.toString('utf8');
       } catch (e) {
         if (e.code !== 'NoSuchKey') throw e;
-        propsText = '';
       }
 
       const propsMap = parseProperties(propsText);
-      propsMap['level-name'] = levelName || 'world';
-      propsMap['level-seed'] = seed || '';
-      propsMap['generator-settings'] = generatorSettings || '';
+      // Update only the specific world generation properties
+      propsMap['level-name'] = levelName || propsMap['level-name'] || 'world';
+      propsMap['level-seed'] = seed || propsMap['level-seed'] || '';
+      propsMap['generator-settings'] = generatorSettings || propsMap['generator-settings'] || '';
       propsMap['level-type'] = {
         default: 'minecraft\\:normal',
         superflat: 'minecraft\\:flat',
         amplified: 'minecraft\\:amplified',
         large_biomes: 'minecraft\\:large_biomes',
         single_biome: 'minecraft\\:single_biome',
-      }[worldType] || 'minecraft\\:normal';
-      propsMap['generate-structures'] = generateStructures ? 'true' : 'false';
-      propsMap['hardcore'] = hardcore ? 'true' : 'false';
+      }[worldType] || propsMap['level-type'] || 'minecraft\\:normal';
+      propsMap['generate-structures'] = generateStructures !== undefined ? (generateStructures ? 'true' : 'false') : propsMap['generate-structures'] || 'true';
+      propsMap['hardcore'] = hardcore !== undefined ? (hardcore ? 'true' : 'false') : propsMap['hardcore'] || 'false';
 
       const newPropsText = serializeProperties(propsMap);
       await s3.putObject({
