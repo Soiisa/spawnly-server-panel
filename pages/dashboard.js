@@ -360,36 +360,21 @@ export default function Dashboard() {
     if (!confirm('Are you sure you want to delete this server? This will remove the instance and its data.')) return;
 
     try {
-      // Delete server from Supabase
-      const { error: supabaseError } = await supabase
-        .from('servers')
-        .delete()
-        .eq('id', serverId);
-
-      if (supabaseError) {
-        console.error('Supabase delete error:', supabaseError);
-        alert(`Failed to delete server from Supabase: ${supabaseError.message}`);
-        return;
-      }
-
-      // Delete server folder from S3
-      const s3Response = await fetch('/api/servers/delete-s3-folder', {
+      const resp = await fetch('/api/servers/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverId }),
+        body: JSON.stringify({ serverId, action: 'delete' }),
       });
 
-      if (!s3Response.ok) {
-        const s3Error = await s3Response.json().catch(() => ({}));
-        console.error('S3 folder deletion error:', s3Error);
-        alert(`Failed to delete server data from S3: ${s3Error.error || 'unknown error'}`);
-        // Note: We don't return here to allow the UI to reflect the Supabase deletion
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        console.error('Delete API error', j);
+        alert('Failed to delete server: ' + (j.error || 'unknown error'));
+        return;
       }
-
-      console.log(`Server ${serverId} deleted successfully`);
     } catch (err) {
-      console.error('Delete error:', err);
-      alert(`Failed to delete server: ${err.message}`);
+      console.error('Delete error', err);
+      alert('Failed to delete server');
     }
   };
 

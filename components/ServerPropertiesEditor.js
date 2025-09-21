@@ -1,4 +1,3 @@
-// components/ServerPropertiesEditor.js
 import { useState, useEffect, useMemo } from 'react';
 
 /**

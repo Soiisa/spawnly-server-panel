@@ -1,11 +1,9 @@
 // components/FileManager.js
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import path from 'path';
-import { read, write } from 'nbtify';
 
-export default function FileManager({ server, token, initialPath = '', autoOpenFile = '', setActiveTab }) {
-  const [currentPath, setCurrentPath] = useState(initialPath);
+export default function FileManager({ server, token, setActiveTab }) {
+  const [currentPath, setCurrentPath] = useState('');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -15,11 +13,9 @@ export default function FileManager({ server, token, initialPath = '', autoOpenF
   const [fileContent, setFileContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [isNbt, setIsNbt] = useState(false);
-  const [nbtName, setNbtName] = useState('');
 
-  const apiBase = `/api/servers/${server.id}`;
-  const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md', '.dat'];
+  const apiBase = `/api/servers/${server.id}`; // Always use backend
+  const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md'];
 
   // List of files and folders to mask (case-insensitive, normalized)
   const maskedItems = [
@@ -47,22 +43,6 @@ export default function FileManager({ server, token, initialPath = '', autoOpenF
     setIsOffline(server.status !== 'Running' || !server.ipv4);
     fetchFiles(currentPath);
   }, [currentPath, token, server]);
-
-  useEffect(() => {
-    if (initialPath !== currentPath) {
-      setCurrentPath(initialPath);
-    }
-  }, [initialPath]);
-
-  useEffect(() => {
-    if (autoOpenFile && files.length > 0 && !editingFile) {
-      const file = files.find(f => f.name === autoOpenFile && !f.isDirectory);
-      if (file) {
-        console.log('Auto-opening file:', file.name);
-        openFileForEditing(file);
-      }
-    }
-  }, [files, autoOpenFile, editingFile]);
 
   const fetchFiles = async (path) => {
     setLoading(true);
@@ -103,94 +83,60 @@ export default function FileManager({ server, token, initialPath = '', autoOpenF
       return;
     }
     const relPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-    let responseType = 'text';
-    const extension = path.extname(file.name).toLowerCase();
-    if (extension === '.dat') {
-      responseType = 'arraybuffer';
-    }
     try {
       setLoading(true);
       setError(null);
-      console.log(`Fetching file: ${relPath}, responseType: ${responseType}`);
       const res = await axios.get(`${apiBase}/file`, {
         params: { path: relPath },
         headers: { Authorization: `Bearer ${token}` },
-        responseType,
+        responseType: 'text', // Attempt to enforce text response
       });
 
       let content = res.data;
 
-      if (extension === '.dat') {
+      // Debug: Log the raw response to inspect its type and value
+      console.log(`Raw response for ${file.name}:`, content, `Type: ${typeof content}`);
+
+      // Handle non-string responses (e.g., parsed JSON object)
+      if (typeof content !== 'string') {
         try {
-          const uint8 = new Uint8Array(content);
-          if (uint8.length === 0) {
-            setError(`File ${file.name} is empty.`);
-            setFileContent('');
-            setIsNbt(true);
-            setNbtName('');
-            return;
-          }
-          const nbt = await read(uint8, { endian: 'big', compression: 'gzip' });
-          console.log('Parsed NBT:', JSON.stringify(nbt, (key, value) => typeof value === 'bigint' ? value.toString() : value, 2));
-          // Ensure data is a Compound tag
-          if (typeof nbt.data !== 'object' || nbt.data === null || Array.isArray(nbt.data)) {
-            setError('Invalid NBT structure: Root tag must be a Compound tag.');
-            setFileContent('');
-            setIsNbt(true);
-            setNbtName(nbt.name || 'Data');
-            return;
-          }
-          // Handle BigInt for display
-          const replacer = (key, value) => {
-            if (typeof value === 'bigint') {
-              return value.toString();
-            }
-            return value;
-          };
-          // Use the inner Compound tag (nbt.data.Data) for level.dat
-          const dataToDisplay = nbt.data.Data || nbt.data;
-          content = JSON.stringify(dataToDisplay, replacer, 2);
-          setIsNbt(true);
-          setNbtName(nbt.name || 'Data'); // Default to 'Data' for level.dat
+          // Convert object to formatted JSON string
+          content = JSON.stringify(content, null, 2);
         } catch (e) {
-          console.error(`NBT parsing error for ${file.name}:`, e);
-          setError(`Failed to parse NBT file: ${e.message}. Displaying raw data.`);
-          content = new TextDecoder().decode(new Uint8Array(content));
-          setIsNbt(false);
-          setNbtName('');
+          setError(`File ${file.name} could not be read: Invalid response format (expected text or valid JSON, got ${typeof content}).`);
+          setEditingFile(file);
+          setFileContent('');
+          return;
         }
-      } else {
-        if (typeof content !== 'string') {
-          try {
-            content = JSON.stringify(content, null, 2);
-          } catch (e) {
-            setError(`Invalid response format for ${file.name}`);
-            content = '';
-          }
-        }
-        setIsNbt(false);
-        setNbtName('');
       }
 
+      // Check if content is empty
       if (content.trim() === '') {
         setError(`File ${file.name} is empty or could not be read.`);
+        setEditingFile(file);
+        setFileContent('');
+        return;
       }
 
-      if (extension === '.json') {
+      // If the file is a JSON file, try to parse and re-stringify for pretty printing
+      if (file.name.toLowerCase().endsWith('.json')) {
         try {
+          // Parse the text to ensure it's valid JSON
           const parsed = JSON.parse(content);
+          // Stringify with indentation for pretty printing
           content = JSON.stringify(parsed, null, 2);
         } catch (e) {
-          setError(`Invalid JSON in ${file.name}. Displaying raw content.`);
+          console.warn(`Failed to parse JSON in ${file.name}:`, e);
+          setError(`File ${file.name} contains invalid JSON. Displaying raw content.`);
+          // Display raw content if JSON is invalid
         }
       }
 
-      console.log('Setting fileContent:', content.slice(0, 100) + (content.length > 100 ? '...' : '')); // Truncated log
       setEditingFile(file);
       setFileContent(content);
     } catch (err) {
-      console.error(`Error fetching file ${file.name}:`, err);
       setError(`Failed to open file ${file.name}: ${err.response?.data?.error || err.message}`);
+      console.error(`Error fetching file ${file.name}:`, err);
     } finally {
       setLoading(false);
     }
@@ -204,76 +150,19 @@ export default function FileManager({ server, token, initialPath = '', autoOpenF
       return;
     }
     const relPath = currentPath ? `${currentPath}/${editingFile.name}` : editingFile.name;
-    let body;
-    let contentType;
-    if (isNbt) {
-      try {
-        // Validate JSON content
-        if (!fileContent.trim()) {
-          setError('File content is empty. Please provide valid NBT data.');
-          return;
-        }
-        let data;
-        try {
-          data = JSON.parse(fileContent, (key, value) => {
-            const bigintFields = ['RandomSeed', 'Time', 'LastPlayed', 'DayTime', 'BorderSizeLerpTime'];
-            if (bigintFields.includes(key) && typeof value === 'string' && /^\d+$/.test(value)) {
-              return BigInt(value);
-            }
-            return value;
-          });
-        } catch (e) {
-          setError(`Invalid JSON format: ${e.message}`);
-          return;
-        }
-
-        // Ensure data is an object (Compound tag)
-        if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-          setError('NBT data must be a JSON object (Compound tag), not a string, array, or other type.');
-          return;
-        }
-
-        // Use the stored nbtName or default to 'Data' for level.dat
-        const rootTagName = nbtName || 'Data';
-        // Handle BigInt for debug logging
-        const replacer = (key, value) => {
-          if (typeof value === 'bigint') {
-            return value.toString();
-          }
-          return value;
-        };
-        console.log(`Saving NBT file: ${relPath}, root tag name: ${rootTagName}, data:`, JSON.stringify(data, replacer, 2));
-
-        // Wrap data in a Data object for level.dat
-        const nbtData = { Data: data };
-        const nbtBytes = await write(rootTagName, nbtData, { endian: 'big', compression: 'gzip' });
-        body = new Blob([nbtBytes]);
-        contentType = 'application/octet-stream';
-      } catch (e) {
-        console.error(`NBT serialization error for ${editingFile.name}:`, e);
-        setError(`Failed to serialize NBT: ${e.message}`);
-        return;
-      }
-    } else {
-      body = fileContent;
-      contentType = 'text/plain';
-    }
     try {
       setIsSaving(true);
       setError(null);
-      await axios.put(`${apiBase}/files`, body, {
+      await axios.put(`${apiBase}/files`, fileContent, {
         params: { path: relPath },
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': contentType,
+          'Content-Type': 'text/plain',
         },
       });
       setEditingFile(null);
       setFileContent('');
-      setIsNbt(false);
-      setNbtName('');
     } catch (err) {
-      console.error(`Error saving file ${editingFile.name}:`, err);
       setError(`Failed to save file: ${err.response?.data?.error || err.message}`);
     } finally {
       setIsSaving(false);
@@ -369,10 +258,10 @@ export default function FileManager({ server, token, initialPath = '', autoOpenF
     setUploadProgress(0);
     setError(null);
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('path', currentPath);
+    formData.append('fileName', file.name);
+    formData.append('fileContent', file);
     try {
-      await axios.post(`${apiBase}/file`, formData, {
+      await axios.post(`${apiBase}/files?path=${currentPath}`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
@@ -447,8 +336,6 @@ export default function FileManager({ server, token, initialPath = '', autoOpenF
                   onClick={() => {
                     setEditingFile(null);
                     setFileContent('');
-                    setIsNbt(false);
-                    setNbtName('');
                   }}
                   className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded"
                 >

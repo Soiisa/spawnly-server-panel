@@ -38,15 +38,14 @@ export const config = {
   },
 };
 
-async function getRawBody(req, isBinary = false) {
+async function getRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     req.on('data', (chunk) => {
       chunks.push(chunk);
     });
     req.on('end', () => {
-      const buffer = Buffer.concat(chunks);
-      resolve(isBinary ? buffer : buffer.toString('utf8'));
+      resolve(Buffer.concat(chunks).toString('utf8'));
     });
     req.on('error', reject);
   });
@@ -197,9 +196,8 @@ export default async function handler(req, res) {
   // Handle PUT /files - update file content
   if (req.method === 'PUT') {
     try {
-      const contentType = req.headers['content-type'] || 'application/octet-stream';
-      const isBinary = !contentType.startsWith('text/');
-      const body = await getRawBody(req, isBinary);
+      const body = await getRawBody(req);
+      console.log('PUT request received for:', req.query.path, 'Body length:', body.length);
 
       let relPath = req.query.path;
       if (!relPath) return res.status(400).json({ error: 'Missing path' });
@@ -212,7 +210,7 @@ export default async function handler(req, res) {
           Bucket: S3_BUCKET,
           Key: s3Key,
           Body: body,
-          ContentType: contentType,
+          ContentType: 'text/plain',
         })
         .promise();
       console.log('S3 file updated successfully:', s3Key);

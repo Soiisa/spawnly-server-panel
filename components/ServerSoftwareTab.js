@@ -258,6 +258,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     }
   };
 
+  // Cancel version change
   const cancelVersionChange = () => {
     console.log('Cancelling version change');
     setShowVersionWarning(false);
@@ -478,7 +479,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         {/* Top Row: Software Type Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Select Software Type</label>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-5 gap-4">
             {softwareOptions.map((option) => (
               <div
                 key={option.value}
@@ -501,7 +502,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
           {loadingVersions ? (
             <div className="animate-pulse bg-gray-200 rounded h-24 w-full" />
           ) : availableVersions.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 auto-rows-fr">
+            <div className="grid grid-cols-5 gap-4 auto-rows-fr">
               {availableVersions.map((v) => (
                 <div
                   key={v}

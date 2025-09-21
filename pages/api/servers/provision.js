@@ -1,4 +1,5 @@
 // pages/api/servers/provision.js
+
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 
@@ -661,11 +662,44 @@ write_files:
     owner: minecraft:minecraft
     defer: true
     content: |
+      const WebSocket = require('ws');
       const { execSync } = require('child_process');
 
       const SERVER_ID = '${serverId}';
       const RCON_PASSWORD = '${escapedRconPassword}';
-      const NEXTJS_API_URL = '${process.env.APP_BASE_URL || "https://www.spawnly.net"}';
+      const NEXTJS_API_URL = '${process.env.APP_BASE_URL || "http://localhost:3000"}';
+      const STATUS_WS_URL = 'ws://0.0.0.0:3006';
+
+      let ws = null;
+      let reconnectInterval = null;
+
+      function connect() {
+        console.log('Connecting to status WebSocket...');
+        ws = new WebSocket(STATUS_WS_URL);
+
+        ws.onopen = () => {
+          console.log('Status WebSocket connected');
+          clearInterval(reconnectInterval);
+        };
+
+        ws.onmessage = (event) => {
+          console.log('Status update received:', event.data);
+        };
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+
+        ws.onclose = () => {
+          console.log('Status WebSocket disconnected, attempting to reconnect...');
+          scheduleReconnect();
+        };
+      }
+
+      function scheduleReconnect() {
+        if (reconnectInterval) clearInterval(reconnectInterval);
+        reconnectInterval = setInterval(connect, 5000);
+      }
 
       function getServerStatus() {
         try {
@@ -722,9 +756,36 @@ write_files:
 
       function broadcastStatus() {
         const status = getServerStatus();
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try {
+            ws.send(JSON.stringify(status));
+          } catch (error) {
+            console.error('Error sending status via WebSocket:', error);
+          }
+        }
+        
         updateStatusInSupabase(status);
       }
 
+      const wss = new WebSocket.Server({ port: 3006 }, () => {
+        console.log('Status WebSocket server listening on port 3006');
+      });
+
+      wss.on('connection', (clientWs) => {
+        console.log('Status client connected');
+        clientWs.send(JSON.stringify(getServerStatus()));
+        
+        clientWs.on('close', () => {
+          console.log('Status client disconnected');
+        });
+
+        wss.on('error', (err) => {
+          console.log('Status WebSocket client error', err && err.message);
+        });
+      });
+
+      connect();
       setInterval(broadcastStatus, 30000);
 
       process.on('SIGINT', () => process.exit(0));
@@ -733,7 +794,7 @@ write_files:
     permissions: '0644'
     content: |
       [Unit]
-      Description=Minecraft Status Reporter
+      Description=Minecraft Status WebSocket Server
       After=network.target minecraft.service
 
       [Service]
@@ -752,76 +813,99 @@ write_files:
     owner: minecraft:minecraft
     defer: true
     content: |
-      const { exec } = require('child_process');
-      const http = require('http');
+      const { spawn, execSync } = require('child_process');
+      const WebSocket = require('ws');
 
-      const PORT = process.env.CONSOLE_PORT || 3002;
+      const PORT = process.env.CONSOLE_PORT ? parseInt(process.env.CONSOLE_PORT, 10) : 3002;
       const MAX_HISTORY_LINES = 2000;
+      const wss = new WebSocket.Server({ port: PORT }, () => {
+        console.log('Console WebSocket listening on port', PORT);
+      });
 
-      const server = http.createServer((req, res) => {
-        if (req.url === '/console') {
-          res.writeHead(200, {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST',
-          });
+      let history = [];
+      let lineBuffer = '';
 
-          // Send history
-          exec(\`journalctl -u minecraft -n \${MAX_HISTORY_LINES} -o cat\`, (err, stdout) => {
-            if (err) {
-              res.write(\`data: [server] Failed to load historical logs: \${err.message}\\n\\n\`);
-            } else {
-              const lines = stdout.split('\\n').filter(line => line.trim());
-              lines.forEach(line => {
-                res.write(\`data: \${line}\\n\\n\`);
-              });
+      try {
+        const pastLogs = execSync('journalctl -u minecraft -n ' + MAX_HISTORY_LINES + ' -o cat').toString().trim();
+        history = pastLogs.split('\\n').filter(line => line.trim());
+      } catch (e) {
+        console.error('Failed to load historical logs:', e.message);
+      }
+
+      const tail = spawn('journalctl', ['-u', 'minecraft', '-f', '-n', '0', '-o', 'cat'], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+      tail.on('error', (err) => {
+        console.error('journalctl spawn error', err);
+      });
+
+      tail.stderr.on('data', (d) => {
+        console.error('journalctl stderr:', d.toString());
+      });
+
+      tail.stdout.on('data', (chunk) => {
+        lineBuffer += chunk.toString();
+        let lines = lineBuffer.split('\\n');
+        lineBuffer = lines.pop() || '';
+        lines = lines.filter(line => line.trim());
+
+        if (lines.length > 0) {
+          history.push(...lines);
+          if (history.length > MAX_HISTORY_LINES) {
+            history = history.slice(-MAX_HISTORY_LINES);
+          }
+
+          const message = lines.join('\\n') + '\\n';
+          wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              try {
+                client.send(message);
+              } catch (e) {
+                console.error('Send error:', e);
+              }
             }
-
-            res.write('data: [server] Connected to console stream\\n\\n');
-
-            // Tail live logs
-            const tail = exec('journalctl -u minecraft -f -n 0 -o cat');
-
-            tail.stdout.on('data', (chunk) => {
-              const lines = chunk.toString().split('\\n').filter(line => line.trim());
-              lines.forEach(line => {
-                res.write(\`data: \${line}\\n\\n\`);
-              });
-            });
-
-            tail.on('error', (err) => {
-              console.error('journalctl error:', err);
-              res.write(\`data: [ERROR] Log stream error: \${err.message}\\n\\n\`);
-            });
-
-            req.on('close', () => {
-              tail.kill();
-              res.end();
-            });
           });
-        } else {
-          res.writeHead(404);
-          res.end('Not found');
         }
       });
 
-      server.listen(PORT, () => {
-        console.log('Console SSE server listening on port', PORT);
+      tail.on('close', () => {
+        if (lineBuffer.trim()) {
+          history.push(lineBuffer);
+          if (history.length > MAX_HISTORY_LINES) {
+            history = history.slice(-MAX_HISTORY_LINES);
+          }
+          const message = lineBuffer + '\\n';
+          wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(message);
+            }
+          });
+        }
       });
 
-      process.on('SIGINT', () => {
-        server.close(() => process.exit(0));
+      wss.on('connection', (ws) => {
+        console.log('Console client connected');
+        if (ws.readyState === WebSocket.OPEN) {
+          const historyMessage = history.join('\\n') + (history.length ? '\\n' : '');
+          ws.send(historyMessage);
+          ws.send('[server] Connected to console stream\\n');
+        }
+
+        ws.on('close', () => {
+          console.log('Console client disconnected');
+        });
+
+        ws.on('error', (err) => {
+          console.log('WebSocket client error', err && err.message);
+        });
       });
-      process.on('SIGTERM', () => {
-        server.close(() => process.exit(0));
-      });
+
+      process.on('SIGINT', () => process.exit(0));
+      process.on('SIGTERM', () => process.exit(0));
   - path: /etc/systemd/system/mc-console.service
     permissions: '0644'
     content: |
       [Unit]
-      Description=Minecraft Console SSE
+      Description=Minecraft Console WebSocket
       After=network.target minecraft.service
 
       [Service]
@@ -908,64 +992,56 @@ write_files:
     owner: minecraft:minecraft
     defer: true
     content: |
-      const http = require('http');
+      const WebSocket = require('ws');
       const os = require('os');
 
-      const PORT = process.env.METRICS_PORT || 3004;
-
-      const server = http.createServer((req, res) => {
-        if (req.url === '/metrics') {
-          res.writeHead(200, {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST',
-          });
-
-          res.write('data: [server] Connected to metrics stream\\n\\n');
-
-          const interval = setInterval(() => {
-            const load = os.loadavg()[0];
-            const cpuCount = os.cpus().length;
-            const cpuUsage = (load / cpuCount) * 100;
-            const totalMem = os.totalmem();
-            const freeMem = os.freemem();
-            const usedMem = totalMem - freeMem;
-            const ramUsage = (usedMem / totalMem) * 100;
-            const metrics = {
-              cpu: Math.min(100, Math.max(0, cpuUsage.toFixed(2))),
-              ram: ramUsage.toFixed(2),
-              timestamp: new Date().toISOString(),
-            };
-            res.write(\`data: \${JSON.stringify(metrics)}\\n\\n\`);
-          }, 2000);
-
-          req.on('close', () => {
-            clearInterval(interval);
-            res.end();
-          });
-        } else {
-          res.writeHead(404);
-          res.end('Not found');
-        }
+      const PORT = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT, 10) : 3004;
+      const wss = new WebSocket.Server({ port: PORT }, () => {
+        console.log('Metrics WebSocket listening on port', PORT);
       });
 
-      server.listen(PORT, () => {
-        console.log('Metrics SSE server listening on port', PORT);
+      function getSystemMetrics() {
+        const load = os.loadavg()[0];
+        const cpuCount = os.cpus().length;
+        const cpuUsage = (load / cpuCount) * 100;
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+        const usedMem = totalMem - freeMem;
+        const ramUsage = (usedMem / totalMem) * 100;
+        return {
+          cpu: Math.min(100, Math.max(0, cpuUsage.toFixed(2))),
+          ram: ramUsage.toFixed(2),
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      wss.on('connection', (ws) => {
+        console.log('Metrics client connected');
+        const interval = setInterval(() => {
+          if (ws.readyState === ws.OPEN) {
+            try {
+              ws.send(JSON.stringify(getSystemMetrics()));
+            } catch (e) {
+              console.error('Error sending metrics:', e);
+            }
+          }
+        }, 2000);
+        ws.on('close', () => {
+          console.log('Metrics client disconnected');
+          clearInterval(interval);
+        });
+        ws.on('error', (err) => {
+          console.log('WebSocket client error', err && err.message);
+        });
       });
 
-      process.on('SIGINT', () => {
-        server.close(() => process.exit(0));
-      });
-      process.on('SIGTERM', () => {
-        server.close(() => process.exit(0));
-      });
+      process.on('SIGINT', () => process.exit(0));
+      process.on('SIGTERM', () => process.exit(0));
   - path: /etc/systemd/system/mc-metrics.service
     permissions: '0644'
     content: |
       [Unit]
-      Description=Minecraft Metrics SSE
+      Description=Minecraft Metrics WebSocket
       After=network.target minecraft.service
 
       [Service]
@@ -1167,7 +1243,7 @@ runcmd:
   - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
   - apt-get install -y nodejs awscli || true
   - cd /opt/minecraft || true
-  - sudo -u minecraft npm install --no-audit --no-fund express multer archiver cors || true
+  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors || true
   - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
   - systemctl daemon-reload
   - systemctl enable mc-sync.service || true
@@ -1191,6 +1267,7 @@ runcmd:
   - ufw allow 3003
   - ufw allow 3004
   - ufw allow 3005
+  - ufw allow 3006
   - ufw --force enable
   - echo "[DEBUG] running quick startup checks"
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":25565\\b"; then echo "PORT 25565 OPEN"; break; fi; sleep 2; done;'
@@ -1429,11 +1506,11 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     console.log('Server provisioned successfully, updated row:', updatedRow.id);
     return res.status(200).json({ 
-      server: updatedRow, 
-      hetznerServer: finalServer,
-      subdomain: serverRow.subdomain, // Bare subdomain
-      fullDomain: subdomain // Full domain with `.spawnly.net`
-    });
+  server: updatedRow, 
+  hetznerServer: finalServer,
+  subdomain: serverRow.subdomain, // Bare subdomain
+  fullDomain: subdomain // Full domain with `.spawnly.net`
+});
   } catch (err) {
     console.error('provisionServer error:', err.message, err.stack);
     return res.status(500).json({ 

@@ -3,15 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start"
+    "start": "next start -p 3001"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.879.0",
     "@supabase/supabase-js": "^2.55.0",
-    "adm-zip": "^0.5.16",
-    "archiver": "^7.0.1",
     "aws": "^0.0.3-2",
     "aws-sdk": "^2.1692.0",
     "dotenv": "^17.2.1",
@@ -21,9 +19,7 @@
     "http-proxy": "^1.18.1",
     "md5": "^2.3.0",
     "minecraft-rcon-client": "^3.0.0",
-    "nbtify": "^2.2.0",
     "next": "^15.4.6",
-    "node-fetch": "^3.3.2",
     "node-ssh": "^13.2.1",
     "rcon-client": "^4.2.5",
     "react": "^18.3.1",

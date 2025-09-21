@@ -1,4 +1,3 @@
-// pages/server/[id].js
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
@@ -13,7 +12,6 @@ import ServerStatusIndicator from '../../components/ServerStatusIndicator';
 import Header from '../../components/ServersHeader';
 import Footer from '../../components/ServersFooter';
 import PlayersTab from '../../components/PlayersTab';
-import WorldTab from '../../components/WorldTab';
 
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
@@ -30,8 +28,6 @@ export default function ServerDetailPage({ initialServer }) {
   const [liveMetrics, setLiveMetrics] = useState({ cpu: 0, memory: 0, disk: 0 });
   const [editingRam, setEditingRam] = useState(false);
   const [newRam, setNewRam] = useState(null);
-  const [fileManagerPath, setFileManagerPath] = useState('');
-  const [fileManagerAutoOpen, setFileManagerAutoOpen] = useState('');
 
   // Realtime channel refs
   const serverChannelRef = useRef(null);
@@ -157,7 +153,7 @@ export default function ServerDetailPage({ initialServer }) {
             { event: 'UPDATE', schema: 'public', table: 'servers', filter: `id=eq.${id}` },
             (payload) => {
               if (!mountedRef.current) return;
-              console.log('Realtime server update received:', payload.new.status); // Enhanced logging
+              console.log('Realtime server update:', payload);
               const newRow = payload.new;
               setServer(newRow);
 
@@ -286,7 +282,7 @@ export default function ServerDetailPage({ initialServer }) {
     if (!server?.ipv4 || metricsWsRef.current) return;
 
     try {
-      const wsUrl = `wss://${server.ipv4}:3004`;
+      const wsUrl = `ws://${server.ipv4}:3004`;
       console.log('Connecting to metrics WebSocket:', wsUrl);
 
       const ws = new WebSocket(wsUrl);
@@ -422,15 +418,6 @@ export default function ServerDetailPage({ initialServer }) {
 
       setServer((prev) => (prev ? { ...prev, status: 'Starting' } : prev));
 
-      // Update Supabase immediately to prevent fetch overwrites
-      const { error: updateError } = await supabase
-        .from('servers')
-        .update({ status: 'Starting' })
-        .eq('id', serverId);
-      if (updateError) {
-        throw new Error(`Failed to update status in DB: ${updateError.message}`);
-      }
-
       const { data: serverData, error: serverError } = await supabase
         .from('servers')
         .select('type, version, pending_type, pending_version')
@@ -473,7 +460,7 @@ export default function ServerDetailPage({ initialServer }) {
           .eq('id', serverId);
       }
 
-      // Start polling until 'Running' or 'Initializing'
+      // Start polling until 'Running'
       pollUntilStatus(['Running', 'Initializing']);
 
       // Immediate fetch and schedule another after 2 seconds
@@ -518,15 +505,6 @@ export default function ServerDetailPage({ initialServer }) {
       }
 
       setServer((prev) => (prev ? { ...prev, status: 'Stopping' } : prev));
-
-      // Update Supabase immediately
-      const { error: updateError } = await supabase
-        .from('servers')
-        .update({ status: 'Stopping' })
-        .eq('id', serverId);
-      if (updateError) {
-        throw new Error(`Failed to update status in DB: ${updateError.message}`);
-      }
 
       const json = await safeFetchJson('/api/servers/action', {
         method: 'POST',
@@ -580,15 +558,6 @@ export default function ServerDetailPage({ initialServer }) {
       }
 
       setServer((prev) => (prev ? { ...prev, status: 'Restarting' } : prev));
-
-      // Update Supabase immediately
-      const { error: updateError } = await supabase
-        .from('servers')
-        .update({ status: 'Restarting' })
-        .eq('id', serverId);
-      if (updateError) {
-        throw new Error(`Failed to update status in DB: ${updateError.message}`);
-      }
 
       const json = await safeFetchJson('/api/servers/action', {
         method: 'POST',
@@ -713,7 +682,7 @@ export default function ServerDetailPage({ initialServer }) {
   const modsPluginsLabel = isModded ? 'Mods' : 'Plugins';
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100" key={server.status}>
       <Header user={user} credits={credits} onLogout={handleLogout} />
       
       <main className="p-4 md:p-8">
@@ -740,7 +709,7 @@ export default function ServerDetailPage({ initialServer }) {
               </div>
             </div>
 
-            <div className="space-x-2">
+            <div className="space-x-2" key={status}>
               <button
                 onClick={refreshServerStatus}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded text-sm transition-colors"
@@ -801,7 +770,6 @@ export default function ServerDetailPage({ initialServer }) {
                 <button onClick={() => setActiveTab('console')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'console' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Console</button>
                 <button onClick={() => setActiveTab('properties')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'properties' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Properties</button>
                 <button onClick={() => setActiveTab('players')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'players' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Players</button>
-                <button onClick={() => setActiveTab('world')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'world' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>World</button>
               </nav>
             </div>
 
@@ -889,7 +857,7 @@ export default function ServerDetailPage({ initialServer }) {
               {activeTab === 'files' && (
                 <div className="bg-white p-4 rounded shadow">
                   {fileToken ? (
-                    <FileManager server={server} token={fileToken} initialPath={fileManagerPath} autoOpenFile={fileManagerAutoOpen} setActiveTab={setActiveTab} />
+                    <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} />
                   ) : (
                     <p className="text-gray-600">Loading file access token...</p>
                   )}
@@ -916,16 +884,6 @@ export default function ServerDetailPage({ initialServer }) {
                     <p className="text-gray-600">Loading file access token...</p>
                   )}
                 </div>
-              )}
-
-              {activeTab === 'world' && (
-                <WorldTab 
-                  server={server} 
-                  token={fileToken} 
-                  setActiveTab={setActiveTab} 
-                  setFileManagerPath={setFileManagerPath} 
-                  setFileManagerAutoOpen={setFileManagerAutoOpen} 
-                />
               )}
             </div>
           </div>

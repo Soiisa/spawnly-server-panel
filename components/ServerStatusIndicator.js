@@ -1,6 +1,4 @@
-// components/ServerStatusIndicator.js
 import { useEffect, useState, useRef } from 'react';
-import { supabase } from '../lib/supabaseClient';
 
 export default function ServerStatusIndicator({ server }) {
   const [status, setStatus] = useState(server.status || 'Unknown');
@@ -10,49 +8,95 @@ export default function ServerStatusIndicator({ server }) {
   const [connected, setConnected] = useState(false);
   const [debug, setDebug] = useState('');
   const wsRef = useRef(null);
-  const channelRef = useRef(null);
 
   useEffect(() => {
-    if (!server?.id) {
-      setDebug('No server ID available');
+    if (!server?.ipv4) {
+      setDebug('No IPv4 address available');
       return;
     }
 
-    // Subscribe to Supabase real-time updates for status
-    channelRef.current = supabase
-      .channel(`server-status-${server.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'servers',
-          filter: `id=eq.${server.id}`
-        },
-        (payload) => {
-          console.log('Received Supabase status update:', payload);
-          const newData = payload.new;
-          setStatus(newData.status || 'Unknown');
-          setCpu(newData.cpu_usage || 0);
-          setMemory(newData.memory_usage || 0);
-          setDisk(newData.disk_usage || 0);
-          setConnected(true);
-          setDebug('Updated from Supabase');
+    const connectToStatusServer = () => {
+      const wsUrl = `ws://${server.ipv4}:3006`;
+      setDebug(`Connecting to: ${wsUrl}`);
+      console.log('Connecting to status WebSocket:', wsUrl);
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setDebug('WebSocket connected successfully');
+        console.log('Status WebSocket connected');
+        setConnected(true);
+      };
+
+      ws.onmessage = async (event) => {
+  try {
+    const data = JSON.parse(event.data);
+    if (data.type === 'status_update') {
+      setStatus(data.status);
+      setCpu(data.cpu || 0);
+      setMemory(data.memory || 0);
+      setDisk(data.disk || 0);
+
+      // UPDATE SUPABASE WITH THE NEW STATUS
+      try {
+        console.log('Calling update-status API for server:', server.id);
+        const response = await fetch('/api/servers/update-status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            serverId: server.id,
+            status: data.status,
+            cpu: data.cpu || 0,
+            memory: data.memory || 0,
+            disk: data.disk || 0
+          })
+        });
+
+        const responseData = await response.json();
+        
+        if (!response.ok) {
+          console.error('API failed:', response.status, responseData);
+          throw new Error(responseData.error || `HTTP ${response.status}`);
         }
-      )
-      .subscribe((status) => {
-        console.log('Supabase subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          setDebug('Subscribed to Supabase updates');
-        }
-      });
+
+        console.log('API success:', responseData);
+        
+      } catch (apiError) {
+        console.error('Error calling update-status API:', apiError.message);
+        // You could add retry logic here
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing status message:', error);
+  }
+};
+
+      ws.onerror = (error) => {
+        setDebug(`WebSocket error: ${error.message || 'Unknown error'}`);
+        console.error('Status WebSocket error:', error);
+        setConnected(false);
+      };
+
+      ws.onclose = (event) => {
+        setDebug(`WebSocket closed: ${event.code} ${event.reason || 'No reason'}`);
+        console.log('Status WebSocket disconnected', event.code, event.reason);
+        setConnected(false);
+        // Attempt to reconnect after a delay
+        setTimeout(connectToStatusServer, 5000);
+      };
+    };
+
+    connectToStatusServer();
 
     return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
+      if (wsRef.current) {
+        wsRef.current.close();
       }
     };
-  }, [server.id]);
+  }, [server.ipv4, server.id]);
 
   if (!server.ipv4) {
     return (
