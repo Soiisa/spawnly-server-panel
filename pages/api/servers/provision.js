@@ -308,7 +308,6 @@ const deleteS3Files = async (serverId, s3Config) => {
 
     console.log(`Deleting S3 files for server ${serverId} in bucket ${bucket} with prefix ${prefix}`);
 
-    // List all objects in the server's S3 prefix
     const listParams = {
       Bucket: bucket,
       Prefix: prefix,
@@ -320,10 +319,8 @@ const deleteS3Files = async (serverId, s3Config) => {
       return;
     }
 
-    // Prepare objects for deletion
     const objectsToDelete = listedObjects.Contents.map((object) => ({ Key: object.Key }));
 
-    // Delete objects
     const deleteParams = {
       Bucket: bucket,
       Delete: {
@@ -340,11 +337,12 @@ const deleteS3Files = async (serverId, s3Config) => {
   }
 };
 
-const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false) => {
+const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain) => {
   const heapGb = Math.max(1, Math.floor(Number(ramGb) * 0.8));
   const timestamp = new Date().toISOString();
   const escapedDl = escapeForSingleQuotes(downloadUrl || '');
   const escapedRconPassword = escapeForSingleQuotes(rconPassword);
+  const escapedSubdomain = escapeForSingleQuotes(subdomain || '');
   if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
     console.warn(`Invalid or missing version: ${version}, defaulting to 1.21.8`);
     version = '1.21.8';
@@ -404,6 +402,9 @@ packages:
   - groff
   - less
   - awscli
+  - nginx
+  - certbot
+  - python3-certbot-nginx
 
 write_files:
   - path: /home/minecraft/.aws/credentials
@@ -422,6 +423,31 @@ write_files:
       [default]
       region = ${s3Config.AWS_REGION || 'fsn1'}
       ${s3Config.S3_ENDPOINT ? `endpoint_url = ${s3Config.S3_ENDPOINT}` : ''}
+  - path: /etc/nginx/sites-available/minecraft-websocket
+    permissions: '0644'
+    content: |
+      server {
+        listen 3006 ssl;
+        server_name ${escapedSubdomain}.spawnly.net;
+
+        ssl_certificate /etc/letsencrypt/live/${escapedSubdomain}.spawnly.net/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${escapedSubdomain}.spawnly.net/privkey.pem;
+
+        location / {
+          proxy_pass http://localhost:3006;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+      }
+  - path: /etc/nginx/sites-enabled/minecraft-websocket
+    permissions: '0644'
+    content: |
+      include /etc/nginx/sites-available/minecraft-websocket;
   - path: /usr/local/bin/mc-sync.sh
     permissions: '0755'
     content: |
@@ -668,13 +694,13 @@ write_files:
       const SERVER_ID = '${serverId}';
       const RCON_PASSWORD = '${escapedRconPassword}';
       const NEXTJS_API_URL = '${process.env.APP_BASE_URL || "http://localhost:3000"}';
-      const STATUS_WS_URL = 'ws://0.0.0.0:3006';
+      const STATUS_WS_URL = 'wss://${escapedSubdomain}.spawnly.net:3006';
 
       let ws = null;
       let reconnectInterval = null;
 
       function connect() {
-        console.log('Connecting to status WebSocket...');
+        console.log('Connecting to status WebSocket:', STATUS_WS_URL);
         ws = new WebSocket(STATUS_WS_URL);
 
         ws.onopen = () => {
@@ -687,7 +713,7 @@ write_files:
         };
 
         ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
+          console.error('WebSocket error:', error.message, error.stack);
         };
 
         ws.onclose = () => {
@@ -750,7 +776,7 @@ write_files:
             console.log('Status updated in Supabase successfully');
           }
         } catch (error) {
-          console.error('Error updating status in Supabase:', error);
+          console.error('Error updating status in Supabase:', error.message, error.stack);
         }
       }
 
@@ -761,7 +787,7 @@ write_files:
           try {
             ws.send(JSON.stringify(status));
           } catch (error) {
-            console.error('Error sending status via WebSocket:', error);
+            console.error('Error sending status via WebSocket:', error.message, error.stack);
           }
         }
         
@@ -781,7 +807,7 @@ write_files:
         });
 
         wss.on('error', (err) => {
-          console.log('Status WebSocket client error', err && err.message);
+          console.error('Status WebSocket server error:', err.message, err.stack);
         });
       });
 
@@ -1242,6 +1268,9 @@ runcmd:
   - apt-get update || true
   - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
   - apt-get install -y nodejs awscli || true
+  - certbot --nginx -d ${escapedSubdomain}.spawnly.net --non-interactive --agree-tos --email admin@spawnly.net || true
+  - systemctl restart nginx || true
+  - echo "0 0,12 * * * root certbot renew --quiet --no-self-upgrade" >> /etc/crontab
   - cd /opt/minecraft || true
   - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors || true
   - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
@@ -1268,12 +1297,14 @@ runcmd:
   - ufw allow 3004
   - ufw allow 3005
   - ufw allow 3006
+  - ufw allow 443
   - ufw --force enable
   - echo "[DEBUG] running quick startup checks"
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":25565\\b"; then echo "PORT 25565 OPEN"; break; fi; sleep 2; done;'
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3002\\b"; then echo "CONSOLE PORT 3002 OPEN"; break; fi; sleep 2; done;'
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3003\\b"; then echo "PROPERTIES API PORT 3003 OPEN"; break; fi; sleep 2; done;'
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3005\\b"; then echo "FILE API PORT 3005 OPEN"; break; fi; sleep 2; done;'
+  - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3006\\b"; then echo "WEBSOCKET PORT 3006 OPEN"; break; fi; sleep 2; done;'
   - echo "[FINAL DEBUG] cloud-init finished at $(date)"
 `;
 
@@ -1287,6 +1318,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const serverType = ramToServerType(Number(serverRow.ram || 4));
     const software = serverRow.type || 'vanilla';
     const needsFileDeletion = serverRow.needs_file_deletion;
+    const subdomain = serverRow.subdomain;
 
     let downloadUrl;
     try {
@@ -1331,7 +1363,8 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       serverRow.id,
       s3Config,
       version,
-      needsFileDeletion
+      needsFileDeletion,
+      subdomain
     );
 
     const sanitizedUserData = sanitizeYaml(userData);
@@ -1450,7 +1483,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const hetznerId = finalServer?.id || null;
     const newStatus = finalServer ? (finalServer.status === 'running' ? 'Running' : 'Initializing') : 'Initializing';
 
-    let subdomain = null;
+    let subdomainResult = null;
     if (ipv4 && serverRow.subdomain) {
       try {
         const isAvailable = await checkSubdomainAvailable(serverRow.subdomain);
@@ -1465,7 +1498,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         await createSRVRecord(serverRow.subdomain, 25565);
         console.log(`Created SRV record for _minecraft._tcp.${serverRow.subdomain}.spawnly.net`);
 
-        subdomain = `${serverRow.subdomain}.spawnly.net`;
+        subdomainResult = `${serverRow.subdomain}.spawnly.net`;
       } catch (dnsErr) {
         console.error('Cloudflare DNS setup failed:', dnsErr.message, dnsErr.stack);
         return res.status(502).json({ 
@@ -1477,7 +1510,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       }
     }
 
-    console.log('Updating Supabase with:', { hetznerId, ipv4, newStatus, rconPassword, subdomain, needsFileDeletion: false });
+    console.log('Updating Supabase with:', { hetznerId, ipv4, newStatus, rconPassword, subdomain: subdomainResult, needsFileDeletion: false });
 
     const { data: updatedRow, error: updateErr } = await supabaseAdmin
       .from('servers')
@@ -1486,8 +1519,8 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         ipv4,
         status: newStatus,
         rcon_password: rconPassword,
-        subdomain: serverRow.subdomain,
-        needs_file_deletion: false // Reset after successful provisioning
+        subdomain: subdomainResult,
+        needs_file_deletion: false
       })
       .eq('id', serverRow.id)
       .select()
@@ -1498,7 +1531,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       return res.status(200).json({ 
         warning: 'Provisioned but failed to update DB', 
         hetznerServer: finalServer,
-        subdomain,
+        subdomain: subdomainResult,
         detail: updateErr.message,
         stack: process.env.NODE_ENV === 'development' ? updateErr.stack : undefined
       });
@@ -1506,11 +1539,11 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     console.log('Server provisioned successfully, updated row:', updatedRow.id);
     return res.status(200).json({ 
-  server: updatedRow, 
-  hetznerServer: finalServer,
-  subdomain: serverRow.subdomain, // Bare subdomain
-  fullDomain: subdomain // Full domain with `.spawnly.net`
-});
+      server: updatedRow, 
+      hetznerServer: finalServer,
+      subdomain: serverRow.subdomain,
+      fullDomain: subdomainResult
+    });
   } catch (err) {
     console.error('provisionServer error:', err.message, err.stack);
     return res.status(500).json({ 

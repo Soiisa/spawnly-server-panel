@@ -19,21 +19,19 @@ export default function ConsoleViewer({ server }) {
   }, [paused]);
 
   useEffect(() => {
-    if (!server || !server.ipv4) return;
+    if (!server || !server.subdomain) return;
     
     const connectToServer = () => {
-      // Use the server's IP directly
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const wsUrl = `${protocol}://${server.ipv4}:3002`;
+      const wsUrl = `wss://${server.subdomain}.spawnly.net/ws/console`;
       
-      setStatusMsg(`Connecting to ${server.ipv4}:3002...`);
+      setStatusMsg(`Connecting to ${server.subdomain}.spawnly.net/ws/console...`);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
         setConnected(true);
         setLines([]); // Clear lines on connect to load server-provided history
-        setStatusMsg(`Connected to ${server.ipv4}:3002`);
+        setStatusMsg(`Connected to ${server.subdomain}.spawnly.net/ws/console`);
         // Clear any reconnect timeout
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
@@ -139,7 +137,7 @@ export default function ConsoleViewer({ server }) {
           <strong className="text-lg">{server?.name || 'Server Console'}</strong>
           <div className="text-sm text-gray-500">
             {connected ? 'Live' : 'Disconnected'} — {statusMsg}
-            {server?.ipv4 && <span> (Direct to {server.ipv4}:3002)</span>}
+            {server?.subdomain && <span> (Direct to {server.subdomain}.spawnly.net/ws/console)</span>}
           </div>
         </div>
         <div className="flex items-center space-x-2">

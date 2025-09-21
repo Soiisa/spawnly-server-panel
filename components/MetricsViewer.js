@@ -13,20 +13,18 @@ export default function MetricsViewer({ server }) {
   const reconnectTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!server || !server.ipv4) return;
+    if (!server || !server.subdomain) return;
 
     const connectToServer = () => {
-      // Use the server's IP directly
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const wsUrl = `${protocol}://${server.ipv4}:3004`;
+      const wsUrl = `wss://${server.subdomain}.spawnly.net/ws/metrics`;
       
-      setStatusMsg(`Connecting to ${server.ipv4}:3004...`);
+      setStatusMsg(`Connecting to ${server.subdomain}.spawnly.net/ws/metrics...`);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
         setConnected(true);
-        setStatusMsg(`Connected to ${server.ipv4}:3004`);
+        setStatusMsg(`Connected to ${server.subdomain}.spawnly.net/ws/metrics`);
         // Clear any reconnect timeout
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);

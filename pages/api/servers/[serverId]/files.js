@@ -58,7 +58,7 @@ export default async function handler(req, res) {
   // Authenticate using server row
   const { data: server, error } = await supabaseAdmin
     .from('servers')
-    .select('rcon_password, ipv4, status')
+    .select('rcon_password, subdomain, status')
     .eq('id', serverId)
     .single();
 
@@ -78,9 +78,9 @@ export default async function handler(req, res) {
     relPath = relPath.replace(/^\/+/, '').replace(/\/+$/, '');
     const s3Path = relPath ? path.join(s3Prefix, relPath).replace(/\\/g, '/') + '/' : s3Prefix;
 
-    if (server.status === 'Running' && server.ipv4) {
+    if (server.status === 'Running' && server.subdomain) {
       try {
-        const response = await fetch(`http://${server.ipv4}:3005/api/files?path=${encodeURIComponent(relPath)}`, {
+        const response = await fetch(`https://${server.subdomain}.spawnly.net/api/files?path=${encodeURIComponent(relPath)}`, {
           headers: {
             'Authorization': `Bearer ${server.rcon_password}`,
           },
@@ -154,12 +154,12 @@ export default async function handler(req, res) {
           return resolve(res.status(500).json({ error: 'Failed to parse upload' }));
         }
 
-        const fileName = fields.fileName;
+        const fileName = files.file.originalname;  // Adjust for formidable-serverless
         if (!fileName) {
           return resolve(res.status(400).json({ error: 'Missing fileName' }));
         }
 
-        const fileContent = files.fileContent;
+        const fileContent = files.file;
         if (!fileContent || !fileContent.path) {
           return resolve(res.status(400).json({ error: 'Missing file content' }));
         }
