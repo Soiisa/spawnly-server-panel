@@ -1,5 +1,4 @@
-// pages/api/servers/status.js
-import WebSocket from 'ws';
+import { Server } from 'socket.io';
 import { createClient } from '@supabase/supabase-js';
 
 const statusConnections = new Map();
@@ -24,16 +23,23 @@ export default function handler(req, res) {
     return res.status(400).json({ error: 'Missing serverId' });
   }
 
-  if (req.headers.upgrade === 'websocket') {
-    const wss = new WebSocket.Server({ noServer: true });
+  // Check if Socket.IO server is already attached
+  if (!res.socket.server.io) {
+    console.log('Initializing Socket.IO server for status');
+    const io = new Server(res.socket.server, {
+      path: `/api/servers/status/${serverId}`,
+      cors: {
+        origin: '*', // Adjust for your client origins
+        methods: ['GET', 'POST'],
+      },
+    });
 
-    wss.on('connection', (ws, request) => {
-      console.log('Status WebSocket connected for server:', serverId);
-      statusConnections.set(serverId, ws);
+    io.on('connection', (socket) => {
+      console.log('Socket.IO connected for server:', serverId);
+      statusConnections.set(serverId, socket);
 
-      ws.on('message', async (message) => {
+      socket.on('status_update', async (data) => {
         try {
-          const data = JSON.parse(message);
           if (data.type === 'status_update') {
             const { error } = await supabase
               .from('servers')
@@ -42,7 +48,7 @@ export default function handler(req, res) {
                 cpu_usage: data.cpu || 0,
                 memory_usage: data.memory || 0,
                 disk_usage: data.disk || 0,
-                last_status_update: new Date().toISOString()
+                last_status_update: new Date().toISOString(),
               })
               .eq('id', serverId);
 
@@ -52,35 +58,28 @@ export default function handler(req, res) {
               console.log('Status updated in Supabase for server:', serverId);
             }
 
-            wss.clients.forEach((client) => {
-              if (client.readyState === WebSocket.OPEN) {
-                try {
-                  client.send(JSON.stringify(data));
-                } catch (e) {
-                  console.error('Error sending WebSocket message:', e.message);
-                }
-              }
-            });
+            // Broadcast to all connected clients
+            io.emit('status_update', data);
           }
         } catch (error) {
           console.error('Error processing status message:', error.message, error.stack);
         }
       });
 
-      ws.on('close', () => {
-        console.log('Status WebSocket disconnected for server:', serverId);
+      socket.on('disconnect', () => {
+        console.log('Socket.IO disconnected for server:', serverId);
         statusConnections.delete(serverId);
       });
 
-      ws.on('error', (error) => {
-        console.error('Status WebSocket error for server:', serverId, 'Error:', error.message);
+      socket.on('error', (error) => {
+        console.error('Socket.IO error for server:', serverId, 'Error:', error.message);
       });
     });
 
-    wss.handleUpgrade(req, req.socket, Buffer.alloc(0), (ws) => {
-      wss.emit('connection', ws, req);
-    });
+    res.socket.server.io = io;
   } else {
-    res.status(400).json({ error: 'Expected WebSocket upgrade' });
+    console.log('Socket.IO server already initialized for status');
   }
+
+  res.end();
 }

@@ -747,34 +747,42 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  - path: /opt/minecraft/console-server.js
+- path: /opt/minecraft/console-server.js
     permissions: '0755'
     owner: minecraft:minecraft
     defer: true
     content: |
-      const { spawn, execSync } = require('child_process');
-      const WebSocket = require('ws');
+      const { execSync, spawn } = require('child_process');
+      const http = require('http');
+      const { Server } = require('socket.io');
 
       const PORT = process.env.CONSOLE_PORT ? parseInt(process.env.CONSOLE_PORT, 10) : 3002;
       const MAX_HISTORY_LINES = 2000;
-      const wss = new WebSocket.Server({ port: PORT }, () => {
-        console.log('Console WebSocket listening on port', PORT);
+
+      const server = http.createServer();
+      const io = new Server(server, {
+        cors: {
+          origin: '*',
+          methods: ['GET', 'POST'],
+        },
       });
 
       let history = [];
       let lineBuffer = '';
 
       try {
-        const pastLogs = execSync('journalctl -u minecraft -n ' + MAX_HISTORY_LINES + ' -o cat').toString().trim();
+        const pastLogs = execSync(\`journalctl -u minecraft -n \${MAX_HISTORY_LINES} -o cat\`).toString().trim();
         history = pastLogs.split('\\n').filter(line => line.trim());
       } catch (e) {
         console.error('Failed to load historical logs:', e.message);
       }
 
-      const tail = spawn('journalctl', ['-u', 'minecraft', '-f', '-n', '0', '-o', 'cat'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      const tail = spawn('journalctl', ['-u', 'minecraft', '-f', '-n', '0', '-o', 'cat'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
 
       tail.on('error', (err) => {
-        console.error('journalctl spawn error', err);
+        console.error('journalctl spawn error:', err);
       });
 
       tail.stderr.on('data', (d) => {
@@ -783,26 +791,17 @@ write_files:
 
       tail.stdout.on('data', (chunk) => {
         lineBuffer += chunk.toString();
-        let lines = lineBuffer.split('\\n');
+        const lines = lineBuffer.split('\\n');
         lineBuffer = lines.pop() || '';
-        lines = lines.filter(line => line.trim());
+        const validLines = lines.filter(line => line.trim());
 
-        if (lines.length > 0) {
-          history.push(...lines);
+        if (validLines.length > 0) {
+          history.push(...validLines);
           if (history.length > MAX_HISTORY_LINES) {
             history = history.slice(-MAX_HISTORY_LINES);
           }
 
-          const message = lines.join('\\n') + '\\n';
-          wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-              try {
-                client.send(message);
-              } catch (e) {
-                console.error('Send error:', e);
-              }
-            }
-          });
+          io.emit('console', validLines.join('\\n') + '\\n');
         }
       });
 
@@ -812,34 +811,30 @@ write_files:
           if (history.length > MAX_HISTORY_LINES) {
             history = history.slice(-MAX_HISTORY_LINES);
           }
-          const message = lineBuffer + '\\n';
-          wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-              client.send(message);
-            }
-          });
+          io.emit('console', lineBuffer + '\\n');
         }
       });
 
-      wss.on('connection', (ws) => {
-        console.log('Console client connected');
-        if (ws.readyState === WebSocket.OPEN) {
-          const historyMessage = history.join('\\n') + (history.length ? '\\n' : '');
-          ws.send(historyMessage);
-          ws.send('[server] Connected to console stream\\n');
-        }
+      io.on('connection', (socket) => {
+        console.log('Console client connected:', socket.id);
+        socket.emit('console', history.join('\\n') + (history.length ? '\\n' : ''));
+        socket.emit('console', '[server] Connected to console stream\\n');
 
-        ws.on('close', () => {
-          console.log('Console client disconnected');
-        });
-
-        ws.on('error', (err) => {
-          console.log('WebSocket client error', err && err.message);
+        socket.on('disconnect', () => {
+          console.log('Console client disconnected:', socket.id);
         });
       });
 
-      process.on('SIGINT', () => process.exit(0));
-      process.on('SIGTERM', () => process.exit(0));
+      server.listen(PORT, () => {
+        console.log('Console Socket.IO server listening on port', PORT);
+      });
+
+      process.on('SIGINT', () => {
+        server.close(() => process.exit(0));
+      });
+      process.on('SIGTERM', () => {
+        server.close(() => process.exit(0));
+      });
   - path: /etc/systemd/system/mc-console.service
     permissions: '0644'
     content: |
@@ -926,17 +921,23 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  - path: /opt/minecraft/metrics-server.js
+- path: /opt/minecraft/metrics-server.js
     permissions: '0755'
     owner: minecraft:minecraft
     defer: true
     content: |
-      const WebSocket = require('ws');
+      const http = require('http');
+      const { Server } = require('socket.io');
       const os = require('os');
 
       const PORT = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT, 10) : 3004;
-      const wss = new WebSocket.Server({ port: PORT }, () => {
-        console.log('Metrics WebSocket listening on port', PORT);
+
+      const server = http.createServer();
+      const io = new Server(server, {
+        cors: {
+          origin: '*',
+          methods: ['GET', 'POST'],
+        },
       });
 
       function getSystemMetrics() {
@@ -954,28 +955,28 @@ write_files:
         };
       }
 
-      wss.on('connection', (ws) => {
-        console.log('Metrics client connected');
+      io.on('connection', (socket) => {
+        console.log('Metrics client connected:', socket.id);
         const interval = setInterval(() => {
-          if (ws.readyState === ws.OPEN) {
-            try {
-              ws.send(JSON.stringify(getSystemMetrics()));
-            } catch (e) {
-              console.error('Error sending metrics:', e);
-            }
-          }
+          socket.emit('metrics', getSystemMetrics());
         }, 2000);
-        ws.on('close', () => {
-          console.log('Metrics client disconnected');
+
+        socket.on('disconnect', () => {
+          console.log('Metrics client disconnected:', socket.id);
           clearInterval(interval);
-        });
-        ws.on('error', (err) => {
-          console.log('WebSocket client error', err && err.message);
         });
       });
 
-      process.on('SIGINT', () => process.exit(0));
-      process.on('SIGTERM', () => process.exit(0));
+      server.listen(PORT, () => {
+        console.log('Metrics Socket.IO server listening on port', PORT);
+      });
+
+      process.on('SIGINT', () => {
+        server.close(() => process.exit(0));
+      });
+      process.on('SIGTERM', () => {
+        server.close(() => process.exit(0));
+      });
   - path: /etc/systemd/system/mc-metrics.service
     permissions: '0644'
     content: |
@@ -1182,7 +1183,7 @@ runcmd:
   - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
   - apt-get install -y nodejs awscli || true
   - cd /opt/minecraft || true
-  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors || true
+  - sudo -u minecraft npm install --no-audit --no-fund socket.io ws express multer archiver cors || true
   - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
   - systemctl daemon-reload
   - systemctl enable mc-sync.service || true

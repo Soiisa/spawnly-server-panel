@@ -1,90 +1,66 @@
 // components/MetricsViewer.js
-
 import { useEffect, useRef, useState } from 'react';
+import io from 'socket.io-client';
 
 export default function MetricsViewer({ server }) {
-  const wsRef = useRef(null);
+  const socketRef = useRef(null);
   const [metrics, setMetrics] = useState({
     cpu: 0,
-    ram: 0
+    ram: 0,
   });
   const [connected, setConnected] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
-  const reconnectTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!server || !server.ipv4) return;
+    if (!server || !server.ipv4) {
+      setStatusMsg('No server IP available');
+      return;
+    }
 
     const connectToServer = () => {
-      // Use the server's IP directly
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const wsUrl = `${protocol}://${server.ipv4}:3004`;
-      
-      setStatusMsg(`Connecting to ${server.ipv4}:3004...`);
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      const socket = io(`http://${server.ipv4}:3004`, {
+        transports: ['websocket'], // Use WebSocket transport only
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 3000,
+      });
+      socketRef.current = socket;
 
-      ws.onopen = () => {
+      socket.on('connect', () => {
         setConnected(true);
         setStatusMsg(`Connected to ${server.ipv4}:3004`);
-        // Clear any reconnect timeout
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = null;
-        }
-      };
+      });
 
-      ws.onmessage = (ev) => {
-        try {
-          const data = JSON.parse(ev.data);
-          // Handle the actual data format: {cpu: number, ram: string, timestamp: string}
-          if (data.cpu !== undefined && data.ram !== undefined) {
-            setMetrics({
-              cpu: data.cpu,
-              ram: parseFloat(data.ram) || 0
-            });
-          }
-        } catch (e) {
-          console.error('Metrics parse error', e);
+      socket.on('metrics', (data) => {
+        if (data.cpu !== undefined && data.ram !== undefined) {
+          setMetrics({
+            cpu: parseFloat(data.cpu) || 0,
+            ram: parseFloat(data.ram) || 0,
+          });
         }
-      };
+      });
 
-      ws.onerror = (err) => {
-        console.warn('Metrics WS error', err);
+      socket.on('connect_error', (err) => {
+        console.warn('Metrics Socket.IO error:', err.message);
         setStatusMsg('Connection error, retrying...');
-      };
+        setConnected(false);
+      });
 
-      ws.onclose = () => {
+      socket.on('disconnect', () => {
         setConnected(false);
         setStatusMsg('Disconnected, attempting to reconnect...');
-        
-        // Try to reconnect after a delay
-        if (!reconnectTimeoutRef.current) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectTimeoutRef.current = null;
-            connectToServer();
-          }, 3000);
-        }
-      };
+      });
     };
 
     connectToServer();
 
     return () => {
-      try {
-        wsRef.current?.close();
-      } catch (e) {}
-      
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
+      socketRef.current?.disconnect();
     };
   }, [server]);
 
   return (
     <div className="bg-white rounded-lg shadow p-4">
-
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="font-bold">CPU Usage</div>
@@ -102,6 +78,9 @@ export default function MetricsViewer({ server }) {
             <div className="bg-green-500 h-4 rounded" style={{ width: `${Math.min(metrics.ram, 100)}%` }} />
           </div>
         </div>
+      </div>
+      <div className="text-sm text-gray-500 mt-2">
+        {connected ? 'Live' : 'Disconnected'} — {statusMsg}
       </div>
     </div>
   );

@@ -1,9 +1,10 @@
 // components/ConsoleViewer.js
 import { useEffect, useRef, useState } from 'react';
+import io from 'socket.io-client';
 
 export default function ConsoleViewer({ server }) {
   const logRef = useRef(null);
-  const wsRef = useRef(null);
+  const socketRef = useRef(null);
   const [lines, setLines] = useState([]);
   const [connected, setConnected] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -11,45 +12,39 @@ export default function ConsoleViewer({ server }) {
   const [command, setCommand] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const pausedRef = useRef(paused);
-  const reconnectTimeoutRef = useRef(null);
 
-  // Keep the ref updated with the current paused state
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
 
   useEffect(() => {
-    if (!server || !server.ipv4) return;
-    
-    const connectToServer = () => {
-      // Use the server's IP directly
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const wsUrl = `${protocol}://${server.ipv4}:3002`;
-      
-      setStatusMsg(`Connecting to ${server.ipv4}:3002...`);
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    if (!server || !server.ipv4) {
+      setStatusMsg('No server IP available');
+      return;
+    }
 
-      ws.onopen = () => {
+    const connectToServer = () => {
+      const socket = io(`http://${server.ipv4}:3002`, {
+        transports: ['websocket'], // Use WebSocket transport only
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 3000,
+      });
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
         setConnected(true);
         setLines([]); // Clear lines on connect to load server-provided history
         setStatusMsg(`Connected to ${server.ipv4}:3002`);
-        // Clear any reconnect timeout
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = null;
-        }
-      };
+      });
 
-      ws.onmessage = (ev) => {
-        // Use the ref instead of state to avoid dependency issues
+      socket.on('console', (data) => {
         if (pausedRef.current) return;
-        
-        const text = String(ev.data || '');
+
+        const text = String(data || '');
         const newLines = text.split(/\r?\n/).filter(Boolean);
         if (newLines.length === 0) return;
-        
-        // Process each line to remove system log prefix if present
+
         const processedLines = newLines.map(line => {
           const timestampMatch = line.match(/\[(\d{2}:\d{2}:\d{2})\]/);
           if (timestampMatch) {
@@ -60,42 +55,27 @@ export default function ConsoleViewer({ server }) {
         });
 
         setLines((prev) => prev.concat(processedLines));
-      };
+      });
 
-      ws.onerror = (err) => {
-        console.warn('Console WS error', err);
+      socket.on('connect_error', (err) => {
+        console.warn('Console Socket.IO error:', err.message);
         setStatusMsg('Connection error, retrying...');
-      };
+        setConnected(false);
+      });
 
-      ws.onclose = () => {
+      socket.on('disconnect', () => {
         setConnected(false);
         setStatusMsg('Disconnected, attempting to reconnect...');
-        
-        // Try to reconnect after a delay
-        if (!reconnectTimeoutRef.current) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectTimeoutRef.current = null;
-            connectToServer();
-          }, 3000);
-        }
-      };
+      });
     };
 
     connectToServer();
 
     return () => {
-      try {
-        wsRef.current?.close();
-      } catch (e) {}
-      
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
+      socketRef.current?.disconnect();
     };
   }, [server]);
 
-  // Auto-scroll effect
   useEffect(() => {
     if (!autoScroll || !logRef.current) return;
     logRef.current.scrollTop = logRef.current.scrollHeight;
