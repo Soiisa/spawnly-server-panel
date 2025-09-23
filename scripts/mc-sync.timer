@@ -1,0 +1,9 @@
+[Unit]
+Description=Minecraft S3 Sync Timer
+
+[Timer]
+OnCalendar=*:0/5
+Unit=mc-sync.service
+
+[Install]
+WantedBy=timers.target
