@@ -1,4 +1,3 @@
-// components/PlayersTab.js
 import { useState, useEffect } from 'react';
 import md5 from 'md5';
 
@@ -21,7 +20,7 @@ export default function PlayersTab({ server, token }) {
   const [success, setSuccess] = useState(null);
 
   const isRunning = server.status === 'Running';
-  const API_URL = `https://${server.subdomain}.spawnly.net/api`;
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   useEffect(() => {
     console.log('PlayersTab mounted with server:', server.id, 'token:', token);
@@ -44,7 +43,7 @@ export default function PlayersTab({ server, token }) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`Fetching file: ${filePath} (attempt ${attempt}/${retries})`);
-        const res = await fetch(`${API_URL}/file?path=${filePath}`, {
+        const res = await fetch(`${API_URL}/api/servers/${server.id}/file?path=${filePath}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         
@@ -106,7 +105,7 @@ export default function PlayersTab({ server, token }) {
       }
       console.log(`Saving file: ${filePath}`, { data: JSON.stringify(data, null, 2) });
       
-      const res = await fetch(`${API_URL}/files?path=${filePath}`, {
+      const res = await fetch(`${API_URL}/api/servers/${server.id}/files?path=${filePath}`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -135,13 +134,13 @@ export default function PlayersTab({ server, token }) {
 
   const sendRconCommand = async (command) => {
     try {
-      const res = await fetch(`${API_URL}/rcon`, {
+      const res = await fetch(`${API_URL}/api/servers/rcon`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ command }),
+        body: JSON.stringify({ serverId: server.id, command }),
       });
       
       if (!res.ok) {
@@ -149,9 +148,9 @@ export default function PlayersTab({ server, token }) {
         throw new Error(`Failed to execute command: ${errorText}`);
       }
       
-      const { output } = await res.json();
-      console.log('RCON response:', output);
-      return output;
+      const { response } = await res.json();
+      console.log('RCON response:', response);
+      return response;
     } catch (err) {
       console.error('RCON command failed:', err);
       throw err;
@@ -482,7 +481,7 @@ export default function PlayersTab({ server, token }) {
       )}
       
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-800">Player Management</h2>
+        <h2 className="text-xl font-bold">Player Management</h2>
         <button
           onClick={fetchAllData}
           disabled={loading}

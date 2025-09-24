@@ -14,7 +14,7 @@ export default function FileManager({ server, token, setActiveTab }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
 
-  const apiBase = `https://${server.subdomain}.spawnly.net/api`; // Use secure direct connection
+  const apiBase = `/api/servers/${server.id}`; // Always use backend
   const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md'];
 
   // List of files and folders to mask (case-insensitive, normalized)
@@ -40,7 +40,7 @@ export default function FileManager({ server, token, setActiveTab }) {
 
   useEffect(() => {
     if (!token || !server) return;
-    setIsOffline(server.status !== 'Running' || !server.subdomain);
+    setIsOffline(server.status !== 'Running' || !server.ipv4);
     fetchFiles(currentPath);
   }, [currentPath, token, server]);
 
@@ -153,7 +153,7 @@ export default function FileManager({ server, token, setActiveTab }) {
     try {
       setIsSaving(true);
       setError(null);
-      await axios.put(`${apiBase}/file`, fileContent, {
+      await axios.put(`${apiBase}/files`, fileContent, {
         params: { path: relPath },
         headers: {
           Authorization: `Bearer ${token}`,
@@ -258,10 +258,10 @@ export default function FileManager({ server, token, setActiveTab }) {
     setUploadProgress(0);
     setError(null);
     const formData = new FormData();
-    formData.append('file', file);
-    const relPath = currentPath ? `${currentPath}` : '';
+    formData.append('fileName', file.name);
+    formData.append('fileContent', file);
     try {
-      await axios.post(`${apiBase}/file?path=${relPath}`, formData, {
+      await axios.post(`${apiBase}/files?path=${currentPath}`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',

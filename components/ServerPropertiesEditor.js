@@ -1,10 +1,9 @@
-// components/ServerPropertiesEditor.js
 import { useState, useEffect, useMemo } from 'react';
 
 /**
  * ServerPropertiesEditor
  * - Parses server.properties text -> key/value map
- * - Renders two-column card UI for common keys (order matters)
+ * - Renders two-column card UI for common keys (toggles, selects, steppers)
  * - Keeps textarea and cards in sync
  *
  * Requires Tailwind CSS.
@@ -92,18 +91,15 @@ export default function ServerPropertiesEditor({ server }) {
 
   // Fetch properties
   useEffect(() => {
-    if (!server || !server.subdomain) return;
+    if (!server) return;
 
     const fetchProperties = async () => {
       try {
         setIsLoading(true);
         setError('');
-        setIsServerOffline(server.status !== 'Running' || !server.subdomain);
+        setIsServerOffline(server.status !== 'Running' || !server.ipv4);
 
-        const response = await fetch(`https://${server.subdomain}.spawnly.net/api/properties`, {
-          headers: { Authorization: `Bearer ${server.rcon_password}` },
-          timeout: 5000,  // Increase timeout to 10s for reliability
-        });
+        const response = await fetch(`/api/servers/${server.id}/properties`);
         if (!response.ok) {
           if (response.status === 404) {
             throw new Error('Server not found');
@@ -130,12 +126,9 @@ export default function ServerPropertiesEditor({ server }) {
       setIsSaving(true);
       setError('');
       setMessage('');
-      const response = await fetch(`https://${server.subdomain}.spawnly.net/api/properties`, {
+      const response = await fetch(`/api/servers/${server.id}/properties`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'text/plain',
-          'Authorization': `Bearer ${server.rcon_password}`
-        },
+        headers: { 'Content-Type': 'text/plain' },
         body: propertiesText,
       });
       const result = await response.json().catch(() => ({}));
@@ -163,9 +156,7 @@ export default function ServerPropertiesEditor({ server }) {
       setIsLoading(true);
       setError('');
       try {
-        const response = await fetch(`https://${server.subdomain}.spawnly.net/api/properties`, {
-          headers: { 'Authorization': `Bearer ${server.rcon_password}` },
-        });
+        const response = await fetch(`/api/servers/${server.id}/properties`);
         if (!response.ok) throw new Error('Failed to reload properties');
         const text = await response.text();
         setPropertiesText(text);

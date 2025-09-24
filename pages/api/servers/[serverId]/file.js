@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   // Authenticate using server row
   const { data: server, error } = await supabaseAdmin
     .from('servers')
-    .select('rcon_password, subdomain, status')
+    .select('rcon_password, ipv4, status')
     .eq('id', serverId)
     .single();
 
@@ -59,9 +59,9 @@ export default async function handler(req, res) {
       const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
 
       let content;
-      if (server.status === 'Running' && server.subdomain) {
+      if (server.status === 'Running' && server.ipv4) {
         try {
-          const response = await fetch(`https://${server.subdomain}.spawnly.net/api/file?path=${encodeURIComponent(relPath)}`, {
+          const response = await fetch(`http://${server.ipv4}:3005/api/file?path=${encodeURIComponent(relPath)}`, {
             headers: {
               'Authorization': `Bearer ${server.rcon_password}`,
             },

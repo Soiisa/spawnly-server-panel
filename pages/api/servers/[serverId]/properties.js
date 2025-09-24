@@ -1,4 +1,3 @@
-// pages/api/servers/[serverId]/properties.js
 import { createClient } from '@supabase/supabase-js';
 import AWS from 'aws-sdk';
 
