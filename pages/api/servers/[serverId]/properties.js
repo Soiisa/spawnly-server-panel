@@ -1,3 +1,4 @@
+// pages/api/servers/[serverId]/properties.js
 import { createClient } from '@supabase/supabase-js';
 import AWS from 'aws-sdk';
 
@@ -40,7 +41,7 @@ export default async function handler(req, res) {
       // Get server info from database
       const { data: server, error } = await supabaseAdmin
         .from('servers')
-        .select('ipv4, rcon_password, status')
+        .select('subdomain, rcon_password, status')
         .eq('id', serverId)
         .single();
 
@@ -48,10 +49,10 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'Server not found' });
       }
 
-      // If server is running and has an IP, try to fetch from game server
-      if (server.status === 'Running' && server.ipv4) {
+      // If server is running and has an subdomain, try to fetch from game server
+      if (server.status === 'Running' && server.subdomain) {
         try {
-          const response = await fetch(`http://${server.ipv4}:3003/api/properties`, {
+          const response = await fetch(`https://${server.subdomain}.spawnly.net/api/properties`, {
             headers: {
               'Authorization': `Bearer ${server.rcon_password}`,
             },
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // Server is offline or no IP, fetch from S3
+      // Server is offline or no subdomain, fetch from S3
       try {
         const s3Response = await s3
           .getObject({
@@ -98,7 +99,7 @@ export default async function handler(req, res) {
       // Get server info from database
       const { data: server, error } = await supabaseAdmin
         .from('servers')
-        .select('ipv4, rcon_password, status')
+        .select('subdomain, rcon_password, status')
         .eq('id', serverId)
         .single();
 
@@ -106,10 +107,10 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'Server not found' });
       }
 
-      // If server is running and has an IP, try to save to game server
-      if (server.status === 'Running' && server.ipv4) {
+      // If server is running and has an subdomain, try to save to game server
+      if (server.status === 'Running' && server.subdomain) {
         try {
-          const response = await fetch(`http://${server.ipv4}:3003/api/properties`, {
+          const response = await fetch(`https://${server.subdomain}.spawnly.net/api/properties`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${server.rcon_password}`,
@@ -140,7 +141,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // Server is offline or no IP, save to S3
+      // Server is offline or no subdomain, save to S3
       try {
         await s3
           .putObject({

@@ -1,3 +1,4 @@
+// pages/server/[id].js
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
@@ -282,7 +283,7 @@ export default function ServerDetailPage({ initialServer }) {
     if (!server?.ipv4 || metricsWsRef.current) return;
 
     try {
-      const wsUrl = `ws://${server.ipv4}:3004`;
+      const wsUrl = `wss://${server.subdomain}.spawnly.net:3006`;
       console.log('Connecting to metrics WebSocket:', wsUrl);
 
       const ws = new WebSocket(wsUrl);

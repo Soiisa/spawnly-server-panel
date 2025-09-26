@@ -1,5 +1,3 @@
-// pages/api/servers/provision.js
-
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 
@@ -198,7 +196,7 @@ const getSoftwareDownloadUrl = async (software, version) => {
 };
 
 const escapeForSingleQuotes = (str) => {
-  return str.replace(/'/g, `'\"'\"'`);
+  return str ? str.replace(/'/g, `'\"'\"'`) : '';
 };
 
 const generateRconPassword = () => {
@@ -308,7 +306,6 @@ const deleteS3Files = async (serverId, s3Config) => {
 
     console.log(`Deleting S3 files for server ${serverId} in bucket ${bucket} with prefix ${prefix}`);
 
-    // List all objects in the server's S3 prefix
     const listParams = {
       Bucket: bucket,
       Prefix: prefix,
@@ -320,10 +317,8 @@ const deleteS3Files = async (serverId, s3Config) => {
       return;
     }
 
-    // Prepare objects for deletion
     const objectsToDelete = listedObjects.Contents.map((object) => ({ Key: object.Key }));
 
-    // Delete objects
     const deleteParams = {
       Bucket: bucket,
       Delete: {
@@ -340,11 +335,17 @@ const deleteS3Files = async (serverId, s3Config) => {
   }
 };
 
-const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false) => {
+const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '') => {
   const heapGb = Math.max(1, Math.floor(Number(ramGb) * 0.8));
   const timestamp = new Date().toISOString();
   const escapedDl = escapeForSingleQuotes(downloadUrl || '');
   const escapedRconPassword = escapeForSingleQuotes(rconPassword);
+  const escapedSubdomain = escapeForSingleQuotes(subdomain.toLowerCase() || '');
+  const appBaseUrl = process.env.APP_BASE_URL || 'https://spawnly.net';
+  console.log(`[DEBUG] Generating cloud-init with subdomain: ${escapedSubdomain || 'none'}`);
+  if (!escapedSubdomain) {
+    console.warn('[WARN] Subdomain is empty, services will use insecure mode');
+  }
   if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
     console.warn(`Invalid or missing version: ${version}, defaulting to 1.21.8`);
     version = '1.21.8';
@@ -404,6 +405,8 @@ packages:
   - groff
   - less
   - awscli
+  - dnsutils
+  - certbot
 
 write_files:
   - path: /home/minecraft/.aws/credentials
@@ -420,8 +423,15 @@ write_files:
     defer: true
     content: |
       [default]
-      region = ${s3Config.AWS_REGION || 'fsn1'}
+      region = ${s3Config.AWS_REGION || 'eu-central-1'}
       ${s3Config.S3_ENDPOINT ? `endpoint_url = ${s3Config.S3_ENDPOINT}` : ''}
+  - path: /etc/hosts
+    permissions: '0644'
+    content: |
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      ff02::1 ip6-allnodes
+      ff02::2 ip6-allrouters
   - path: /usr/local/bin/mc-sync.sh
     permissions: '0755'
     content: |
@@ -657,139 +667,6 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  - path: /opt/minecraft/status-reporter.js
-    permissions: '0755'
-    owner: minecraft:minecraft
-    defer: true
-    content: |
-      const WebSocket = require('ws');
-      const { execSync } = require('child_process');
-
-      const SERVER_ID = '${serverId}';
-      const RCON_PASSWORD = '${escapedRconPassword}';
-      const NEXTJS_API_URL = '${process.env.APP_BASE_URL || "http://localhost:3000"}';
-      const STATUS_WS_URL = 'ws://0.0.0.0:3006';
-
-      let ws = null;
-      let reconnectInterval = null;
-
-      function connect() {
-        console.log('Connecting to status WebSocket...');
-        ws = new WebSocket(STATUS_WS_URL);
-
-        ws.onopen = () => {
-          console.log('Status WebSocket connected');
-          clearInterval(reconnectInterval);
-        };
-
-        ws.onmessage = (event) => {
-          console.log('Status update received:', event.data);
-        };
-
-        ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-        };
-
-        ws.onclose = () => {
-          console.log('Status WebSocket disconnected, attempting to reconnect...');
-          scheduleReconnect();
-        };
-      }
-
-      function scheduleReconnect() {
-        if (reconnectInterval) clearInterval(reconnectInterval);
-        reconnectInterval = setInterval(connect, 5000);
-      }
-
-      function getServerStatus() {
-        try {
-          const minecraftStatus = execSync('systemctl is-active minecraft').toString().trim();
-          const cpuUsage = execSync("grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'").toString().trim();
-          const memInfo = execSync("free | grep Mem | awk '{print $3/$2 * 100.0}'").toString().trim();
-          const diskUsage = execSync("df / | awk 'END{print $5}' | sed 's/%//'").toString().trim();
-          
-          return {
-            type: 'status_update',
-            status: minecraftStatus === 'active' ? 'Running' : 'Stopped',
-            cpu: parseFloat(cpuUsage) || 0,
-            memory: parseFloat(memInfo) || 0,
-            disk: parseFloat(diskUsage) || 0,
-            timestamp: new Date().toISOString()
-          };
-        } catch (error) {
-          return {
-            type: 'status_update',
-            status: 'Error',
-            error: error.message,
-            timestamp: new Date().toISOString()
-          };
-        }
-      }
-
-      async function updateStatusInSupabase(statusData) {
-        try {
-          const response = await fetch(NEXTJS_API_URL + '/api/servers/update-status', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + RCON_PASSWORD
-            },
-            body: JSON.stringify({
-              serverId: SERVER_ID,
-              status: statusData.status,
-              cpu: statusData.cpu,
-              memory: statusData.memory,
-              disk: statusData.disk,
-              error: statusData.error
-            })
-          });
-
-          if (!response.ok) {
-            console.error('Failed to update status in Supabase:', response.statusText);
-          } else {
-            console.log('Status updated in Supabase successfully');
-          }
-        } catch (error) {
-          console.error('Error updating status in Supabase:', error);
-        }
-      }
-
-      function broadcastStatus() {
-        const status = getServerStatus();
-        
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          try {
-            ws.send(JSON.stringify(status));
-          } catch (error) {
-            console.error('Error sending status via WebSocket:', error);
-          }
-        }
-        
-        updateStatusInSupabase(status);
-      }
-
-      const wss = new WebSocket.Server({ port: 3006 }, () => {
-        console.log('Status WebSocket server listening on port 3006');
-      });
-
-      wss.on('connection', (clientWs) => {
-        console.log('Status client connected');
-        clientWs.send(JSON.stringify(getServerStatus()));
-        
-        clientWs.on('close', () => {
-          console.log('Status client disconnected');
-        });
-
-        wss.on('error', (err) => {
-          console.log('Status WebSocket client error', err && err.message);
-        });
-      });
-
-      connect();
-      setInterval(broadcastStatus, 30000);
-
-      process.on('SIGINT', () => process.exit(0));
-      process.on('SIGTERM', () => process.exit(0));
   - path: /etc/systemd/system/mc-status-reporter.service
     permissions: '0644'
     content: |
@@ -799,6 +676,10 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
+      Environment=SERVER_ID=${serverId}
+      Environment=RCON_PASSWORD=${escapedRconPassword}
+      Environment=APP_BASE_URL=${appBaseUrl}
+      Environment=SUBDOMAIN=${escapedSubdomain}
       ExecStart=/usr/bin/node /opt/minecraft/status-reporter.js
       Restart=always
       RestartSec=5
@@ -808,99 +689,6 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  - path: /opt/minecraft/console-server.js
-    permissions: '0755'
-    owner: minecraft:minecraft
-    defer: true
-    content: |
-      const { spawn, execSync } = require('child_process');
-      const WebSocket = require('ws');
-
-      const PORT = process.env.CONSOLE_PORT ? parseInt(process.env.CONSOLE_PORT, 10) : 3002;
-      const MAX_HISTORY_LINES = 2000;
-      const wss = new WebSocket.Server({ port: PORT }, () => {
-        console.log('Console WebSocket listening on port', PORT);
-      });
-
-      let history = [];
-      let lineBuffer = '';
-
-      try {
-        const pastLogs = execSync('journalctl -u minecraft -n ' + MAX_HISTORY_LINES + ' -o cat').toString().trim();
-        history = pastLogs.split('\\n').filter(line => line.trim());
-      } catch (e) {
-        console.error('Failed to load historical logs:', e.message);
-      }
-
-      const tail = spawn('journalctl', ['-u', 'minecraft', '-f', '-n', '0', '-o', 'cat'], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-      tail.on('error', (err) => {
-        console.error('journalctl spawn error', err);
-      });
-
-      tail.stderr.on('data', (d) => {
-        console.error('journalctl stderr:', d.toString());
-      });
-
-      tail.stdout.on('data', (chunk) => {
-        lineBuffer += chunk.toString();
-        let lines = lineBuffer.split('\\n');
-        lineBuffer = lines.pop() || '';
-        lines = lines.filter(line => line.trim());
-
-        if (lines.length > 0) {
-          history.push(...lines);
-          if (history.length > MAX_HISTORY_LINES) {
-            history = history.slice(-MAX_HISTORY_LINES);
-          }
-
-          const message = lines.join('\\n') + '\\n';
-          wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-              try {
-                client.send(message);
-              } catch (e) {
-                console.error('Send error:', e);
-              }
-            }
-          });
-        }
-      });
-
-      tail.on('close', () => {
-        if (lineBuffer.trim()) {
-          history.push(lineBuffer);
-          if (history.length > MAX_HISTORY_LINES) {
-            history = history.slice(-MAX_HISTORY_LINES);
-          }
-          const message = lineBuffer + '\\n';
-          wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-              client.send(message);
-            }
-          });
-        }
-      });
-
-      wss.on('connection', (ws) => {
-        console.log('Console client connected');
-        if (ws.readyState === WebSocket.OPEN) {
-          const historyMessage = history.join('\\n') + (history.length ? '\\n' : '');
-          ws.send(historyMessage);
-          ws.send('[server] Connected to console stream\\n');
-        }
-
-        ws.on('close', () => {
-          console.log('Console client disconnected');
-        });
-
-        ws.on('error', (err) => {
-          console.log('WebSocket client error', err && err.message);
-        });
-      });
-
-      process.on('SIGINT', () => process.exit(0));
-      process.on('SIGTERM', () => process.exit(0));
   - path: /etc/systemd/system/mc-console.service
     permissions: '0644'
     content: |
@@ -910,6 +698,9 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
+      Environment=SUBDOMAIN=${escapedSubdomain}
+      Environment=RCON_PASSWORD=${escapedRconPassword}
+      Environment=APP_BASE_URL=${appBaseUrl}
       ExecStart=/usr/bin/node /opt/minecraft/console-server.js
       Restart=always
       RestartSec=5
@@ -919,56 +710,6 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  - path: /opt/minecraft/properties-api.js
-    permissions: '0755'
-    owner: minecraft:minecraft
-    defer: true
-    content: |
-      const fs = require('fs').promises;
-      const path = require('path');
-      const express = require('express');
-      
-      const app = express();
-      const PORT = process.env.PROPERTIES_API_PORT || 3003;
-      
-      app.use(express.text({ type: '*/*' }));
-      
-      const authenticate = (req, res, next) => {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          return res.status(401).json({ error: 'Unauthorized' });
-        }
-        
-        const token = authHeader.substring(7);
-        next();
-      };
-      
-      app.get('/api/properties', authenticate, async (req, res) => {
-        try {
-          const propertiesPath = path.join(process.cwd(), 'server.properties');
-          const properties = await fs.readFile(propertiesPath, 'utf8');
-          res.set('Content-Type', 'text/plain');
-          res.send(properties);
-        } catch (error) {
-          console.error('Error reading properties:', error);
-          res.status(500).json({ error: 'Failed to read server.properties' });
-        }
-      });
-      
-      app.post('/api/properties', authenticate, async (req, res) => {
-        try {
-          const propertiesPath = path.join(process.cwd(), 'server.properties');
-          await fs.writeFile(propertiesPath, req.body);
-          res.json({ success: true });
-        } catch (error) {
-          console.error('Error writing properties:', error);
-          res.status(500).json({ error: 'Failed to write server.properties' });
-        }
-      });
-      
-      app.listen(PORT, () => {
-        console.log('Properties API listening on port', PORT);
-      });
   - path: /etc/systemd/system/mc-properties-api.service
     permissions: '0644'
     content: |
@@ -978,6 +719,9 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
+      Environment=SUBDOMAIN=${escapedSubdomain}
+      Environment=RCON_PASSWORD=${escapedRconPassword}
+      Environment=APP_BASE_URL=${appBaseUrl}
       ExecStart=/usr/bin/node /opt/minecraft/properties-api.js
       Restart=always
       RestartSec=5
@@ -987,56 +731,6 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  - path: /opt/minecraft/metrics-server.js
-    permissions: '0755'
-    owner: minecraft:minecraft
-    defer: true
-    content: |
-      const WebSocket = require('ws');
-      const os = require('os');
-
-      const PORT = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT, 10) : 3004;
-      const wss = new WebSocket.Server({ port: PORT }, () => {
-        console.log('Metrics WebSocket listening on port', PORT);
-      });
-
-      function getSystemMetrics() {
-        const load = os.loadavg()[0];
-        const cpuCount = os.cpus().length;
-        const cpuUsage = (load / cpuCount) * 100;
-        const totalMem = os.totalmem();
-        const freeMem = os.freemem();
-        const usedMem = totalMem - freeMem;
-        const ramUsage = (usedMem / totalMem) * 100;
-        return {
-          cpu: Math.min(100, Math.max(0, cpuUsage.toFixed(2))),
-          ram: ramUsage.toFixed(2),
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      wss.on('connection', (ws) => {
-        console.log('Metrics client connected');
-        const interval = setInterval(() => {
-          if (ws.readyState === ws.OPEN) {
-            try {
-              ws.send(JSON.stringify(getSystemMetrics()));
-            } catch (e) {
-              console.error('Error sending metrics:', e);
-            }
-          }
-        }, 2000);
-        ws.on('close', () => {
-          console.log('Metrics client disconnected');
-          clearInterval(interval);
-        });
-        ws.on('error', (err) => {
-          console.log('WebSocket client error', err && err.message);
-        });
-      });
-
-      process.on('SIGINT', () => process.exit(0));
-      process.on('SIGTERM', () => process.exit(0));
   - path: /etc/systemd/system/mc-metrics.service
     permissions: '0644'
     content: |
@@ -1046,6 +740,9 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
+      Environment=SUBDOMAIN=${escapedSubdomain}
+      Environment=RCON_PASSWORD=${escapedRconPassword}
+      Environment=APP_BASE_URL=${appBaseUrl}
       ExecStart=/usr/bin/node /opt/minecraft/metrics-server.js
       Restart=always
       RestartSec=5
@@ -1055,159 +752,6 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  - path: /opt/minecraft/file-api.js
-    permissions: '0755'
-    owner: minecraft:minecraft
-    defer: true
-    content: |
-      const fs = require('fs').promises;
-      const path = require('path');
-      const express = require('express');
-      const multer = require('multer');
-      const archiver = require('archiver');
-      const cors = require('cors');
-
-      const app = express();
-      const PORT = process.env.FILE_API_PORT || 3005;
-      const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
-
-      app.use(cors());
-      app.use(express.json());
-      const upload = multer({ limits: { fileSize: MAX_UPLOAD_SIZE } });
-
-      async function getRconPassword() {
-        const props = await fs.readFile(path.join(process.cwd(), 'server.properties'), 'utf8');
-        const match = props.match(/^rcon\.password=(.*)$/m);
-        return match ? match[1].trim() : null;
-      }
-
-      const authenticate = async (req, res, next) => {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          return res.status(401).json({ error: 'Unauthorized' });
-        }
-        const token = authHeader.substring(7);
-        const rconPass = await getRconPassword();
-        if (token !== rconPass) {
-          return res.status(403).json({ error: 'Invalid token' });
-        }
-        next();
-      };
-
-      app.get('/api/files', authenticate, async (req, res) => {
-        try {
-          let relPath = req.query.path || '';
-          relPath = relPath.replace(/^\\/+/, '');
-          const absPath = path.resolve(process.cwd(), relPath);
-          if (!absPath.startsWith(process.cwd())) {
-            return res.status(403).json({ error: 'Invalid path' });
-          }
-          const stats = await fs.stat(absPath);
-          if (!stats.isDirectory()) {
-            return res.status(400).json({ error: 'Not a directory' });
-          }
-          const entries = await fs.readdir(absPath, { withFileTypes: true });
-          const files = await Promise.all(entries.map(async (entry) => {
-            const entryPath = path.join(absPath, entry.name);
-            const entryStats = await fs.stat(entryPath);
-            return {
-              name: entry.name,
-              isDirectory: entry.isDirectory(),
-              size: entryStats.size,
-              modified: entryStats.mtime.toISOString(),
-            };
-          }));
-          res.json({ path: relPath, files });
-        } catch (err) {
-          console.error('Error listing files:', err.message, err.stack);
-          res.status(500).json({ error: 'Failed to list files', detail: err.message });
-        }
-      });
-
-      app.get('/api/file', authenticate, async (req, res) => {
-        try {
-          let relPath = req.query.path;
-          if (!relPath) return res.status(400).json({ error: 'Missing path' });
-          relPath = relPath.replace(/^\\/+/, '');
-          const absPath = path.resolve(process.cwd(), relPath);
-          if (!absPath.startsWith(process.cwd())) {
-            return res.status(403).json({ error: 'Invalid path' });
-          }
-          const stats = await fs.stat(absPath);
-          if (stats.isDirectory()) {
-            const archive = archiver('zip', { zlib: { level: 9 } });
-            res.attachment(path.basename(absPath) + '.zip');
-            archive.pipe(res);
-            archive.directory(absPath, false);
-            archive.finalize();
-          } else {
-            res.download(absPath);
-          }
-        } catch (err) {
-          console.error('Error downloading file:', err.message, err.stack);
-          res.status(500).json({ error: 'Failed to download', detail: err.message });
-        }
-      });
-
-      app.post('/api/file', authenticate, upload.single('file'), async (req, res) => {
-        try {
-          if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-          let relPath = req.body.path || '';
-          relPath = relPath.replace(/^\\/+/, '');
-          const targetDir = path.resolve(process.cwd(), relPath);
-          if (!targetDir.startsWith(process.cwd())) {
-            return res.status(403).json({ error: 'Invalid path' });
-          }
-          await fs.mkdir(targetDir, { recursive: true });
-          const targetPath = path.join(targetDir, req.file.originalname);
-          await fs.writeFile(targetPath, req.file.buffer);
-          res.json({ success: true, path: path.join(relPath, req.file.originalname) });
-        } catch (err) {
-          console.error('Error uploading file:', err.message, err.stack);
-          res.status(500).json({ error: 'Failed to upload', detail: err.message });
-        }
-      });
-
-      app.put('/api/file', authenticate, async (req, res) => {
-        try {
-          let relPath = req.query.path;
-          if (!relPath) return res.status(400).json({ error: 'Missing path' });
-    
-          relPath = relPath.replace(/^\\/+/, '');
-          const absPath = path.resolve(process.cwd(), relPath);
-    
-          if (!absPath.startsWith(process.cwd())) {
-            return res.status(403).json({ error: 'Invalid path' });
-          }
-    
-          await fs.mkdir(path.dirname(absPath), { recursive: true });
-    
-          await fs.writeFile(absPath, req.body);
-          res.json({ success: true });
-        } catch (err) {
-          console.error('Error updating file:', err.message, err.stack);
-          res.status(500).json({ error: 'Failed to update file', detail: err.message });
-        }
-      });
-
-      app.post('/api/rcon', authenticate, async (req, res) => {
-        const { command } = req.body;
-        if (!command) return res.status(400).json({ error: 'Missing command' });
-        try {
-          const { execSync } = require('child_process');
-          const rconPass = await getRconPassword();
-          if (!rconPass) return res.status(500).json({ error: 'RCON not configured' });
-          const output = execSync('mcrcon -H 127.0.0.1 -p "\${rconPassword}" "\${command}"').toString().trim();
-          res.json({ output });
-        } catch (error) {
-          console.error('RCON error:', error.message, error.stack);
-          res.status(500).json({ error: 'Failed to execute command', detail: error.message });
-        }
-      });
-
-      app.listen(PORT, () => {
-        console.log("File API listening on port " + PORT);
-      });
   - path: /etc/systemd/system/mc-file-api.service
     permissions: '0644'
     content: |
@@ -1217,6 +761,9 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
+      Environment=SUBDOMAIN=${escapedSubdomain}
+      Environment=RCON_PASSWORD=${escapedRconPassword}
+      Environment=APP_BASE_URL=${appBaseUrl}
       ExecStart=/usr/bin/node /opt/minecraft/file-api.js
       Restart=always
       RestartSec=5
@@ -1226,6 +773,21 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
+  - path: /usr/local/bin/setup-cert-permissions.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      groupadd certaccess || true
+      usermod -aG certaccess minecraft || true
+      chgrp certaccess /etc/letsencrypt /etc/letsencrypt/live /etc/letsencrypt/archive || true
+      chmod g+rx /etc/letsencrypt /etc/letsencrypt/live /etc/letsencrypt/archive || true
+      if [ -n "${escapedSubdomain}" ]; then
+        chgrp -R certaccess /etc/letsencrypt/live/${escapedSubdomain}.spawnly.net /etc/letsencrypt/archive/${escapedSubdomain}.spawnly.net || true
+        chmod -R g+r /etc/letsencrypt/live/${escapedSubdomain}.spawnly.net /etc/letsencrypt/archive/${escapedSubdomain}.spawnly.net || true
+      else
+        echo "[setup-cert-permissions] No subdomain provided, skipping specific cert permissions"
+      fi
 runcmd:
   - mkdir -p /opt/minecraft
   - chown -R minecraft:minecraft /opt/minecraft
@@ -1245,7 +807,28 @@ runcmd:
   - cd /opt/minecraft || true
   - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors || true
   - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption} || echo "[ERROR] Failed to download status-reporter.js"
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js ${endpointCliOption} || echo "[ERROR] Failed to download console-server.js"
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js ${endpointCliOption} || echo "[ERROR] Failed to download properties-api.js"
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js ${endpointCliOption} || echo "[ERROR] Failed to download metrics-server.js"
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js ${endpointCliOption} || echo "[ERROR] Failed to download file-api.js"
+  - chown -R minecraft:minecraft /opt/minecraft/*.js || true
+  - chmod 0755 /opt/minecraft/*.js || true
   - systemctl daemon-reload
+  - echo "[DEBUG] Checking DNS resolution before Certbot"
+  - dig @8.8.8.8 +short A ${escapedSubdomain} > /var/log/dns-a.log || echo "[ERROR] Failed to resolve A record" >> /var/log/dns-a.log
+  - dig @8.8.8.8 +short AAAA ${escapedSubdomain} > /var/log/dns-aaaa.log || echo "[ERROR] Failed to resolve AAAA record" >> /var/log/dns-aaaa.log
+  - curl -4 -s ifconfig.me > /var/log/my-ip-v4.log || echo "[ERROR] Failed to get IPv4" >> /var/log/my-ip-v4.log
+  - curl -6 -s ifconfig.me > /var/log/my-ip-v6.log || echo "[ERROR] Failed to get IPv6" >> /var/log/my-ip-v6.log
+  - ufw allow 80/tcp
+  - echo "[DEBUG] Waiting 30 seconds for DNS propagation"
+  - sleep 30
+  - echo "[DEBUG] Running Certbot for ${escapedSubdomain}"
+  - certbot certonly --standalone --non-interactive --agree-tos --email admin@spawnly.net -d "${escapedSubdomain}.spawnly.net" 2>&1 | tee /var/log/certbot.log
+  - groupadd certaccess || true
+  - usermod -aG certaccess minecraft || true
+  - /usr/local/bin/setup-cert-permissions.sh || true
+  - ufw deny 80/tcp
   - systemctl enable mc-sync.service || true
   - systemctl enable mc-sync.timer || true
   - systemctl start mc-sync.timer || true
@@ -1287,6 +870,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const serverType = ramToServerType(Number(serverRow.ram || 4));
     const software = serverRow.type || 'vanilla';
     const needsFileDeletion = serverRow.needs_file_deletion;
+    const subdomain = serverRow.subdomain.toLowerCase() || '';
 
     let downloadUrl;
     try {
@@ -1331,7 +915,8 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       serverRow.id,
       s3Config,
       version,
-      needsFileDeletion
+      needsFileDeletion,
+      subdomain
     );
 
     const sanitizedUserData = sanitizeYaml(userData);
@@ -1450,7 +1035,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const hetznerId = finalServer?.id || null;
     const newStatus = finalServer ? (finalServer.status === 'running' ? 'Running' : 'Initializing') : 'Initializing';
 
-    let subdomain = null;
+    let subdomainResult = null;
     if (ipv4 && serverRow.subdomain) {
       try {
         const isAvailable = await checkSubdomainAvailable(serverRow.subdomain);
@@ -1465,7 +1050,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         await createSRVRecord(serverRow.subdomain, 25565);
         console.log(`Created SRV record for _minecraft._tcp.${serverRow.subdomain}.spawnly.net`);
 
-        subdomain = `${serverRow.subdomain}.spawnly.net`;
+        subdomainResult = `${serverRow.subdomain}.spawnly.net`;
       } catch (dnsErr) {
         console.error('Cloudflare DNS setup failed:', dnsErr.message, dnsErr.stack);
         return res.status(502).json({ 
@@ -1477,7 +1062,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       }
     }
 
-    console.log('Updating Supabase with:', { hetznerId, ipv4, newStatus, rconPassword, subdomain, needsFileDeletion: false });
+    console.log('Updating Supabase with:', { hetznerId, ipv4, newStatus, rconPassword, subdomain: serverRow.subdomain, needsFileDeletion: false });
 
     const { data: updatedRow, error: updateErr } = await supabaseAdmin
       .from('servers')
@@ -1487,7 +1072,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         status: newStatus,
         rcon_password: rconPassword,
         subdomain: serverRow.subdomain,
-        needs_file_deletion: false // Reset after successful provisioning
+        needs_file_deletion: false
       })
       .eq('id', serverRow.id)
       .select()
@@ -1498,7 +1083,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       return res.status(200).json({ 
         warning: 'Provisioned but failed to update DB', 
         hetznerServer: finalServer,
-        subdomain,
+        subdomain: subdomainResult,
         detail: updateErr.message,
         stack: process.env.NODE_ENV === 'development' ? updateErr.stack : undefined
       });
@@ -1506,11 +1091,11 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     console.log('Server provisioned successfully, updated row:', updatedRow.id);
     return res.status(200).json({ 
-  server: updatedRow, 
-  hetznerServer: finalServer,
-  subdomain: serverRow.subdomain, // Bare subdomain
-  fullDomain: subdomain // Full domain with `.spawnly.net`
-});
+      server: updatedRow, 
+      hetznerServer: finalServer,
+      subdomain: serverRow.subdomain,
+      fullDomain: subdomainResult
+    });
   } catch (err) {
     console.error('provisionServer error:', err.message, err.stack);
     return res.status(500).json({ 
