@@ -1,3 +1,5 @@
+// components/PlayersTab.js
+
 import { useState, useEffect } from 'react';
 import md5 from 'md5';
 
@@ -20,7 +22,7 @@ export default function PlayersTab({ server, token }) {
   const [success, setSuccess] = useState(null);
 
   const isRunning = server.status === 'Running';
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
   useEffect(() => {
     console.log('PlayersTab mounted with server:', server.id, 'token:', token);

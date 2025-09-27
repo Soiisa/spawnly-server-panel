@@ -243,7 +243,6 @@ export default function ServerPropertiesEditor({ server }) {
         <div>
           <h2 className="text-2xl font-bold">Server Properties {isServerOffline && <span className="text-sm text-yellow-600">(Offline Mode)</span>}</h2>
           <p className="text-sm text-gray-400">
-            Friendly editor for your <code>server.properties</code>. Changes sync to the raw file below.
             {isServerOffline && ' Changes will be applied when the server is restarted.'}
           </p>
         </div>
@@ -473,48 +472,6 @@ export default function ServerPropertiesEditor({ server }) {
               return null;
           }
         })}
-      </div>
-
-      <div className="mt-6 border-t border-gray-800 pt-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-sm text-gray-400">
-            Raw <code>server.properties</code> (editable)
-          </div>
-          <div className="flex items-center space-x-3">
-            <label className="flex items-center text-sm text-gray-300">
-              <input type="checkbox" className="mr-2" checked={showRaw} onChange={() => setShowRaw((s) => !s)} />
-              Show raw
-            </label>
-            <button
-              onClick={() => {
-                navigator.clipboard?.writeText(propertiesText);
-                setMessage('Copied raw properties to clipboard');
-                setTimeout(() => setMessage(''), 2500);
-              }}
-              className="px-3 py-1 bg-gray-800 rounded hover:bg-gray-700"
-            >
-              Copy
-            </button>
-          </div>
-        </div>
-
-        {showRaw ? (
-          <textarea
-            value={propertiesText}
-            onChange={(e) => setPropertiesText(e.target.value)}
-            className="w-full min-h-[280px] p-4 bg-black text-green-300 border border-gray-800 rounded font-mono text-sm"
-            spellCheck="false"
-          />
-        ) : (
-          <div className="p-4 bg-gray-850 border border-gray-800 rounded text-sm text-gray-300 font-mono">
-            <pre className="whitespace-pre-wrap break-words">{propertiesText || '# (no properties loaded)'}</pre>
-          </div>
-        )}
-
-        <div className="mt-4 text-sm text-gray-400">
-          <strong>Note:</strong> Some changes require a server restart to take effect.
-          {isServerOffline && ' Changes are saved to storage and will be applied when the server is restarted.'}
-        </div>
       </div>
     </div>
   );
