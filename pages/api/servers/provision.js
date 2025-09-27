@@ -277,7 +277,7 @@ const createSRVRecord = async (subdomain, port = 25565) => {
       target: `${subdomain}.spawnly.net.`,
     },
     ttl: 1,
-    proxied: true,
+    proxied: false,
   };
   const response = await fetch(url, {
     method: 'POST',

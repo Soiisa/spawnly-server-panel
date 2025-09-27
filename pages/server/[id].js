@@ -286,7 +286,7 @@ export default function ServerDetailPage({ initialServer }) {
     if (!server?.ipv4 || metricsWsRef.current) return;
 
     try {
-      const wsUrl = `wss://${server.subdomain}.spawnly.net:3006`;
+      const wsUrl = `wss://${server.subdomain}.spawnly.net/status`;
       console.log('Connecting to metrics WebSocket:', wsUrl);
 
       const ws = new WebSocket(wsUrl);

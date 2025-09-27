@@ -17,7 +17,7 @@ export default function MetricsViewer({ server }) {
 
     const connectToServer = () => {
       // Use the server's IP directly
-      const wsUrl = `wss://${server.subdomain}.spawnly.net:3004`;
+      const wsUrl = `wss://${server.subdomain}.spawnly.net/metrics`;
       
       setStatusMsg(`Connecting to ${server.ipv4}:3004...`);
       const ws = new WebSocket(wsUrl);
