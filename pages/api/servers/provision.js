@@ -1,3 +1,5 @@
+// pages/api/servers/provision.js
+
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 
@@ -243,7 +245,7 @@ const createARecord = async (subdomain, ip) => {
     name: `${subdomain}.spawnly.net`,
     content: ip,
     ttl: 1,
-    proxied: false,
+    proxied: true,
   };
   const response = await fetch(url, {
     method: 'POST',
@@ -275,7 +277,7 @@ const createSRVRecord = async (subdomain, port = 25565) => {
       target: `${subdomain}.spawnly.net.`,
     },
     ttl: 1,
-    proxied: false,
+    proxied: true,
   };
   const response = await fetch(url, {
     method: 'POST',
@@ -344,7 +346,7 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const appBaseUrl = process.env.APP_BASE_URL || 'https://spawnly.net';
   console.log(`[DEBUG] Generating cloud-init with subdomain: ${escapedSubdomain || 'none'}`);
   if (!escapedSubdomain) {
-    console.warn('[WARN] Subdomain is empty, services will use insecure mode');
+    console.warn('[WARN] Subdomain is empty, services will use insecure mode unless proxied');
   }
   if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
     console.warn(`Invalid or missing version: ${version}, defaulting to 1.21.8`);
@@ -406,7 +408,6 @@ packages:
   - less
   - awscli
   - dnsutils
-  - certbot
 
 write_files:
   - path: /home/minecraft/.aws/credentials
@@ -701,6 +702,7 @@ write_files:
       Environment=SUBDOMAIN=${escapedSubdomain}
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
+      Environment=CONSOLE_PORT=3002
       ExecStart=/usr/bin/node /opt/minecraft/console-server.js
       Restart=always
       RestartSec=5
@@ -722,6 +724,7 @@ write_files:
       Environment=SUBDOMAIN=${escapedSubdomain}
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
+      Environment=PROPERTIES_API_PORT=3003
       ExecStart=/usr/bin/node /opt/minecraft/properties-api.js
       Restart=always
       RestartSec=5
@@ -743,6 +746,7 @@ write_files:
       Environment=SUBDOMAIN=${escapedSubdomain}
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
+      Environment=METRICS_PORT=3004
       ExecStart=/usr/bin/node /opt/minecraft/metrics-server.js
       Restart=always
       RestartSec=5
@@ -764,6 +768,7 @@ write_files:
       Environment=SUBDOMAIN=${escapedSubdomain}
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
+      Environment=FILE_API_PORT=3005
       ExecStart=/usr/bin/node /opt/minecraft/file-api.js
       Restart=always
       RestartSec=5
@@ -773,21 +778,6 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  - path: /usr/local/bin/setup-cert-permissions.sh
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      set -euo pipefail
-      groupadd certaccess || true
-      usermod -aG certaccess minecraft || true
-      chgrp certaccess /etc/letsencrypt /etc/letsencrypt/live /etc/letsencrypt/archive || true
-      chmod g+rx /etc/letsencrypt /etc/letsencrypt/live /etc/letsencrypt/archive || true
-      if [ -n "${escapedSubdomain}" ]; then
-        chgrp -R certaccess /etc/letsencrypt/live/${escapedSubdomain}.spawnly.net /etc/letsencrypt/archive/${escapedSubdomain}.spawnly.net || true
-        chmod -R g+r /etc/letsencrypt/live/${escapedSubdomain}.spawnly.net /etc/letsencrypt/archive/${escapedSubdomain}.spawnly.net || true
-      else
-        echo "[setup-cert-permissions] No subdomain provided, skipping specific cert permissions"
-      fi
 runcmd:
   - mkdir -p /opt/minecraft
   - chown -R minecraft:minecraft /opt/minecraft
@@ -815,20 +805,6 @@ runcmd:
   - chown -R minecraft:minecraft /opt/minecraft/*.js || true
   - chmod 0755 /opt/minecraft/*.js || true
   - systemctl daemon-reload
-  - echo "[DEBUG] Checking DNS resolution before Certbot"
-  - dig @8.8.8.8 +short A ${escapedSubdomain} > /var/log/dns-a.log || echo "[ERROR] Failed to resolve A record" >> /var/log/dns-a.log
-  - dig @8.8.8.8 +short AAAA ${escapedSubdomain} > /var/log/dns-aaaa.log || echo "[ERROR] Failed to resolve AAAA record" >> /var/log/dns-aaaa.log
-  - curl -4 -s ifconfig.me > /var/log/my-ip-v4.log || echo "[ERROR] Failed to get IPv4" >> /var/log/my-ip-v4.log
-  - curl -6 -s ifconfig.me > /var/log/my-ip-v6.log || echo "[ERROR] Failed to get IPv6" >> /var/log/my-ip-v6.log
-  - ufw allow 80/tcp
-  - echo "[DEBUG] Waiting 30 seconds for DNS propagation"
-  - sleep 30
-  - echo "[DEBUG] Running Certbot for ${escapedSubdomain}"
-  - certbot certonly --standalone --non-interactive --agree-tos --email admin@spawnly.net -d "${escapedSubdomain}.spawnly.net" 2>&1 | tee /var/log/certbot.log
-  - groupadd certaccess || true
-  - usermod -aG certaccess minecraft || true
-  - /usr/local/bin/setup-cert-permissions.sh || true
-  - ufw deny 80/tcp
   - systemctl enable mc-sync.service || true
   - systemctl enable mc-sync.timer || true
   - systemctl start mc-sync.timer || true
@@ -842,22 +818,24 @@ runcmd:
   - systemctl start mc-metrics || true
   - systemctl enable mc-file-api || true
   - systemctl start mc-file-api || true
-  - echo "[DEBUG] firewall setup"
+  - echo "[DEBUG] Setting up firewall for Cloudflare IPs"
+  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 25565; done
+  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 25575; done
+  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3002; done
+  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3003; done
+  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3004; done
+  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3005; done
+  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3006; done
   - ufw allow 22
-  - ufw allow 25565
-  - ufw allow 25575
-  - ufw allow 3002
-  - ufw allow 3003
-  - ufw allow 3004
-  - ufw allow 3005
-  - ufw allow 3006
   - ufw --force enable
-  - echo "[DEBUG] running quick startup checks"
+  - echo "[DEBUG] Running quick startup checks"
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":25565\\b"; then echo "PORT 25565 OPEN"; break; fi; sleep 2; done;'
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3002\\b"; then echo "CONSOLE PORT 3002 OPEN"; break; fi; sleep 2; done;'
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3003\\b"; then echo "PROPERTIES API PORT 3003 OPEN"; break; fi; sleep 2; done;'
+  - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3004\\b"; then echo "METRICS PORT 3004 OPEN"; break; fi; sleep 2; done;'
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3005\\b"; then echo "FILE API PORT 3005 OPEN"; break; fi; sleep 2; done;'
-  - echo "[FINAL DEBUG] cloud-init finished at $(date)"
+  - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3006\\b"; then echo "STATUS PORT 3006 OPEN"; break; fi; sleep 2; done;'
+  - echo "[FINAL DEBUG] Cloud-init finished at $(date)"
 `;
 
   console.log('Generated cloud-init length:', userData.length);

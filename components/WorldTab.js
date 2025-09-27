@@ -1,209 +1,272 @@
-// components/WorldTab.js
 import { useState } from 'react';
 
-export default function WorldTab({ server, token, setActiveTab, setFileManagerPath, setFileManagerAutoOpen }) {
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [generateForm, setGenerateForm] = useState({
+export default function WorldTab({ server, token }) {
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [formData, setFormData] = useState({
     levelName: 'world',
     seed: '',
     generatorSettings: '',
     worldType: 'default',
     generateStructures: true,
-    datapacks: '',
     hardcore: false,
+    datapacks: '',
   });
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const isStopped = server.status === 'Stopped';
+  const isServerStopped = server?.status === 'Stopped';
 
   const handleDownload = async () => {
+    if (!isServerStopped) {
+      setError('Server must be stopped to download the world.');
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/world`, {
+      const response = await fetch(`/api/servers/${server.id}/world`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error('Failed to download world');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to download world');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${server.name}-world.zip`;
+      a.download = 'world.zip';
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      a.remove();
+      window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      console.error('Download world error:', err);
+      setError(`Failed to download world: ${err.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append('worldZip', file);
+  const handleUpload = async (event) => {
+    if (!isServerStopped) {
+      setError('Server must be stopped to upload a world.');
+      return;
+    }
+    const file = event.target.files[0];
+    if (!file || !file.name.endsWith('.zip')) {
+      setError('Please select a valid .zip file.');
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/world`, {
+      const formData = new FormData();
+      formData.append('worldZip', file);
+      const response = await fetch(`/api/servers/${server.id}/world`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      if (!res.ok) throw new Error('Failed to upload world');
-      alert('World uploaded successfully');
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload world');
+      }
+      alert('World uploaded successfully!');
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      console.error('Upload world error:', err);
+      setError(`Failed to upload world: ${err.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleOptions = () => {
-    setFileManagerPath('world');
-    setFileManagerAutoOpen('level.dat');
-    setActiveTab('files');
-  };
-
-  const handleFiles = () => {
-    setFileManagerPath('world');
-    setFileManagerAutoOpen('');
-    setActiveTab('files');
-  };
-
-  const handleGenerate = () => {
-    if (!isStopped) {
-      alert('Server must be stopped to generate a new world.');
+  const handleGenerate = async () => {
+    if (!isServerStopped) {
+      setError('Server must be stopped to generate a new world.');
       return;
     }
-    setShowGenerateModal(true);
-  };
-
-  const updateForm = (key, value) => {
-    setGenerateForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const submitGenerate = async () => {
+    setError(null);
+    setIsLoading(true);
     try {
-      const res = await fetch(`/api/servers/${server.id}/world?action=generate`, {
+      const response = await fetch(`/api/servers/${server.id}/world?action=generate`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(generateForm),
+        body: JSON.stringify(formData),
       });
-      if (!res.ok) throw new Error('Failed to generate world');
-      setShowGenerateModal(false);
-      alert('New world generated successfully. Start the server to load it.');
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate world');
+      }
+      alert('World generated successfully!');
+      setIsGenerateModalOpen(false);
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      console.error('Generate world error:', err);
+      setError(`Failed to generate world: ${err.message}`);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
   };
 
   return (
-    <div className="bg-white p-4 rounded shadow">
-      <h2 className="text-xl font-bold mb-4">World Management</h2>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+    <div className="bg-white p-6 rounded-lg shadow-md">
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md border border-red-200">
+          {error}
+          <button
+            onClick={() => setError(null)}
+            className="float-right text-red-800 font-bold"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      <div className="flex space-x-4 mb-6">
         <button
           onClick={handleDownload}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+          disabled={isLoading || !isServerStopped}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 transition-colors"
         >
-          Download
+          {isLoading ? 'Processing...' : 'Download World'}
         </button>
-        <label className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded cursor-pointer">
-          Upload
-          <input type="file" className="hidden" onChange={handleUpload} accept=".zip" />
+        <label
+          className={`bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50 transition-colors ${isLoading || !isServerStopped ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          <span>{isLoading ? 'Processing...' : 'Upload World'}</span>
+          <input
+            type="file"
+            accept=".zip"
+            onChange={handleUpload}
+            disabled={isLoading || !isServerStopped}
+            className="hidden"
+          />
         </label>
         <button
-          onClick={handleOptions}
-          className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded"
+          onClick={() => alert('Options feature coming soon!')}
+          className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
         >
           Options
         </button>
         <button
-          onClick={handleFiles}
-          className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded"
+          onClick={() => setIsGenerateModalOpen(true)}
+          disabled={isLoading || !isServerStopped}
+          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded disabled:opacity-50 transition-colors"
         >
-          Files
-        </button>
-        <button
-          onClick={handleGenerate}
-          disabled={!isStopped}
-          className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded disabled:opacity-50"
-        >
-          Generate
+          {isLoading ? 'Processing...' : 'Generate New World'}
         </button>
       </div>
 
-      {showGenerateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-            <h3 className="text-lg font-bold mb-4">Generate New World</h3>
+      {isGenerateModalOpen && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+            <h2 className="text-xl font-bold mb-4">Generate New World</h2>
             <div className="space-y-4">
-              <input
-                type="text"
-                value={generateForm.levelName}
-                onChange={(e) => updateForm('levelName', e.target.value)}
-                placeholder="Level Name"
-                className="w-full border p-2 rounded"
-              />
-              <input
-                type="text"
-                value={generateForm.seed}
-                onChange={(e) => updateForm('seed', e.target.value)}
-                placeholder="Level Seed"
-                className="w-full border p-2 rounded"
-              />
-              <input
-                type="text"
-                value={generateForm.generatorSettings}
-                onChange={(e) => updateForm('generatorSettings', e.target.value)}
-                placeholder="Generator Settings (JSON)"
-                className="w-full border p-2 rounded"
-              />
-              <select
-                value={generateForm.worldType}
-                onChange={(e) => updateForm('worldType', e.target.value)}
-                className="w-full border p-2 rounded"
-              >
-                <option value="default">Default</option>
-                <option value="superflat">Superflat</option>
-                <option value="amplified">Amplified</option>
-                <option value="large_biomes">Large Biomes</option>
-                <option value="single_biome">Single Biome</option>
-              </select>
-              <label className="flex items-center">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Level Name</label>
                 <input
-                  type="checkbox"
-                  checked={generateForm.generateStructures}
-                  onChange={(e) => updateForm('generateStructures', e.target.checked)}
-                  className="mr-2"
+                  type="text"
+                  name="levelName"
+                  value={formData.levelName}
+                  onChange={handleInputChange}
+                  className="mt-1 w-full border border-gray-300 rounded px-3 py-2"
+                  placeholder="world"
                 />
-                Generate Structures
-              </label>
-              <input
-                type="text"
-                value={generateForm.datapacks}
-                onChange={(e) => updateForm('datapacks', e.target.value)}
-                placeholder="Datapacks (comma-separated URLs)"
-                className="w-full border p-2 rounded"
-              />
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={generateForm.hardcore}
-                  onChange={(e) => updateForm('hardcore', e.target.checked)}
-                  className="mr-2"
-                />
-                Hardcore
-              </label>
-              <div className="flex justify-end space-x-2">
-                <button
-                  onClick={submitGenerate}
-                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
-                >
-                  Generate
-                </button>
-                <button
-                  onClick={() => setShowGenerateModal(false)}
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded"
-                >
-                  Cancel
-                </button>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Seed</label>
+                <input
+                  type="text"
+                  name="seed"
+                  value={formData.seed}
+                  onChange={handleInputChange}
+                  className="mt-1 w-full border border-gray-300 rounded px-3 py-2"
+                  placeholder="Enter seed (optional)"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Generator Settings</label>
+                <input
+                  type="text"
+                  name="generatorSettings"
+                  value={formData.generatorSettings}
+                  onChange={handleInputChange}
+                  className="mt-1 w-full border border-gray-300 rounded px-3 py-2"
+                  placeholder="Custom settings (optional)"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">World Type</label>
+                <select
+                  name="worldType"
+                  value={formData.worldType}
+                  onChange={handleInputChange}
+                  className="mt-1 w-full border border-gray-300 rounded px-3 py-2"
+                >
+                  <option value="default">Normal</option>
+                  <option value="superflat">Superflat</option>
+                  <option value="amplified">Amplified</option>
+                  <option value="large_biomes">Large Biomes</option>
+                  <option value="single_biome">Single Biome</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Datapacks (URLs, comma-separated)</label>
+                <input
+                  type="text"
+                  name="datapacks"
+                  value={formData.datapacks}
+                  onChange={handleInputChange}
+                  className="mt-1 w-full border border-gray-300 rounded px-3 py-2"
+                  placeholder="https://example.com/datapack.zip,..."
+                />
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="generateStructures"
+                  checked={formData.generateStructures}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                />
+                <label className="ml-2 text-sm text-gray-700">Generate Structures</label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="hardcore"
+                  checked={formData.hardcore}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                />
+                <label className="ml-2 text-sm text-gray-700">Hardcore Mode</label>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end space-x-2">
+              <button
+                onClick={() => setIsGenerateModalOpen(false)}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={isLoading}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded disabled:opacity-50"
+              >
+                {isLoading ? 'Generating...' : 'Generate'}
+              </button>
             </div>
           </div>
         </div>

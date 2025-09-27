@@ -3,6 +3,8 @@
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
 import { useState, useEffect, useRef } from 'react';
+import { format } from 'date-fns'; // Added for consistent date formatting
+import { Suspense } from 'react'; // Added for hydration safety
 import ServerSoftwareTab from '../../components/ServerSoftwareTab';
 import ModsPluginsTab from '../../components/ModsPluginsTab';
 import ConsoleViewer from '../../components/ConsoleViewer';
@@ -13,6 +15,7 @@ import ServerStatusIndicator from '../../components/ServerStatusIndicator';
 import Header from '../../components/ServersHeader';
 import Footer from '../../components/ServersFooter';
 import PlayersTab from '../../components/PlayersTab';
+import WorldTab from '../../components/WorldTab'; // Added WorldTab import
 
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
@@ -417,7 +420,7 @@ export default function ServerDetailPage({ initialServer }) {
         return;
       }
 
-      setServer((prev) => (prev ? { ...prev, status: 'Starting' } : prev));
+      setServer((prev) => (prev? { ...prev, status: 'Starting' } : prev));
 
       const { data: serverData, error: serverError } = await supabase
         .from('servers')
@@ -505,7 +508,7 @@ export default function ServerDetailPage({ initialServer }) {
         return;
       }
 
-      setServer((prev) => (prev ? { ...prev, status: 'Stopping' } : prev));
+      setServer((prev) => (prev? { ...prev, status: 'Stopping' } : prev));
 
       const json = await safeFetchJson('/api/servers/action', {
         method: 'POST',
@@ -558,7 +561,7 @@ export default function ServerDetailPage({ initialServer }) {
         return;
       }
 
-      setServer((prev) => (prev ? { ...prev, status: 'Restarting' } : prev));
+      setServer((prev) => (prev? { ...prev, status: 'Restarting' } : prev));
 
       const json = await safeFetchJson('/api/servers/action', {
         method: 'POST',
@@ -755,7 +758,7 @@ export default function ServerDetailPage({ initialServer }) {
               <ServerStatusIndicator server={server} />
               {server.last_status_update && (
                 <span className="ml-3 text-xs text-gray-500">
-                  Last update: {new Date(server.last_status_update).toLocaleString()}
+                  Last update: {format(new Date(server.last_status_update), 'yyyy-MM-dd HH:mm:ss')}
                 </span>
               )}
             </div>
@@ -771,121 +774,134 @@ export default function ServerDetailPage({ initialServer }) {
                 <button onClick={() => setActiveTab('console')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'console' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Console</button>
                 <button onClick={() => setActiveTab('properties')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'properties' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Properties</button>
                 <button onClick={() => setActiveTab('players')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'players' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Players</button>
+                <button onClick={() => setActiveTab('world')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'world' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>World</button>
               </nav>
             </div>
 
             <div className="mt-6">
-              {activeTab === 'overview' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-100">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                      <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
-                      Server Information
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">IP:</strong> {server.name + ".spawnly.net" || '—'}</p>
-                    <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">Software:</strong> {server.type || '—'}</p>
-                    <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">Version:</strong> {server.version || '—'}</p>
-                    <p className="text-sm text-gray-600"><strong className="font-medium text-gray-800">Game:</strong> {server.game || '—'}</p>
-                  </div>
-                  
-                  <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-100">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                      <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      Billing
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">Cost / hr:</strong> {server.cost_per_hour ? `$${server.cost_per_hour}` : '—'}</p>
-                    <div className="text-sm text-gray-600 mb-2 flex items-center">
-                      <strong className="font-medium text-gray-800 mr-2">RAM:</strong>
-                      {editingRam ? (
-                        <>
-                          <input
-                            type="number"
-                            value={newRam}
-                            onChange={(e) => setNewRam(parseInt(e.target.value, 10))}
-                            className="w-20 border border-gray-300 rounded px-2 py-1 mr-2"
-                            min="2"
-                            max="32"
-                            step="1"
-                          />
-                          GB
-                          <button
-                            onClick={handleSaveRam}
-                            disabled={actionLoading}
-                            className="ml-2 bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingRam(false)}
-                            className="ml-1 bg-gray-300 hover:bg-gray-400 text-gray-800 px-2 py-1 rounded text-xs"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          {server.ram} GB
-                          {status === 'Stopped' && (
-                            <button
-                              onClick={startEditingRam}
-                              className="ml-2 text-indigo-600 hover:text-indigo-800 text-xs"
-                            >
-                              Edit
-                            </button>
-                          )}
-                        </>
-                      )}
+              <Suspense fallback={<div>Loading...</div>}>
+                {activeTab === 'overview' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
+                        Server Information
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">IP:</strong> {server.name + ".spawnly.net" || '—'}</p>
+                      <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">Software:</strong> {server.type || '—'}</p>
+                      <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">Version:</strong> {server.version || '—'}</p>
+                      <p className="text-sm text-gray-600"><strong className="font-medium text-gray-800">Game:</strong> {server.game || '—'}</p>
                     </div>
-                    <p className="text-sm text-gray-600"><strong className="font-medium text-gray-800">Created:</strong> {server.created_at ? new Date(server.created_at).toLocaleString() : '—'}</p>
+                    
+                    <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        Billing
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">Cost / hr:</strong> {server.cost_per_hour ? `$${server.cost_per_hour}` : '—'}</p>
+                      <div className="text-sm text-gray-600 mb-2 flex items-center">
+                        <strong className="font-medium text-gray-800 mr-2">RAM:</strong>
+                        {editingRam ? (
+                          <>
+                            <input
+                              type="number"
+                              value={newRam}
+                              onChange={(e) => setNewRam(parseInt(e.target.value, 10))}
+                              className="w-20 border border-gray-300 rounded px-2 py-1 mr-2"
+                              min="2"
+                              max="32"
+                              step="1"
+                            />
+                            GB
+                            <button
+                              onClick={handleSaveRam}
+                              disabled={actionLoading}
+                              className="ml-2 bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingRam(false)}
+                              className="ml-1 bg-gray-300 hover:bg-gray-400 text-gray-800 px-2 py-1 rounded text-xs"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {server.ram} GB
+                            {status === 'Stopped' && (
+                              <button
+                                onClick={startEditingRam}
+                                className="ml-2 text-indigo-600 hover:text-indigo-800 text-xs"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600"><strong className="font-medium text-gray-800">Created:</strong> {server.created_at ? format(new Date(server.created_at), 'yyyy-MM-dd HH:mm:ss') : '—'}</p>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2M9 19a2 2 0 01-2-2" /></svg>
+                        Live Metrics
+                      </h3>
+                      <ServerMetrics server={server} />
+                    </div>
                   </div>
+                )}
 
-                  <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-100">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                      <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2M9 19a2 2 0 01-2-2" /></svg>
-                      Live Metrics
-                    </h3>
-                    <ServerMetrics server={server} />
+                {activeTab === 'software' && (
+                  <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} />
+                )}
+
+                {activeTab === 'mods' && <ModsPluginsTab server={server} />}
+
+                {activeTab === 'files' && (
+                  <div className="bg-white p-4 rounded shadow">
+                    {fileToken ? (
+                      <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} />
+                    ) : (
+                      <p className="text-gray-600">Loading file access token...</p>
+                    )}
                   </div>
-                </div>
-              )}
+                )}
 
-              {activeTab === 'software' && (
-                <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} />
-              )}
+                {activeTab === 'console' && (
+                  <div className="mt-4">
+                    <ConsoleViewer server={server} />
+                  </div>
+                )}
 
-              {activeTab === 'mods' && <ModsPluginsTab server={server} />}
+                {activeTab === 'properties' && (
+                  <div className="mt-4">
+                    <ServerPropertiesEditor server={server} />
+                  </div>
+                )}
 
-              {activeTab === 'files' && (
-                <div className="bg-white p-4 rounded shadow">
-                  {fileToken ? (
-                    <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} />
-                  ) : (
-                    <p className="text-gray-600">Loading file access token...</p>
-                  )}
-                </div>
-              )}
+                {activeTab === 'players' && (
+                  <div className="mt-4">
+                    {fileToken ? (
+                      <PlayersTab server={server} token={fileToken} />
+                    ) : (
+                      <p className="text-gray-600">Loading file access token...</p>
+                    )}
+                  </div>
+                )}
 
-              {activeTab === 'console' && (
-                <div className="mt-4">
-                  <ConsoleViewer server={server} />
-                </div>
-              )}
-
-              {activeTab === 'properties' && (
-                <div className="mt-4">
-                  <ServerPropertiesEditor server={server} />
-                </div>
-              )}
-
-              {activeTab === 'players' && (
-                <div className="mt-4">
-                  {fileToken ? (
-                    <PlayersTab server={server} token={fileToken} />
-                  ) : (
-                    <p className="text-gray-600">Loading file access token...</p>
-                  )}
-                </div>
-              )}
+                {activeTab === 'world' && (
+                  <div className="mt-4">
+                    {fileToken ? (
+                      <WorldTab server={server} token={fileToken} />
+                    ) : (
+                      <p className="text-gray-600">Loading file access token...</p>
+                    )}
+                  </div>
+                )}
+              </Suspense>
             </div>
           </div>
         </div>
