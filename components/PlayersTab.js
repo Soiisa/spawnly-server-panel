@@ -45,7 +45,7 @@ export default function PlayersTab({ server, token }) {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`Fetching file: ${filePath} (attempt ${attempt}/${retries})`);
-        const res = await fetch(`${API_URL}/api/servers/${server.id}/file?path=${filePath}`, {
+        const res = await fetch(`/api/servers/${server.id}/file?path=${filePath}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         
@@ -107,7 +107,7 @@ export default function PlayersTab({ server, token }) {
       }
       console.log(`Saving file: ${filePath}`, { data: JSON.stringify(data, null, 2) });
       
-      const res = await fetch(`${API_URL}/api/servers/${server.id}/files?path=${filePath}`, {
+      const res = await fetch(`/api/servers/${server.id}/files?path=${filePath}`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -136,7 +136,7 @@ export default function PlayersTab({ server, token }) {
 
   const sendRconCommand = async (command) => {
     try {
-      const res = await fetch(`${API_URL}/api/servers/rcon`, {
+      const res = await fetch(`/api/servers/rcon`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
