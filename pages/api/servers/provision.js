@@ -245,7 +245,7 @@ const createARecord = async (subdomain, ip) => {
     name: `${subdomain}.spawnly.net`,
     content: ip,
     ttl: 1,
-    proxied: true,
+    proxied: false,
   };
   const response = await fetch(url, {
     method: 'POST',
@@ -827,6 +827,8 @@ runcmd:
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3005; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3006; done
   - ufw allow 22
+  - ufw allow 25565
+  - ufw allow 25575
   - ufw --force enable
   - echo "[DEBUG] Running quick startup checks"
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":25565\\b"; then echo "PORT 25565 OPEN"; break; fi; sleep 2; done;'

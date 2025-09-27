@@ -80,7 +80,7 @@ export default async function handler(req, res) {
 
     if (server.status === 'Running' && server.ipv4) {
       try {
-        const response = await fetch(`https://${server.subdomain}.spawnly.net:3005/api/files?path=${encodeURIComponent(relPath)}`, {
+        const response = await fetch(`https://${server.subdomain}.spawnly.net/files/api/files?path=${encodeURIComponent(relPath)}`, {
           headers: {
             'Authorization': `Bearer ${server.rcon_password}`,
           },
