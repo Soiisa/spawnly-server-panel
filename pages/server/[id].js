@@ -3,8 +3,8 @@
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
 import { useState, useEffect, useRef } from 'react';
-import { format } from 'date-fns'; // Added for consistent date formatting
-import { Suspense } from 'react'; // Added for hydration safety
+import { format } from 'date-fns';
+import { Suspense } from 'react';
 import ServerSoftwareTab from '../../components/ServerSoftwareTab';
 import ModsPluginsTab from '../../components/ModsPluginsTab';
 import ConsoleViewer from '../../components/ConsoleViewer';
@@ -15,7 +15,7 @@ import ServerStatusIndicator from '../../components/ServerStatusIndicator';
 import Header from '../../components/ServersHeader';
 import Footer from '../../components/ServersFooter';
 import PlayersTab from '../../components/PlayersTab';
-import WorldTab from '../../components/WorldTab'; // Added WorldTab import
+import WorldTab from '../../components/WorldTab';
 
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
@@ -26,6 +26,7 @@ export default function ServerDetailPage({ initialServer }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [user, setUser] = useState(null);
   const [credits, setCredits] = useState(0);
+  const [creditsLoading, setCreditsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fileToken, setFileToken] = useState(null);
@@ -39,6 +40,12 @@ export default function ServerDetailPage({ initialServer }) {
   const mountedRef = useRef(false);
   const metricsWsRef = useRef(null);
   const pollRef = useRef(null);
+  const creditsFetchedRef = useRef(false);
+
+  // Debug credits state changes
+  useEffect(() => {
+    console.log('Credits state updated:', credits);
+  }, [credits]);
 
   // Handle tab query param
   useEffect(() => {
@@ -50,94 +57,96 @@ export default function ServerDetailPage({ initialServer }) {
 
   // Fetch session and initial server data
   useEffect(() => {
-    mountedRef.current = true;
+  mountedRef.current = true;
 
-    const fetchSessionAndServer = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        const session = data?.session;
-        if (!session) {
-          router.push('/login');
-          return;
-        }
-        setUser(session.user);
-        await fetchUserCredits(session.user.id);
-        if (id) await fetchServer(id, session.user.id);
-      } catch (err) {
-        console.error('Session fetch error:', err);
+  const fetchSessionAndServer = async () => {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      const session = data?.session;
+      if (!session) {
+        console.error('No session found, redirecting to login');
         router.push('/login');
+        return;
       }
-    };
+      setUser(session.user);
+      await fetchUserCredits(session.user.id);
+      if (id) await fetchServer(id, session.user.id);
+    } catch (err) {
+      console.error('Session fetch error:', err);
+      setError('Failed to load session. Redirecting to login...');
+      router.push('/login');
+    }
+  };
 
-    if (id && !server) fetchSessionAndServer();
+  if (id) fetchSessionAndServer();  // Always call if id exists
 
-    // Fetch file token for file access
-    if (server?.id && !fileToken) {
-      const fetchFileToken = async (retries = 3, delay = 1000) => {
-        for (let attempt = 1; attempt <= retries; attempt++) {
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-              console.error('No session found for file token fetch');
-              router.push('/login');
-              return;
-            }
-            const response = await fetch(`/api/servers/get-token?serverId=${server.id}`, {
-              headers: {
-                Authorization: `Bearer ${session.access_token}`,
-              },
-            });
-            const data = await response.json();
-            if (response.ok && data.token && mountedRef.current) {
-              setFileToken(data.token);
-              setError(null);
-            } else {
-              console.error('Failed to fetch file token:', data.error || 'No token returned');
-              if (attempt === retries) {
-                setError('Failed to fetch file access token after multiple attempts');
-              }
-            }
-          } catch (err) {
-            console.error(`Failed to fetch file token (attempt ${attempt}/${retries}):`, err.message);
-            if (attempt === retries) {
-              setError('Failed to fetch file access token: ' + err.message);
-            }
-            await new Promise((resolve) => setTimeout(resolve, delay));
+  // Fetch file token for file access
+  if (server?.id && !fileToken) {
+    const fetchFileToken = async (retries = 3, delay = 1000) => {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+            console.error('No session found for file token fetch');
+            router.push('/login');
+            return;
           }
+          const response = await fetch(`/api/servers/get-token?serverId=${server.id}`, {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          });
+          const data = await response.json();
+          if (response.ok && data.token && mountedRef.current) {
+            setFileToken(data.token);
+            setError(null);
+          } else {
+            console.error(`Failed to fetch file token (attempt ${attempt}/${retries}):`, data.error || 'No token returned');
+            if (attempt === retries) {
+              setError('Failed to fetch file access token after multiple attempts');
+            }
+          }
+        } catch (err) {
+          console.error(`Unexpected error fetching file token (attempt ${attempt}/${retries}):`, err.message);
+          if (attempt === retries) {
+            setError('Failed to fetch file access token: ' + err.message);
+          }
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
-      };
-      fetchFileToken();
-    }
-
-    // Connect to metrics WebSocket if server is running
-    if (server?.status === 'Running' && server?.ipv4) {
-      connectToMetricsWebSocket();
-    }
-
-    return () => {
-      mountedRef.current = false;
-      try {
-        if (serverChannelRef.current) {
-          supabase.removeChannel(serverChannelRef.current);
-          serverChannelRef.current = null;
-        }
-        if (profileChannelRef.current) {
-          supabase.removeChannel(profileChannelRef.current);
-          profileChannelRef.current = null;
-        }
-        if (metricsWsRef.current) {
-          metricsWsRef.current.close();
-          metricsWsRef.current = null;
-        }
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-      } catch (e) {
-        // ignore
       }
     };
-  }, [id, server?.id, server?.status, server?.ipv4]);
+    fetchFileToken();
+  }
+
+  // Connect to metrics WebSocket if server is running
+  if (server?.status === 'Running' && server?.ipv4) {
+    connectToMetricsWebSocket();
+  }
+
+  return () => {
+    mountedRef.current = false;
+    try {
+      if (serverChannelRef.current) {
+        supabase.removeChannel(serverChannelRef.current);
+        serverChannelRef.current = null;
+      }
+      if (profileChannelRef.current) {
+        supabase.removeChannel(profileChannelRef.current);
+        profileChannelRef.current = null;
+      }
+      if (metricsWsRef.current) {
+        metricsWsRef.current.close();
+        metricsWsRef.current = null;
+      }
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+}, [id, server?.id, server?.status, server?.ipv4]);
 
   // Dedicated effect for Supabase server subscription
   useEffect(() => {
@@ -178,7 +187,6 @@ export default function ServerDetailPage({ initialServer }) {
             } else if (err) {
               console.error('Subscription error:', err);
               setError('Failed to subscribe to server updates. Retrying...');
-              // Retry subscription
               setTimeout(subscribeToServer, 5000);
             }
           });
@@ -243,7 +251,20 @@ export default function ServerDetailPage({ initialServer }) {
           setCredits(payload.new.credits || 0);
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to profile updates:', user.id);
+        } else if (err) {
+          console.error('Subscription error:', err);
+          setError('Failed to subscribe to profile updates. Retrying...');
+          // Retry subscription
+          setTimeout(() => {
+            if (mountedRef.current) {
+              profileChannel.subscribe();
+            }
+          }, 5000);
+        }
+      });
 
     profileChannelRef.current = profileChannel;
 
@@ -255,31 +276,45 @@ export default function ServerDetailPage({ initialServer }) {
     };
   }, [user?.id]);
 
-  const fetchUserCredits = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('credits')
-        .eq('id', userId)
-        .single();
+  const fetchUserCredits = async (userId, retries = 3, delay = 1000) => {
+    setCreditsLoading(true);
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('credits')
+          .eq('id', userId)
+          .single();
 
-      if (error) {
-        console.error('Error fetching credits:', error.message);
-        setError('Failed to load credits. Please try again.');
-        return;
-      }
+        if (error) {
+          console.error(`Error fetching credits (attempt ${attempt}/${retries}):`, error.message);
+          if (attempt === retries) {
+            setError('Failed to load credits after multiple attempts. Please try again.');
+          }
+          continue;
+        }
 
-      if (data) {
-        console.log('Fetched credits:', data.credits);
-        setCredits(data.credits || 0);
-      } else {
-        console.warn('No profile data found for user:', userId);
-        setError('No profile found. Please contact support.');
+        if (data) {
+          console.log('Fetched credits:', data.credits);
+          setCredits(data.credits || 0);
+          setError(null);
+          setCreditsLoading(false);
+          return;
+        } else {
+          console.warn('No profile data found for user:', userId);
+          if (attempt === retries) {
+            setError('No profile found. Please contact support.');
+          }
+        }
+      } catch (err) {
+        console.error(`Unexpected error fetching credits (attempt ${attempt}/${retries}):`, err.message);
+        if (attempt === retries) {
+          setError('Unexpected error loading credits: ' + err.message);
+        }
       }
-    } catch (err) {
-      console.error('Unexpected error fetching credits:', err.message);
-      setError('Unexpected error loading credits.');
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
+    setCreditsLoading(false);
   };
 
   const connectToMetricsWebSocket = () => {
@@ -687,7 +722,7 @@ export default function ServerDetailPage({ initialServer }) {
 
   return (
     <div className="min-h-screen bg-gray-100" key={server.status}>
-      <Header user={user} credits={credits} onLogout={handleLogout} />
+      <Header user={user} credits={credits} isLoading={creditsLoading} onLogout={handleLogout} />
       
       <main className="p-4 md:p-8">
         <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-lg p-6">

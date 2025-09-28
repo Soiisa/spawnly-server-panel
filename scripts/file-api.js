@@ -35,7 +35,7 @@ const authenticate = async (req, res, next) => {
 app.get('/api/files', authenticate, async (req, res) => {
   try {
     let relPath = req.query.path || '';
-    relPath = relPath.replace(/^\/*/, '');
+    relPath = relPath.replace(/^\/+/, '');
     const absPath = path.resolve(process.cwd(), relPath);
     if (!absPath.startsWith(process.cwd())) {
       return res.status(403).json({ error: 'Invalid path' });
@@ -57,7 +57,7 @@ app.get('/api/files', authenticate, async (req, res) => {
     }));
     res.json({ path: relPath, files });
   } catch (err) {
-    console.error('Error listing files:', err.message);
+    console.error('Error listing files:', err.message, err.stack);
     res.status(500).json({ error: 'Failed to list files', detail: err.message });
   }
 });
@@ -66,7 +66,7 @@ app.get('/api/file', authenticate, async (req, res) => {
   try {
     let relPath = req.query.path;
     if (!relPath) return res.status(400).json({ error: 'Missing path' });
-    relPath = relPath.replace(/^\/*/, '');
+    relPath = relPath.replace(/^\/+/, '');
     const absPath = path.resolve(process.cwd(), relPath);
     if (!absPath.startsWith(process.cwd())) {
       return res.status(403).json({ error: 'Invalid path' });
@@ -82,7 +82,7 @@ app.get('/api/file', authenticate, async (req, res) => {
       res.download(absPath);
     }
   } catch (err) {
-    console.error('Error downloading file:', err.message);
+    console.error('Error downloading file:', err.message, err.stack);
     res.status(500).json({ error: 'Failed to download', detail: err.message });
   }
 });
@@ -91,7 +91,7 @@ app.post('/api/file', authenticate, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     let relPath = req.body.path || '';
-    relPath = relPath.replace(/^\/*/, '');
+    relPath = relPath.replace(/^\/+/, '');
     const targetDir = path.resolve(process.cwd(), relPath);
     if (!targetDir.startsWith(process.cwd())) {
       return res.status(403).json({ error: 'Invalid path' });
@@ -101,7 +101,7 @@ app.post('/api/file', authenticate, upload.single('file'), async (req, res) => {
     await fs.writeFile(targetPath, req.file.buffer);
     res.json({ success: true, path: path.join(relPath, req.file.originalname) });
   } catch (err) {
-    console.error('Error uploading file:', err.message);
+    console.error('Error uploading file:', err.message, err.stack);
     res.status(500).json({ error: 'Failed to upload', detail: err.message });
   }
 });
@@ -110,7 +110,7 @@ app.put('/api/file', authenticate, async (req, res) => {
   try {
     let relPath = req.query.path;
     if (!relPath) return res.status(400).json({ error: 'Missing path' });
-    relPath = relPath.replace(/^\/*/, '');
+    relPath = relPath.replace(/^\/+/, '');
     const absPath = path.resolve(process.cwd(), relPath);
     if (!absPath.startsWith(process.cwd())) {
       return res.status(403).json({ error: 'Invalid path' });
@@ -119,33 +119,26 @@ app.put('/api/file', authenticate, async (req, res) => {
     await fs.writeFile(absPath, req.body);
     res.json({ success: true });
   } catch (err) {
-    console.error('Error updating file:', err.message);
+    console.error('Error updating file:', err.message, err.stack);
     res.status(500).json({ error: 'Failed to update file', detail: err.message });
   }
 });
 
 app.post('/api/rcon', authenticate, async (req, res) => {
+  const { command } = req.body;
+  if (!command) return res.status(400).json({ error: 'Missing command' });
   try {
-    if (!req.body || typeof req.body !== 'object') {
-      return res.status(400).json({ error: 'Invalid request body' });
-    }
-    const { command } = req.body;
-    if (!command || typeof command !== 'string') {
-      return res.status(400).json({ error: 'Missing or invalid command' });
-    }
     const { execSync } = require('child_process');
     const rconPass = await getRconPassword();
-    if (!rconPass) {
-      return res.status(500).json({ error: 'RCON not configured' });
-    }
+    if (!rconPass) return res.status(500).json({ error: 'RCON not configured' });
     const output = execSync(`mcrcon -H 127.0.0.1 -p "${rconPass}" "${command}"`).toString().trim();
     res.json({ output });
   } catch (error) {
-    console.error('RCON error:', error.message);
+    console.error('RCON error:', error.message, error.stack);
     res.status(500).json({ error: 'Failed to execute command', detail: error.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log("File API listening on port " + PORT);
+  console.log(`File API listening on port ${PORT} (HTTP, proxied by Cloudflare)`);
 });

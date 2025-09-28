@@ -2,8 +2,9 @@ const WebSocket = require('ws');
 const os = require('os');
 
 const PORT = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT, 10) : 3004;
+
 const wss = new WebSocket.Server({ port: PORT }, () => {
-  console.log('Metrics WebSocket listening on port', PORT);
+  console.log(`Metrics WebSocket listening on port ${PORT} (HTTP, proxied by Cloudflare)`);
 });
 
 function getSystemMetrics() {

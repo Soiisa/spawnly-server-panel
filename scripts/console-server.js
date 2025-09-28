@@ -1,17 +1,18 @@
-const { spawn, execSync } = require('child_process');
+const { spawn } = require('child_process');
 const WebSocket = require('ws');
 
 const PORT = process.env.CONSOLE_PORT ? parseInt(process.env.CONSOLE_PORT, 10) : 3002;
 const MAX_HISTORY_LINES = 2000;
+
 const wss = new WebSocket.Server({ port: PORT }, () => {
-  console.log('Console WebSocket listening on port', PORT);
+  console.log(`Console WebSocket listening on port ${PORT} (HTTP, proxied by Cloudflare)`);
 });
 
 let history = [];
 let lineBuffer = '';
 
 try {
-  const pastLogs = execSync('journalctl -u minecraft -n ' + MAX_HISTORY_LINES + ' -o cat').toString().trim();
+  const pastLogs = require('child_process').execSync('journalctl -u minecraft -n ' + MAX_HISTORY_LINES + ' -o cat').toString().trim();
   history = pastLogs.split('\n').filter(line => line.trim());
 } catch (e) {
   console.error('Failed to load historical logs:', e.message);

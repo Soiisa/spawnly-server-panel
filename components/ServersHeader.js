@@ -1,7 +1,8 @@
-// components/Header.js
+// components/ServersHeader.js
+
 import CreditBalance from "./CreditBalance";
 
-export default function Header({ user, credits, onLogout }) {
+export default function Header({ user, credits, isLoading, onLogout }) {
   return (
     <header className="bg-white shadow-md flex justify-between items-center px-8 py-4">
       <div className="flex items-center">
@@ -14,7 +15,7 @@ export default function Header({ user, credits, onLogout }) {
       </div>
       
       <div className="flex items-center space-x-4">
-        <CreditBalance credits={credits} />
+        <CreditBalance credits={credits} isLoading={isLoading} />
         <div className="flex items-center space-x-2">
           <div className="bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center">
             <span className="font-medium text-indigo-800">{user?.email?.charAt(0).toUpperCase() || 'U'}</span>

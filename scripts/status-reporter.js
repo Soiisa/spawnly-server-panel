@@ -1,53 +1,14 @@
 const WebSocket = require('ws');
 const { execSync } = require('child_process');
-const fs = require('fs').promises;
-const path = require('path');
 
 const SERVER_ID = process.env.SERVER_ID || 'unknown';
-const NEXTJS_API_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
-const STATUS_WS_URL = `wss://${process.env.SUBDOMAIN}.spawnly.net:3006`;
+const RCON_PASSWORD = process.env.RCON_PASSWORD || '';
+const NEXTJS_API_URL = process.env.APP_BASE_URL ? `${process.env.APP_BASE_URL}/spawnly/api/servers/update-status` : 'https://spawnly.net/spawnly/api/servers/update-status';
+const STATUS_WS_PORT = 3006;
 
-async function getRconPassword() {
-  try {
-    const props = await fs.readFile(path.join(process.cwd(), 'server.properties'), 'utf8');
-    const match = props.match(/^rcon\.password=(.*)$/m);
-    return match ? match[1].trim() : null;
-  } catch (error) {
-    console.error('Error reading RCON password from server.properties:', error.message);
-    return null;
-  }
-}
-
-let ws = null;
-let reconnectInterval = null;
-
-function connect() {
-  console.log('Connecting to status WebSocket:', STATUS_WS_URL);
-  ws = new WebSocket(STATUS_WS_URL);
-
-  ws.on('open', () => {
-    console.log('Status WebSocket connected');
-    clearInterval(reconnectInterval);
-  });
-
-  ws.on('message', (event) => {
-    console.log('Status update received:', event.data);
-  });
-
-  ws.on('error', (error) => {
-    console.error('WebSocket error:', error.message);
-  });
-
-  ws.on('close', () => {
-    console.log('Status WebSocket disconnected, attempting to reconnect...');
-    scheduleReconnect();
-  });
-}
-
-function scheduleReconnect() {
-  if (reconnectInterval) clearInterval(reconnectInterval);
-  reconnectInterval = setInterval(connect, 5000);
-}
+const wss = new WebSocket.Server({ port: STATUS_WS_PORT }, () => {
+  console.log(`Status WebSocket server listening on port ${STATUS_WS_PORT} (HTTP, proxied by Cloudflare)`);
+});
 
 function getServerStatus() {
   try {
@@ -76,16 +37,11 @@ function getServerStatus() {
 
 async function updateStatusInSupabase(statusData) {
   try {
-    const rconPassword = await getRconPassword();
-    if (!rconPassword) {
-      console.error('No RCON password available, skipping Supabase update');
-      return;
-    }
-    const response = await fetch(NEXTJS_API_URL + '/api/servers/update-status', {
+    const response = await fetch(NEXTJS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + rconPassword
+        'Authorization': `Bearer ${RCON_PASSWORD}`
       },
       body: JSON.stringify({
         serverId: SERVER_ID,
@@ -103,27 +59,25 @@ async function updateStatusInSupabase(statusData) {
       console.log('Status updated in Supabase successfully');
     }
   } catch (error) {
-    console.error('Error updating status in Supabase:', error.message);
+    console.error('Error updating status in Supabase:', error);
   }
 }
 
 function broadcastStatus() {
   const status = getServerStatus();
   
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    try {
-      ws.send(JSON.stringify(status));
-    } catch (error) {
-      console.error('Error sending status via WebSocket:', error.message);
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(JSON.stringify(status));
+      } catch (error) {
+        console.error('Error sending status via WebSocket:', error);
+      }
     }
-  }
+  });
   
   updateStatusInSupabase(status);
 }
-
-const wss = new WebSocket.Server({ port: 3006 }, () => {
-  console.log('Status WebSocket server listening on port 3006');
-});
 
 wss.on('connection', (clientWs) => {
   console.log('Status client connected');
@@ -133,12 +87,11 @@ wss.on('connection', (clientWs) => {
     console.log('Status client disconnected');
   });
 
-  wss.on('error', (err) => {
-    console.error('Status WebSocket server error:', err.message);
+  clientWs.on('error', (err) => {
+    console.log('Status WebSocket client error', err && err.message);
   });
 });
 
-connect();
 setInterval(broadcastStatus, 30000);
 
 process.on('SIGINT', () => process.exit(0));

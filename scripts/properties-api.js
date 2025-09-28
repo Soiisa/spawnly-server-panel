@@ -7,13 +7,18 @@ const PORT = process.env.PROPERTIES_API_PORT || 3003;
 
 app.use(express.text({ type: '*/*' }));
 
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  
   const token = authHeader.substring(7);
+  const props = await fs.readFile(path.join(process.cwd(), 'server.properties'), 'utf8');
+  const match = props.match(/^rcon\.password=(.*)$/m);
+  const rconPass = match ? match[1].trim() : null;
+  if (token !== rconPass) {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
   next();
 };
 
@@ -41,5 +46,5 @@ app.post('/api/properties', authenticate, async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log('Properties API listening on port', PORT);
+  console.log(`Properties API listening on port ${PORT} (HTTP, proxied by Cloudflare)`);
 });
