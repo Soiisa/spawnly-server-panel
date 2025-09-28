@@ -23,8 +23,8 @@ const s3Client = new S3Client({
   forcePathStyle: true,
 });
 
-const deleteCloudflareRecords = async (serverId, subdomain, dnsRecordIds = [], maxRetries = 3) => {
-  console.log(`[deleteCloudflareRecords] Attempting to delete DNS records for serverId: ${serverId}, subdomain: ${subdomain}, dnsRecordIds: ${JSON.stringify(dnsRecordIds)}`);
+const deleteCloudflareRecords = async (subdomain, maxRetries = 3) => {
+  console.log(`[deleteCloudflareRecords] Attempting to delete DNS records for subdomain: ${subdomain}`);
   
   // Extract subdomain prefix if full domain is provided
   let subdomainPrefix = subdomain;
@@ -39,52 +39,13 @@ const deleteCloudflareRecords = async (serverId, subdomain, dnsRecordIds = [], m
     return false;
   }
 
-  // Define record types to delete
   const recordTypes = [
-    { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}` }, // e.g., paredes.spawnly.net
-    { type: 'A', name: `${subdomainPrefix}-api${DOMAIN_SUFFIX}` }, // e.g., paredes-api.spawnly.net
-    { type: 'SRV', name: `_minecraft._tcp.${subdomainPrefix}${DOMAIN_SUFFIX}` }, // e.g., _minecraft._tcp.paredes.spawnly.net
+    { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}` },
+    { type: 'A', name: `${subdomainPrefix}-api${DOMAIN_SUFFIX}` },
+    { type: 'SRV', name: `_minecraft._tcp.${subdomainPrefix}${DOMAIN_SUFFIX}` },
   ];
 
   let allDeleted = true;
-
-  // First, try deleting records using dnsRecordIds from Supabase
-  if (dnsRecordIds.length > 0) {
-    for (const recordId of dnsRecordIds) {
-      let attempt = 0;
-      while (attempt < maxRetries) {
-        try {
-          console.log(`[deleteCloudflareRecords] Attempt ${attempt + 1}: Deleting DNS record ID ${recordId}`);
-          const deleteUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${recordId}`;
-          const deleteResponse = await fetch(deleteUrl, {
-            method: 'DELETE',
-            headers: {
-              Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (!deleteResponse.ok) {
-            const errorText = await deleteResponse.text().catch(() => 'no-body');
-            throw new Error(`Failed to delete DNS record ${recordId}: ${deleteResponse.status} ${errorText}`);
-          }
-
-          console.log(`[deleteCloudflareRecords] Successfully deleted DNS record ${recordId}`);
-          break; // Success, move to next record ID
-        } catch (err) {
-          attempt++;
-          console.error(`[deleteCloudflareRecords] Attempt ${attempt} failed for record ID ${recordId}: ${err.message}`);
-          if (attempt >= maxRetries) {
-            console.error(`[deleteCloudflareRecords] Failed to delete record ${recordId} after ${maxRetries} attempts: ${err.message}`);
-            allDeleted = false;
-          }
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait before retrying
-        }
-      }
-    }
-  }
-
-  // Fallback: Query and delete records by type and name if dnsRecordIds are incomplete or missing
   for (const recordType of recordTypes) {
     let attempt = 0;
     while (attempt < maxRetries) {
@@ -107,12 +68,6 @@ const deleteCloudflareRecords = async (serverId, subdomain, dnsRecordIds = [], m
         console.log(`[deleteCloudflareRecords] Found ${result.length} ${recordType.type} records for ${recordType.name}`);
 
         for (const record of result) {
-          // Skip if already deleted via dnsRecordIds
-          if (dnsRecordIds.includes(record.id)) {
-            console.log(`[deleteCloudflareRecords] Skipping already deleted record ${record.id} for ${recordType.name}`);
-            continue;
-          }
-
           const deleteUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record.id}`;
           const deleteResponse = await fetch(deleteUrl, {
             method: 'DELETE',
@@ -266,7 +221,7 @@ export default async function handler(req, res) {
     console.log(`[API:action] Fetching server data for serverId: ${serverId}, action: ${action}`);
     const { data: server, error: serverErr } = await supabaseAdmin
       .from('servers')
-      .select('id, subdomain, hetzner_id, status, ipv4, dns_record_ids')
+      .select('*')
       .eq('id', serverId)
       .single();
 
@@ -274,7 +229,7 @@ export default async function handler(req, res) {
       console.error('[API:action] Server not found or error:', serverErr?.message);
       return res.status(404).json({ error: 'Server not found', detail: serverErr?.message || null });
     }
-    console.log(`[API:action] Server data retrieved:`, { id: server.id, subdomain: server.subdomain, hetzner_id: server.hetzner_id, status: server.status, ipv4: server.ipv4, dns_record_ids: server.dns_record_ids });
+    console.log(`[API:action] Server data retrieved:`, { id: server.id, subdomain: server.subdomain, hetzner_id: server.hetzner_id, status: server.status, ipv4: server.ipv4 });
 
     if (action === 'delete' || action === 'stop') {
       if (server.hetzner_id && server.status === 'Running') {
@@ -300,10 +255,10 @@ export default async function handler(req, res) {
         }
       }
 
-      if (server.subdomain || server.dns_record_ids?.length > 0) {
+      if (server.subdomain) {
         try {
-          console.log(`[API:action] Deleting Cloudflare DNS records for serverId: ${server.id}, subdomain: ${server.subdomain}`);
-          const dnsDeleted = await deleteCloudflareRecords(server.id, server.subdomain, server.dns_record_ids || []);
+          console.log(`[API:action] Deleting Cloudflare DNS records for subdomain: ${server.subdomain}`);
+          const dnsDeleted = await deleteCloudflareRecords(server.subdomain);
           if (!dnsDeleted) {
             console.warn(`[API:action] DNS record deletion for ${server.subdomain} was not fully successful`);
           } else {
@@ -313,9 +268,10 @@ export default async function handler(req, res) {
           console.error('[API:action] Failed to delete Cloudflare DNS records:', dnsErr.message);
           return res.status(502).json({ error: 'Failed to delete DNS records', detail: dnsErr.message });
         }
-      } else if (server.ipv4) {
-        console.warn('[API:action] No subdomain or dns_record_ids found in Supabase, checking Cloudflare for residual records with IP: ${server.ipv4}');
-        try {
+      } else {
+        console.warn('[API:action] No subdomain found in Supabase for server, checking Cloudflare for residual records');
+        if (server.ipv4) {
+          console.log(`[API:action] Searching Cloudflare for A records with IP: ${server.ipv4}`);
           const url = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?type=A&content=${server.ipv4}`;
           const response = await fetch(url, {
             headers: {
@@ -347,8 +303,6 @@ export default async function handler(req, res) {
             const errorText = await response.text().catch(() => 'no-body');
             console.warn(`[API:action] Failed to search for residual A records: ${response.status} ${errorText}`);
           }
-        } catch (err) {
-          console.error('[API:action] Error checking residual A records:', err.message);
         }
       }
 
@@ -373,7 +327,7 @@ export default async function handler(req, res) {
         console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped', clearing hetzner_id and ipv4`);
         const { error: updateErr } = await supabaseAdmin
           .from('servers')
-          .update({ status: 'Stopped', hetzner_id: null, ipv4: null, dns_record_ids: [] })
+          .update({ status: 'Stopped', hetzner_id: null, ipv4: null })
           .eq('id', serverId);
         if (updateErr) {
           console.error('[API:action] Failed to update Supabase after stop:', updateErr.message);
