@@ -1,7 +1,6 @@
-// pages/api/servers/provision.js
-
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
+import axios from 'axios';
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -214,6 +213,7 @@ const generateRconPassword = () => {
 const checkSubdomainAvailable = async (subdomain) => {
   const checks = [
     { type: 'A', name: `${subdomain}.spawnly.net` },
+    { type: 'A', name: `${subdomain}-api.spawnly.net` }, // Updated to check <subdomain>-api
     { type: 'SRV', name: `_minecraft._tcp.${subdomain}.spawnly.net` },
   ];
 
@@ -238,60 +238,72 @@ const checkSubdomainAvailable = async (subdomain) => {
   return true;
 };
 
-const createARecord = async (subdomain, ip) => {
+const createARecord = async (subdomain, serverIp) => {
   const url = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
-  const payload = {
-    type: 'A',
-    name: `${subdomain}.spawnly.net`,
-    content: ip,
-    ttl: 1,
-    proxied: false,
-  };
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
-      'Content-Type': 'application/json',
+  const records = [
+    {
+      type: 'A',
+      name: subdomain, // e.g., paredes
+      content: serverIp, // e.g., 91.99.200.184
+      ttl: 1,
+      proxied: false // DNS-only for Minecraft
     },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Cloudflare A record creation failed: ${error}`);
+    {
+      type: 'A',
+      name: `${subdomain}-api`, // e.g., paredes-api
+      content: serverIp,
+      ttl: 1,
+      proxied: true // Proxied for WSS/HTTPS, covered by Universal SSL
+    }
+  ];
+  const recordIds = [];
+  for (const data of records) {
+    try {
+      const response = await axios.post(url, data, {
+        headers: {
+          Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      console.log(`Created A record for ${data.name}.spawnly.net:`, response.data);
+      recordIds.push(response.data.result.id);
+    } catch (error) {
+      console.error(`Failed to create A record for ${data.name}.spawnly.net:`, error.response?.data || error.message);
+      throw new Error(`Failed to create A record for ${data.name}.spawnly.net: ${error.message}`);
+    }
   }
-  return true;
+  return recordIds;
 };
 
-const createSRVRecord = async (subdomain, port = 25565) => {
+const createSRVRecord = async (subdomain, serverIp) => {
   const url = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
-  const payload = {
+  const data = {
     type: 'SRV',
-    name: `_minecraft._tcp.${subdomain}.spawnly.net`,
     data: {
+      name: `_minecraft._tcp.${subdomain}`, // e.g., _minecraft._tcp.paredes
       service: '_minecraft',
       proto: '_tcp',
-      name: `${subdomain}.spawnly.net`,
+      ttl: 1,
       priority: 0,
-      weight: 5,
-      port,
-      target: `${subdomain}.spawnly.net.`,
-    },
-    ttl: 1,
-    proxied: false,
+      weight: 0,
+      port: 25565,
+      target: subdomain // e.g., paredes
+    }
   };
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Cloudflare SRV record creation failed: ${error}`);
+  try {
+    const response = await axios.post(url, data, {
+      headers: {
+        Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log(`Created SRV record for _minecraft._tcp.${subdomain}.spawnly.net:`, response.data);
+    return response.data.result.id;
+  } catch (error) {
+    const errorDetails = error.response?.data?.errors || error.message;
+    console.error(`Failed to create SRV record for _minecraft._tcp.${subdomain}.spawnly.net:`, JSON.stringify(errorDetails, null, 2));
+    throw new Error(`Failed to create SRV record: ${JSON.stringify(errorDetails)}`);
   }
-  return true;
 };
 
 const deleteS3Files = async (serverId, s3Config) => {
@@ -349,8 +361,8 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
     console.warn('[WARN] Subdomain is empty, services will use insecure mode unless proxied');
   }
   if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
-    console.warn(`Invalid or missing version: ${version}, defaulting to 1.21.8`);
-    version = '1.21.8';
+    console.warn(`Invalid or missing version: ${version}, defaulting to 1.21.1`);
+    version = '1.21.1';
   }
   const escapedVersion = escapeForSingleQuotes(version);
   const isForge = software === 'forge';
@@ -680,7 +692,7 @@ write_files:
       Environment=SERVER_ID=${serverId}
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
-      Environment=SUBDOMAIN=${escapedSubdomain}
+      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
       ExecStart=/usr/bin/node /opt/minecraft/status-reporter.js
       Restart=always
       RestartSec=5
@@ -699,7 +711,7 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
-      Environment=SUBDOMAIN=${escapedSubdomain}
+      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
       Environment=CONSOLE_PORT=3002
@@ -721,7 +733,7 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
-      Environment=SUBDOMAIN=${escapedSubdomain}
+      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
       Environment=PROPERTIES_API_PORT=3003
@@ -743,7 +755,7 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
-      Environment=SUBDOMAIN=${escapedSubdomain}
+      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
       Environment=METRICS_PORT=3004
@@ -765,7 +777,7 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
-      Environment=SUBDOMAIN=${escapedSubdomain}
+      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
       Environment=FILE_API_PORT=3005
@@ -819,16 +831,14 @@ runcmd:
   - systemctl enable mc-file-api || true
   - systemctl start mc-file-api || true
   - echo "[DEBUG] Setting up firewall for Cloudflare IPs"
-  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 25565; done
-  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 25575; done
+  - ufw allow 25565
+  - ufw allow 25575
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3002; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3003; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3004; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3005; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3006; done
   - ufw allow 22
-  - ufw allow 25565
-  - ufw allow 25575
   - ufw --force enable
   - echo "[DEBUG] Running quick startup checks"
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":25565\\b"; then echo "PORT 25565 OPEN"; break; fi; sleep 2; done;'
@@ -1024,13 +1034,25 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
           return res.status(400).json({ error: 'Subdomain already taken in DNS' });
         }
 
-        await createARecord(serverRow.subdomain, ipv4);
-        console.log(`Created A record for ${serverRow.subdomain}.spawnly.net -> ${ipv4}`);
+        const aRecordIds = await createARecord(serverRow.subdomain, ipv4);
+        console.log(`Created A records for ${serverRow.subdomain}.spawnly.net and ${serverRow.subdomain}-api.spawnly.net -> ${ipv4}`);
 
-        await createSRVRecord(serverRow.subdomain, 25565);
-        console.log(`Created SRV record for _minecraft._tcp.${serverRow.subdomain}.spawnly.net`);
+        let srvRecordId;
+        try {
+          srvRecordId = await createSRVRecord(serverRow.subdomain, ipv4);
+          console.log(`Created SRV record for _minecraft._tcp.${serverRow.subdomain}.spawnly.net`);
+        } catch (srvError) {
+          console.error('SRV record creation failed, continuing with A records:', srvError.message);
+        }
 
         subdomainResult = `${serverRow.subdomain}.spawnly.net`;
+        await supabaseAdmin
+          .from('servers')
+          .update({ 
+            dns_record_ids: [...aRecordIds, ...(srvRecordId ? [srvRecordId] : [])],
+            subdomain: serverRow.subdomain
+          })
+          .eq('id', serverRow.id);
       } catch (dnsErr) {
         console.error('Cloudflare DNS setup failed:', dnsErr.message, dnsErr.stack);
         return res.status(502).json({ 
@@ -1048,11 +1070,11 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       .from('servers')
       .update({
         hetzner_id: hetznerId,
-        ipv4,
+        ipv4: ipv4,
         status: newStatus,
         rcon_password: rconPassword,
         subdomain: serverRow.subdomain,
-        needs_file_deletion: false
+        needs_file_deletion: false,
       })
       .eq('id', serverRow.id)
       .select()
@@ -1060,158 +1082,66 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     if (updateErr) {
       console.error('Supabase update error:', updateErr.message, updateErr.stack);
-      return res.status(200).json({ 
-        warning: 'Provisioned but failed to update DB', 
-        hetznerServer: finalServer,
-        subdomain: subdomainResult,
+      return res.status(500).json({ 
+        error: 'Failed to update server status in Supabase', 
         detail: updateErr.message,
         stack: process.env.NODE_ENV === 'development' ? updateErr.stack : undefined
       });
     }
 
-    console.log('Server provisioned successfully, updated row:', updatedRow.id);
-    return res.status(200).json({ 
-      server: updatedRow, 
+    console.log('Provision complete for serverId:', serverRow.id, 'IPv4:', ipv4, 'Subdomain:', subdomainResult);
+
+    return res.status(200).json({
+      server: updatedRow,
       hetznerServer: finalServer,
-      subdomain: serverRow.subdomain,
-      fullDomain: subdomainResult
+      subdomain: subdomainResult,
+      message: 'Server provisioned successfully',
     });
   } catch (err) {
-    console.error('provisionServer error:', err.message, err.stack);
+    console.error('Provision error:', err.message, err.stack);
     return res.status(500).json({ 
-      error: 'Failed to provision server', 
-      detail: err.message || String(err),
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined 
+      error: 'Server provisioning failed', 
+      detail: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
-}
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    console.error('Method not allowed:', req.method);
-    return res.status(405).json({ error: 'Method not allowed', detail: `Expected POST, got ${req.method}` });
-  }
-  
-  if (!HETZNER_TOKEN) {
-    console.error('Missing HETZNER_API_TOKEN env var');
-    return res.status(500).json({ error: 'Server configuration error', detail: 'Missing HETZNER_API_TOKEN' });
-  }
-  if (!CLOUDFLARE_API_TOKEN || !CLOUDFLARE_ZONE_ID) {
-    console.error('Missing Cloudflare env vars');
-    return res.status(500).json({ error: 'Server configuration error', detail: 'Missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID' });
-  }
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('Missing Supabase server env vars:', { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY });
-    return res.status(500).json({ error: 'Server configuration error', detail: 'Missing Supabase credentials' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { serverId, version = null, ssh_keys } = req.body;
+  const { serverId, version, ssh_keys = [] } = req.body;
+
   if (!serverId) {
-    console.error('Missing serverId in request body');
-    return res.status(400).json({ error: 'Missing serverId', detail: 'Request body must include serverId' });
+    return res.status(400).json({ error: 'serverId is required' });
   }
 
   try {
-    console.log('Fetching server row for serverId:', serverId);
-    const { data: serverRow, error: fetchErr } = await supabaseAdmin
+    const { data: serverRow, error } = await supabaseAdmin
       .from('servers')
       .select('*')
       .eq('id', serverId)
       .single();
 
-    if (fetchErr || !serverRow) {
-      console.error('Supabase read error:', fetchErr?.message, fetchErr?.stack);
-      return res.status(404).json({ 
-        error: 'Server not found', 
-        detail: fetchErr?.message || 'No server found with the provided ID',
-        stack: process.env.NODE_ENV === 'development' ? fetchErr?.stack : undefined 
-      });
+    if (error || !serverRow) {
+      console.error('Supabase fetch error:', error?.message || 'Server not found');
+      return res.status(404).json({ error: 'Server not found', detail: error?.message });
     }
 
-    if (serverRow.needs_recreation) {
-      console.log('Server needs recreation, deleting existing Hetzner server');
-      
-      if (serverRow.hetzner_id) {
-        try {
-          console.log('Deleting Hetzner server:', serverRow.hetzner_id);
-          const deleteRes = await fetch(`${HETZNER_API_BASE}/servers/${serverRow.hetzner_id}`, {
-            method: 'DELETE',
-            headers: {
-              Authorization: `Bearer ${HETZNER_TOKEN}`,
-            },
-          });
-          
-          if (!deleteRes.ok) {
-            const errorText = await deleteRes.text();
-            console.warn('Failed to delete existing Hetzner server:', deleteRes.status, errorText);
-          } else {
-            console.log('Hetzner server deleted:', serverRow.hetzner_id);
-          }
-        } catch (deleteError) {
-          console.warn('Error deleting existing Hetzner server:', deleteError.message, deleteError.stack);
-        }
-      }
-      
-      const softwareToUse = serverRow.pending_type || serverRow.type || 'vanilla';
-      const versionToUse = serverRow.pending_version || serverRow.version || version;
-      console.log('Recreating server with software:', softwareToUse, 'version:', versionToUse);
-      
-      const { error: updateErr } = await supabaseAdmin
-        .from('servers')
-        .update({
-          type: softwareToUse,
-          version: versionToUse,
-          needs_recreation: false,
-          pending_type: null,
-          pending_version: null,
-          hetzner_id: null,
-          ipv4: null
-        })
-        .eq('id', serverId);
-        
-      if (updateErr) {
-        console.error('Error updating server for recreation:', updateErr.message, updateErr.stack);
-        return res.status(500).json({ 
-          error: 'Failed to prepare server for recreation', 
-          detail: updateErr.message,
-          stack: process.env.NODE_ENV === 'development' ? updateErr.stack : undefined 
-        });
-      }
-      
-      const { data: updatedServer, error: fetchUpdatedErr } = await supabaseAdmin
-        .from('servers')
-        .select('*')
-        .eq('id', serverId)
-        .single();
-        
-      if (fetchUpdatedErr || !updatedServer) {
-        console.error('Error fetching updated server:', fetchUpdatedErr?.message, fetchUpdatedErr?.stack);
-        return res.status(500).json({ 
-          error: 'Failed to fetch updated server', 
-          detail: fetchUpdatedErr?.message || 'No server found after update',
-          stack: process.env.NODE_ENV === 'development' ? fetchUpdatedErr?.stack : undefined 
-        });
-      }
-      
-      return await provisionServer(updatedServer, versionToUse, ssh_keys, res);
-    }
-    
-    if (serverRow.hetzner_id) {
-      console.log('Server already provisioned, hetzner_id:', serverRow.hetzner_id);
-      return res.status(400).json({ 
-        error: 'Server already provisioned', 
-        hetzner_id: serverRow.hetzner_id,
-        detail: 'This server has already been provisioned on Hetzner. If you want to recreate it, change the software or version first.'
-      });
+    if (!serverRow.subdomain) {
+      console.error('No subdomain specified for serverId:', serverId);
+      return res.status(400).json({ error: 'No subdomain specified' });
     }
 
-    return await provisionServer(serverRow, serverRow.version || version, ssh_keys, res);
+    return await provisionServer(serverRow, version, ssh_keys, res);
   } catch (err) {
-    console.error('provision handler error:', err.message, err.stack);
+    console.error('Handler error:', err.message, err.stack);
     return res.status(500).json({ 
-      error: 'Internal server error', 
-      detail: err.message || String(err),
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined 
+      error: 'Failed to fetch server data', 
+      detail: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
 }

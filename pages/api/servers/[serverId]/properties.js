@@ -110,7 +110,7 @@ export default async function handler(req, res) {
       // If server is running and has an subdomain, try to save to game server
       if (server.status === 'Running' && server.subdomain) {
         try {
-          const response = await fetch(`https://${server.subdomain}.spawnly.net/api/properties`, {
+          const response = await fetch(`https://${server.subdomain}-api.spawnly.net/api/properties`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${server.rcon_password}`,

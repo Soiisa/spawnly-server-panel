@@ -24,7 +24,7 @@ export default function ConsoleViewer({ server }) {
     const connectToServer = () => {
       // Use the server's IP directly
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const wsUrl = `wss://${server.subdomain}.spawnly.net/console`;
+      const wsUrl = `wss://${server.subdomain}-api.spawnly.net/console`;
       
       setStatusMsg(`Connecting to ${server.ipv4}:3002...`);
       const ws = new WebSocket(wsUrl);

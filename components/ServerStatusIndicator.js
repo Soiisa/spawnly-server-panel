@@ -16,7 +16,7 @@ export default function ServerStatusIndicator({ server }) {
     }
 
     const connectToStatusServer = () => {
-      const wsUrl = `wss://${server.subdomain}.spawnly.net/status`;
+      const wsUrl = `wss://${server.subdomain}-api.spawnly.net/status`;
       setDebug(`Connecting to: ${wsUrl}`);
       console.log('Connecting to status WebSocket:', wsUrl);
       
