@@ -1,10 +1,10 @@
-// pages/server/[id].js
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { format } from 'date-fns';
 import { Suspense } from 'react';
+import { debounce, throttle } from 'lodash';
 import ServerSoftwareTab from '../../components/ServerSoftwareTab';
 import ModsPluginsTab from '../../components/ModsPluginsTab';
 import ConsoleViewer from '../../components/ConsoleViewer';
@@ -33,61 +33,92 @@ export default function ServerDetailPage({ initialServer }) {
   const [liveMetrics, setLiveMetrics] = useState({ cpu: 0, memory: 0, disk: 0 });
   const [editingRam, setEditingRam] = useState(false);
   const [newRam, setNewRam] = useState(null);
+  const [onlinePlayers, setOnlinePlayers] = useState([]);
+  const hasReceivedRunningRef = useRef(false);
 
-  // Realtime channel refs
-  const serverChannelRef = useRef(null);
   const profileChannelRef = useRef(null);
   const mountedRef = useRef(false);
   const metricsWsRef = useRef(null);
   const pollRef = useRef(null);
-  const creditsFetchedRef = useRef(false);
+  const onlinePlayersPollRef = useRef(null);
 
-  // Debug credits state changes
+  const throttledSetLiveMetrics = useRef(
+    throttle((newMetrics) => {
+      setLiveMetrics((prev) => {
+        if (
+          prev.cpu === newMetrics.cpu &&
+          prev.memory === newMetrics.memory &&
+          prev.disk === newMetrics.disk
+        ) {
+          return prev;
+        }
+        return newMetrics;
+      });
+    }, 2000)
+  ).current;
+
   useEffect(() => {
     console.log('Credits state updated:', credits);
   }, [credits]);
 
-  // Handle tab query param
   useEffect(() => {
     const qTab = router?.query?.tab;
-    if (qTab && typeof qTab === "string") {
+    if (qTab && typeof qTab === 'string') {
       setActiveTab(qTab);
     }
   }, [router?.query?.tab]);
 
-  // Fetch session and initial server data
   useEffect(() => {
-  mountedRef.current = true;
+    mountedRef.current = true;
 
-  const fetchSessionAndServer = async () => {
-    try {
-      const { data, error } = await supabase.auth.getSession();
-      const session = data?.session;
-      if (!session) {
-        console.error('No session found, redirecting to login');
+    const fetchSessionAndData = async () => {
+      setLoading(true);
+      setCreditsLoading(true);
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !sessionData?.session) {
+          console.error('Session fetch error:', sessionError || 'No session found');
+          setError('Please log in to continue.');
+          router.push('/login');
+          return;
+        }
+
+        const userData = sessionData.session.user;
+        setUser(userData);
+        console.log('Fetched user:', userData);
+
+        await fetchUserCredits(userData.id);
+
+        if (id && !server) {
+          await fetchServer(id, userData.id);
+        }
+      } catch (err) {
+        console.error('Session and data fetch error:', err);
+        setError('Failed to load session or server data. Redirecting to login...');
         router.push('/login');
-        return;
+      } finally {
+        setLoading(false);
       }
-      setUser(session.user);
-      await fetchUserCredits(session.user.id);
-      if (id) await fetchServer(id, session.user.id);
-    } catch (err) {
-      console.error('Session fetch error:', err);
-      setError('Failed to load session. Redirecting to login...');
-      router.push('/login');
-    }
-  };
+    };
 
-  if (id) fetchSessionAndServer();  // Always call if id exists
+    fetchSessionAndData();
 
-  // Fetch file token for file access
-  if (server?.id && !fileToken) {
+    return () => {
+      mountedRef.current = false;
+      cleanupResources();
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!server?.id || fileToken || !user) return;
+
     const fetchFileToken = async (retries = 3, delay = 1000) => {
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (!session) {
             console.error('No session found for file token fetch');
+            setError('Session expired. Please log in again.');
             router.push('/login');
             return;
           }
@@ -100,14 +131,15 @@ export default function ServerDetailPage({ initialServer }) {
           if (response.ok && data.token && mountedRef.current) {
             setFileToken(data.token);
             setError(null);
+            return;
           } else {
             console.error(`Failed to fetch file token (attempt ${attempt}/${retries}):`, data.error || 'No token returned');
             if (attempt === retries) {
-              setError('Failed to fetch file access token after multiple attempts');
+              setError('Failed to fetch file access token after multiple attempts.');
             }
           }
         } catch (err) {
-          console.error(`Unexpected error fetching file token (attempt ${attempt}/${retries}):`, err.message);
+          console.error(`File token fetch error (attempt ${attempt}/${retries}):`, err.message);
           if (attempt === retries) {
             setError('Failed to fetch file access token: ' + err.message);
           }
@@ -115,21 +147,35 @@ export default function ServerDetailPage({ initialServer }) {
         }
       }
     };
+
     fetchFileToken();
-  }
+  }, [server?.id, user]);
 
-  // Connect to metrics WebSocket if server is running
-  if (server?.status === 'Running' && server?.ipv4) {
-    connectToMetricsWebSocket();
-  }
-
-  return () => {
-    mountedRef.current = false;
-    try {
-      if (serverChannelRef.current) {
-        supabase.removeChannel(serverChannelRef.current);
-        serverChannelRef.current = null;
+  useEffect(() => {
+    if (server?.status === 'Running' && server?.ipv4) {
+      if (!metricsWsRef.current) {
+        connectToMetricsWebSocket();
       }
+      if (!onlinePlayersPollRef.current) {
+        fetchOnlinePlayers();
+        onlinePlayersPollRef.current = setInterval(fetchOnlinePlayers, 30000);
+      }
+    }
+
+    return () => {
+      if (metricsWsRef.current) {
+        metricsWsRef.current.close();
+        metricsWsRef.current = null;
+      }
+      if (onlinePlayersPollRef.current) {
+        clearInterval(onlinePlayersPollRef.current);
+        onlinePlayersPollRef.current = null;
+      }
+    };
+  }, [server?.status, server?.ipv4]);
+
+  const cleanupResources = () => {
+    try {
       if (profileChannelRef.current) {
         supabase.removeChannel(profileChannelRef.current);
         profileChannelRef.current = null;
@@ -142,96 +188,15 @@ export default function ServerDetailPage({ initialServer }) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
+      if (onlinePlayersPollRef.current) {
+        clearInterval(onlinePlayersPollRef.current);
+        onlinePlayersPollRef.current = null;
+      }
     } catch (e) {
-      // ignore
+      console.error('Cleanup error:', e);
     }
   };
-}, [id, server?.id, server?.status, server?.ipv4]);
 
-  // Dedicated effect for Supabase server subscription
-  useEffect(() => {
-    if (!id || !user?.id) return;
-
-    const subscribeToServer = async () => {
-      try {
-        if (serverChannelRef.current) {
-          await supabase.removeChannel(serverChannelRef.current);
-          serverChannelRef.current = null;
-        }
-
-        const channel = supabase
-          .channel(`server-${id}`)
-          .on(
-            'postgres_changes',
-            { event: 'UPDATE', schema: 'public', table: 'servers', filter: `id=eq.${id}` },
-            (payload) => {
-              if (!mountedRef.current) return;
-              console.log('Realtime server update:', payload);
-              const newRow = payload.new;
-              setServer(newRow);
-
-              // Trigger immediate fetch on key status changes
-              if (['Running', 'Stopped', 'Initializing'].includes(newRow.status)) {
-                fetchServer(id, user?.id);
-              }
-
-              // Reconnect metrics WebSocket if needed
-              if (newRow.status === 'Running' && newRow.ipv4 && (!metricsWsRef.current || metricsWsRef.current.readyState !== WebSocket.OPEN)) {
-                connectToMetricsWebSocket();
-              }
-            }
-          )
-          .subscribe((status, err) => {
-            if (status === 'SUBSCRIBED') {
-              console.log('Subscribed to server updates:', id);
-            } else if (err) {
-              console.error('Subscription error:', err);
-              setError('Failed to subscribe to server updates. Retrying...');
-              setTimeout(subscribeToServer, 5000);
-            }
-          });
-
-        serverChannelRef.current = channel;
-      } catch (subErr) {
-        console.error('Realtime subscription failed:', subErr);
-        setError('Failed to set up server updates. Please refresh.');
-      }
-    };
-
-    subscribeToServer();
-
-    return () => {
-      if (serverChannelRef.current) {
-        supabase.removeChannel(serverChannelRef.current);
-        serverChannelRef.current = null;
-      }
-    };
-  }, [id, user?.id]);
-
-  // Polling during transitional states
-  useEffect(() => {
-    if (!server?.status || !['Starting', 'Stopping', 'Restarting', 'Initializing'].includes(server.status)) {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-      return;
-    }
-
-    pollRef.current = setInterval(() => {
-      console.log(`Polling server status: ${server.status}`);
-      fetchServer(id, user?.id);
-    }, 1000); // Increased frequency to 1 second
-
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [server?.status, id, user?.id]);
-
-  // Profile subscription for credits
   useEffect(() => {
     if (!user?.id) return;
 
@@ -249,20 +214,21 @@ export default function ServerDetailPage({ initialServer }) {
           if (!mountedRef.current) return;
           console.log('Profile updated, new credits:', payload.new.credits);
           setCredits(payload.new.credits || 0);
+          setCreditsLoading(false);
+          setError(null);
         }
       )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to profile updates:', user.id);
+          console.log('Subscribed to profile updates for user:', user.id);
         } else if (err) {
-          console.error('Subscription error:', err);
+          console.error('Profile subscription error:', err);
           setError('Failed to subscribe to profile updates. Retrying...');
-          // Retry subscription
           setTimeout(() => {
             if (mountedRef.current) {
               profileChannel.subscribe();
             }
-          }, 5000);
+          }, 15000);
         }
       });
 
@@ -286,6 +252,8 @@ export default function ServerDetailPage({ initialServer }) {
           .eq('id', userId)
           .single();
 
+        console.log('Raw Supabase response for credits:', { data, error });
+
         if (error) {
           console.error(`Error fetching credits (attempt ${attempt}/${retries}):`, error.message);
           if (attempt === retries) {
@@ -294,13 +262,13 @@ export default function ServerDetailPage({ initialServer }) {
           continue;
         }
 
-        if (data) {
+        if (data && mountedRef.current) {
           console.log('Fetched credits:', data.credits);
           setCredits(data.credits || 0);
-          setError(null);
           setCreditsLoading(false);
+          setError(null);
           return;
-        } else {
+        } else if (!data) {
           console.warn('No profile data found for user:', userId);
           if (attempt === retries) {
             setError('No profile found. Please contact support.');
@@ -335,7 +303,7 @@ export default function ServerDetailPage({ initialServer }) {
         try {
           const data = JSON.parse(event.data);
           if (mountedRef.current) {
-            setLiveMetrics({
+            throttledSetLiveMetrics({
               cpu: data.cpu || 0,
               memory: data.ram || 0,
               disk: data.disk || 0,
@@ -354,7 +322,7 @@ export default function ServerDetailPage({ initialServer }) {
         console.log('Metrics WebSocket disconnected');
         metricsWsRef.current = null;
         if (mountedRef.current && server?.status === 'Running') {
-          setTimeout(connectToMetricsWebSocket, 5000);
+          setTimeout(connectToMetricsWebSocket, 15000);
         }
       };
     } catch (error) {
@@ -362,7 +330,6 @@ export default function ServerDetailPage({ initialServer }) {
     }
   };
 
-  // Safe fetch helper
   const safeFetchJson = async (url, opts = {}) => {
     try {
       const res = await fetch(url, opts);
@@ -387,67 +354,127 @@ export default function ServerDetailPage({ initialServer }) {
     }
   };
 
-  // Fetch server data
-  const fetchServer = async (serverIdParam, userIdParam) => {
-    setLoading(true);
+  const fetchOnlinePlayers = async () => {
+    if (!server?.status === 'Running' || !fileToken) {
+      setOnlinePlayers([]);
+      return;
+    }
+
     try {
-      const serverId = serverIdParam || id;
-      const userId = userIdParam || user?.id;
-      if (!serverId || !userId) {
-        return;
+      console.log('Fetching online players for server:', server.id);
+      const res = await fetch(`/api/servers/rcon`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${fileToken}`,
+        },
+        body: JSON.stringify({ serverId: server.id, command: 'list' }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        throw new Error(`Failed to fetch online players: ${errorText}`);
       }
 
-      const { data, error } = await supabase
-        .from('servers')
-        .select('*')
-        .eq('id', serverId)
-        .eq('user_id', userId)
-        .single();
-
-      if (error || !data) {
-        console.error('Server not found:', error);
-        router.push('/dashboard');
-        return;
-      }
-
+      const { response } = await res.json();
+      const match = response.match(/There are (\d+) of a max of (\d+) players online: (.*)/) ||
+                    response.match(/players online: (.*)/);
+      
+      const players = match && match[3] ? 
+        match[3].split(', ').filter(Boolean) : 
+        (match && match[1] ? match[1].split(', ').filter(Boolean) : []);
+      
       if (mountedRef.current) {
-        console.log('Fetched server data:', data);
-        setServer(data);
+        setOnlinePlayers(players);
+        console.log('Online players:', players);
       }
     } catch (err) {
-      console.error('Fetch server error:', err);
-      setError('Failed to fetch server data. Please try again.');
-    } finally {
-      if (mountedRef.current) setLoading(false);
+      console.error('Error fetching online players:', err);
+      setOnlinePlayers([]);
+      setError(`Failed to fetch online players: ${err.message}`);
     }
   };
 
-  const pollUntilStatus = (expectedStatuses, timeout = 60000) => {
+  const fetchServer = useCallback(
+    debounce(async (serverIdParam, userIdParam) => {
+      setLoading(true);
+      try {
+        const serverId = serverIdParam || id;
+        const userId = userIdParam || user?.id;
+        if (!serverId || !userId) {
+          console.error('Missing serverId or userId');
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('servers')
+          .select('*')
+          .eq('id', serverId)
+          .eq('user_id', userId)
+          .single();
+
+        if (error || !data) {
+          console.error('Server not found:', error);
+          router.push('/dashboard');
+          return;
+        }
+
+        if (mountedRef.current) {
+          console.log('Fetched server data:', data);
+          setServer((prev) => {
+            if (JSON.stringify(prev) === JSON.stringify(data)) {
+              console.log('No change in server data, skipping update');
+              return prev;
+            }
+            console.log('Checking reload: newStatus=', data.status, 'prevStatus=', prev?.status, 'hasReceivedRunning=', hasReceivedRunningRef.current);
+            if (
+              (data.status === 'Running' && !hasReceivedRunningRef.current) ||
+              (['Running', 'Stopped'].includes(data.status) && prev?.status && !['Running', 'Stopped'].includes(prev.status))
+            ) {
+              console.log('Triggering page reload for status:', data.status);
+              hasReceivedRunningRef.current = true;
+              router.reload();
+              return prev;
+            }
+            return data;
+          });
+        }
+      } catch (err) {
+        console.error('Fetch server error:', err);
+        setError('Failed to fetch server data. Please try again.');
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
+    }, 1000),
+    [id, user?.id]
+  );
+
+  const pollUntilStatus = (expectedStatuses, timeout = 120000) => {
     const startTime = Date.now();
     pollRef.current = setInterval(() => {
+      console.log(`Polling server status: ${server?.status}`);
       fetchServer(id, user?.id);
-      if (expectedStatuses.includes(server.status) || Date.now() - startTime > timeout) {
+      if (expectedStatuses.includes(server?.status) || Date.now() - startTime > timeout) {
         clearInterval(pollRef.current);
         pollRef.current = null;
         if (Date.now() - startTime > timeout) {
-          setError('Operation timed out. Please refresh the page.');
-          router.reload();
+          console.log('Polling timed out after 2min');
+          setError('Operation timed out. Please refresh the page manually.');
         }
       }
-    }, 1000);
+    }, 3000);
   };
 
-  // Handle software change
   const handleSoftwareChange = (newConfig) => {
     setServer((prev) => ({ ...prev, ...newConfig }));
   };
 
-  // Handle server start
   const handleStartServer = async () => {
     if (actionLoading) return;
     try {
       setActionLoading(true);
       setError(null);
+      hasReceivedRunningRef.current = false;
 
       const serverId = server?.id || id;
       if (!serverId) {
@@ -455,7 +482,7 @@ export default function ServerDetailPage({ initialServer }) {
         return;
       }
 
-      setServer((prev) => (prev? { ...prev, status: 'Starting' } : prev));
+      setServer((prev) => (prev ? { ...prev, status: 'Starting' } : prev));
 
       const { data: serverData, error: serverError } = await supabase
         .from('servers')
@@ -491,7 +518,6 @@ export default function ServerDetailPage({ initialServer }) {
 
       console.log('Provision response:', provisionRes);
 
-      // Clear pending fields
       if (serverData.pending_type || serverData.pending_version) {
         await supabase
           .from('servers')
@@ -499,22 +525,7 @@ export default function ServerDetailPage({ initialServer }) {
           .eq('id', serverId);
       }
 
-      // Start polling until 'Running'
-      pollUntilStatus(['Running', 'Initializing']);
-
-      // Immediate fetch and schedule another after 2 seconds
-      await fetchServer(serverId, user?.id);
-      setTimeout(() => {
-        fetchServer(serverId, user?.id);
-      }, 2000);
-
-      // Fallback reload after 10 seconds if still transitional
-      setTimeout(() => {
-        if (['Starting', 'Initializing'].includes(server?.status) && mountedRef.current) {
-          console.warn('Server still transitional, forcing page reload');
-          router.reload();
-        }
-      }, 10000);
+      pollUntilStatus(['Running', 'Stopped']);
     } catch (err) {
       console.error('Start error:', err);
       setError(`Failed to start server: ${err.message}`);
@@ -525,7 +536,6 @@ export default function ServerDetailPage({ initialServer }) {
     }
   };
 
-  // Handle server stop
   const handleStopServer = async () => {
     if (actionLoading) return;
     try {
@@ -543,7 +553,7 @@ export default function ServerDetailPage({ initialServer }) {
         return;
       }
 
-      setServer((prev) => (prev? { ...prev, status: 'Stopping' } : prev));
+      setServer((prev) => (prev ? { ...prev, status: 'Stopping' } : prev));
 
       const json = await safeFetchJson('/api/servers/action', {
         method: 'POST',
@@ -553,21 +563,7 @@ export default function ServerDetailPage({ initialServer }) {
 
       console.log('Stop API response:', json);
 
-      // Start polling until 'Stopped'
       pollUntilStatus(['Stopped']);
-
-      await fetchServer(serverId, user?.id);
-      setTimeout(() => {
-        fetchServer(serverId, user?.id);
-      }, 2000);
-
-      // Fallback reload
-      setTimeout(() => {
-        if (server?.status === 'Stopping' && mountedRef.current) {
-          console.warn('Server still Stopping, forcing page reload');
-          router.reload();
-        }
-      }, 10000);
     } catch (err) {
       console.error('Stop error:', err);
       setError(`Failed to stop server: ${err.message}`);
@@ -578,12 +574,12 @@ export default function ServerDetailPage({ initialServer }) {
     }
   };
 
-  // Handle server restart
   const handleRestartServer = async () => {
     if (actionLoading) return;
     try {
       setActionLoading(true);
       setError(null);
+      hasReceivedRunningRef.current = false;
 
       const serverId = server?.id || id;
       if (!serverId) {
@@ -596,7 +592,7 @@ export default function ServerDetailPage({ initialServer }) {
         return;
       }
 
-      setServer((prev) => (prev? { ...prev, status: 'Restarting' } : prev));
+      setServer((prev) => (prev ? { ...prev, status: 'Restarting' } : prev));
 
       const json = await safeFetchJson('/api/servers/action', {
         method: 'POST',
@@ -606,21 +602,7 @@ export default function ServerDetailPage({ initialServer }) {
 
       console.log('Restart API response:', json);
 
-      // Start polling until 'Running'
       pollUntilStatus(['Running']);
-
-      await fetchServer(serverId, user?.id);
-      setTimeout(() => {
-        fetchServer(serverId, user?.id);
-      }, 2000);
-
-      // Fallback reload
-      setTimeout(() => {
-        if (server?.status === 'Restarting' && mountedRef.current) {
-          console.warn('Server still Restarting, forcing page reload');
-          router.reload();
-        }
-      }, 10000);
     } catch (err) {
       console.error('Restart error:', err);
       setError(`Failed to restart server: ${err.message}`);
@@ -631,7 +613,6 @@ export default function ServerDetailPage({ initialServer }) {
     }
   };
 
-  // Manual status refresh
   const refreshServerStatus = async () => {
     if (!server?.id || !user?.id) return;
 
@@ -686,21 +667,23 @@ export default function ServerDetailPage({ initialServer }) {
     }
   };
 
-  /* ---------- RENDER ---------- */
-
-  if (loading) return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div>
-        <div className="animate-spin h-10 w-10 border-4 rounded-full border-indigo-600 border-b-transparent mx-auto"></div>
-        <p className="mt-3 text-center text-gray-600">Loading server details...</p>
+  if (!user || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto"></div>
+          <p className="mt-4 text-gray-600 text-lg font-medium animate-pulse">Loading server details...</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   if (!server) {
     return (
-      <div className="p-6">
-        <p>Server not found or you don't have access.</p>
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6">
+          <p className="text-red-600 text-lg font-medium">Server not found or you don't have access.</p>
+        </div>
       </div>
     );
   }
@@ -710,7 +693,6 @@ export default function ServerDetailPage({ initialServer }) {
   const canStop = status === 'Running' && !actionLoading;
   const canRestart = status === 'Running' && !actionLoading;
 
-  // Define software types for mods and plugins
   const moddedTypes = ['forge', 'fabric', 'quilt', 'neoforge'].map(t => t.toLowerCase());
   const pluginTypes = ['bukkit', 'spigot', 'paper', 'purpur'].map(t => t.toLowerCase());
 
@@ -720,144 +702,207 @@ export default function ServerDetailPage({ initialServer }) {
   const showModsPluginsTab = isModded || isPlugin;
   const modsPluginsLabel = isModded ? 'Mods' : 'Plugins';
 
+  // UI Enhancement: Show estimated runtime based on credits
+  const estimatedHours = credits / (server.cost_per_hour || 1);
+  const lowCreditsWarning = estimatedHours < 1 ? 'Low credits: May not run for long.' : '';
+
   return (
-    <div className="min-h-screen bg-gray-100" key={server.status}>
+    <div className="min-h-screen bg-gray-50">
       <Header user={user} credits={credits} isLoading={creditsLoading} onLogout={handleLogout} />
-      
-      <main className="p-4 md:p-8">
-        <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-lg p-6">
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md border border-red-200">
-              {error}
-              <button 
-                onClick={() => setError(null)} 
-                className="float-right text-red-800 font-bold"
-              >
-                ×
-              </button>
-            </div>
-          )}
-          
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">{server.name}</h1>
-              <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-600">
-                <span className="flex items-center"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg> Game: {server.game}</span>
-                <span className="flex items-center"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg> Software: {server.type}</span>
-                <span className="flex items-center"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2M8 5V3a2 2 0 012-2h4a2 2 0 012 2v2M8 5h8" /></svg> RAM: {server.ram} GB</span>
+      <main className="py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-white rounded-xl shadow-lg p-6 lg:p-8">
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex items-center justify-between transition-opacity duration-300">
+                <span>{error}</span>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-red-800 hover:text-red-900 font-bold focus:outline-none focus:ring-2 focus:ring-red-500 rounded"
+                  aria-label="Dismiss error"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">{server.name}</h1>
+                <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-500">
+                  <span className="flex items-center">
+                    <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                    </svg>
+                    Game: {server.game}
+                  </span>
+                  <span className="flex items-center">
+                    <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                    </svg>
+                    Software: {server.type}
+                  </span>
+                  <span className="flex items-center">
+                    <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2M8 5V3a2 2 0 012-2h4a2 2 0 012 2v2M8 5h8" />
+                    </svg>
+                    RAM: {server.ram} GB
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={refreshServerStatus}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  aria-label="Refresh server status"
+                >
+                  Refresh Status
+                </button>
+                {status === 'Stopped' && (
+                  <button
+                    onClick={handleStartServer}
+                    disabled={!canStart}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    aria-label="Start server"
+                  >
+                    {actionLoading ? 'Starting...' : 'Start Server'}
+                  </button>
+                )}
+                {status === 'Running' && (
+                  <>
+                    <button
+                      onClick={handleStopServer}
+                      disabled={!canStop}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+                      aria-label="Stop server"
+                    >
+                      {actionLoading ? 'Stopping...' : 'Stop Server'}
+                    </button>
+                    <button
+                      onClick={handleRestartServer}
+                      disabled={!canRestart}
+                      className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                      aria-label="Restart server"
+                    >
+                      {actionLoading ? 'Restarting...' : 'Restart Server'}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="space-x-2" key={status}>
-              <button
-                onClick={refreshServerStatus}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded text-sm transition-colors"
-              >
-                Refresh Status
-              </button>
+            {lowCreditsWarning && (
+              <div className="mb-4 p-2 bg-yellow-100 text-yellow-800 rounded">
+                {lowCreditsWarning} Estimated runtime: {estimatedHours.toFixed(2)} hours.
+              </div>
+            )}
 
-              {status === 'Stopped' && (
-                <button
-                  onClick={handleStartServer}
-                  disabled={!canStart}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50 transition-colors"
-                >
-                  {actionLoading ? 'Starting...' : 'Start Server'}
-                </button>
-              )}
-
-              {status === 'Running' && (
-                <>
-                  <button
-                    onClick={handleStopServer}
-                    disabled={!canStop}
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading ? 'Stopping...' : 'Stop Server'}
-                  </button>
-                  <button
-                    onClick={handleRestartServer}
-                    disabled={!canRestart}
-                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded disabled:opacity-50 transition-colors ml-2"
-                  >
-                    {actionLoading ? 'Restarting...' : 'Restart Server'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <div className="mb-4">
-              <span className="text-sm text-gray-600">Status: </span>
-              <ServerStatusIndicator server={server} />
-              {server.last_status_update && (
-                <span className="ml-3 text-xs text-gray-500">
-                  Last update: {format(new Date(server.last_status_update), 'yyyy-MM-dd HH:mm:ss')}
-                </span>
-              )}
-            </div>
-
-            <div className="border-b border-gray-200">
-              <nav className="-mb-px flex space-x-4">
-                <button onClick={() => setActiveTab('overview')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'overview' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Overview</button>
-                <button onClick={() => setActiveTab('software')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'software' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Software</button>
-                {showModsPluginsTab && (
-                  <button onClick={() => setActiveTab('mods')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'mods' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>{modsPluginsLabel}</button>
+            <div className="mb-6">
+              <div className="flex items-center">
+                <span className="text-sm font-medium text-gray-600 mr-2">Status:</span>
+                <ServerStatusIndicator server={server} />
+                {server.last_status_update && (
+                  <span className="ml-3 text-xs text-gray-400">
+                    Last update: {format(new Date(server.last_status_update), 'yyyy-MM-dd HH:mm:ss')}
+                  </span>
                 )}
-                <button onClick={() => setActiveTab('files')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'files' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Files</button>
-                <button onClick={() => setActiveTab('console')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'console' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Console</button>
-                <button onClick={() => setActiveTab('properties')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'properties' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Properties</button>
-                <button onClick={() => setActiveTab('players')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'players' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>Players</button>
-                <button onClick={() => setActiveTab('world')} className={`py-2 px-3 text-sm font-medium ${activeTab === 'world' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-600 hover:text-indigo-600'}`}>World</button>
+              </div>
+            </div>
+
+            <div className="border-b border-gray-200 mb-6">
+              <nav className="flex flex-wrap gap-2 -mb-px" role="tablist">
+                {[
+                  { id: 'overview', label: 'Overview' },
+                  { id: 'software', label: 'Software' },
+                  ...(showModsPluginsTab ? [{ id: 'mods', label: modsPluginsLabel }] : []),
+                  { id: 'files', label: 'Files' },
+                  { id: 'console', label: 'Console' },
+                  { id: 'properties', label: 'Properties' },
+                  { id: 'players', label: 'Players' },
+                  { id: 'world', label: 'World' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`py-3 px-4 text-sm font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-t-lg ${
+                      activeTab === tab.id
+                        ? 'border-b-2 border-indigo-600 text-indigo-600 bg-indigo-50'
+                        : 'text-gray-600 hover:text-indigo-600 hover:bg-gray-100'
+                    }`}
+                    role="tab"
+                    aria-selected={activeTab === tab.id}
+                    aria-controls={`panel-${tab.id}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </nav>
             </div>
 
-            <div className="mt-6">
-              <Suspense fallback={<div>Loading...</div>}>
+            <div className="mt-6" role="tabpanel" id={`panel-${activeTab}`}>
+              <Suspense fallback={<div className="text-gray-600 text-center">Loading...</div>}>
                 {activeTab === 'overview' && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-100">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
+                    <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                        </svg>
                         Server Information
                       </h3>
-                      <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">IP:</strong> {server.name + ".spawnly.net" || '—'}</p>
-                      <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">Software:</strong> {server.type || '—'}</p>
-                      <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">Version:</strong> {server.version || '—'}</p>
-                      <p className="text-sm text-gray-600"><strong className="font-medium text-gray-800">Game:</strong> {server.game || '—'}</p>
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong className="font-medium text-gray-800">IP:</strong> {server.name + ".spawnly.net" || '—'}
+                      </p>
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong className="font-medium text-gray-800">Software:</strong> {server.type || '—'}
+                      </p>
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong className="font-medium text-gray-800">Version:</strong> {server.version || '—'}
+                      </p>
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong className="font-medium text-gray-800">Game:</strong> {server.game || '—'}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <strong className="font-medium text-gray-800">Online Players:</strong> {onlinePlayers.length}
+                      </p>
                     </div>
-                    
-                    <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-100">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                         Billing
                       </h3>
-                      <p className="text-sm text-gray-600 mb-2"><strong className="font-medium text-gray-800">Cost / hr:</strong> {server.cost_per_hour ? `$${server.cost_per_hour}` : '—'}</p>
-                      <div className="text-sm text-gray-600 mb-2 flex items-center">
-                        <strong className="font-medium text-gray-800 mr-2">RAM:</strong>
+                      <p className="text-sm text-gray-600 mb-2">
+                        <strong className="font-medium text-gray-800">Cost / hr:</strong> {server.cost_per_hour ? `$${server.cost_per_hour}` : '—'}
+                      </p>
+                      <div className="text-sm text-gray-600 mb-2 flex items-center flex-wrap gap-2">
+                        <strong className="font-medium text-gray-800">RAM:</strong>
                         {editingRam ? (
                           <>
                             <input
                               type="number"
                               value={newRam}
                               onChange={(e) => setNewRam(parseInt(e.target.value, 10))}
-                              className="w-20 border border-gray-300 rounded px-2 py-1 mr-2"
+                              className="w-20 border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                               min="2"
                               max="32"
                               step="1"
+                              aria-label="Edit RAM amount"
                             />
-                            GB
+                            <span>GB</span>
                             <button
                               onClick={handleSaveRam}
                               disabled={actionLoading}
-                              className="ml-2 bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs"
+                              className="ml-2 bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500"
+                              aria-label="Save RAM changes"
                             >
                               Save
                             </button>
                             <button
                               onClick={() => setEditingRam(false)}
-                              className="ml-1 bg-gray-300 hover:bg-gray-400 text-gray-800 px-2 py-1 rounded text-xs"
+                              className="ml-2 bg-gray-300 hover:bg-gray-400 text-gray-800 px-3 py-1 rounded-lg text-sm font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                              aria-label="Cancel RAM edit"
                             >
                               Cancel
                             </button>
@@ -868,7 +913,8 @@ export default function ServerDetailPage({ initialServer }) {
                             {status === 'Stopped' && (
                               <button
                                 onClick={startEditingRam}
-                                className="ml-2 text-indigo-600 hover:text-indigo-800 text-xs"
+                                className="ml-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                aria-label="Edit RAM"
                               >
                                 Edit
                               </button>
@@ -876,12 +922,16 @@ export default function ServerDetailPage({ initialServer }) {
                           </>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600"><strong className="font-medium text-gray-800">Created:</strong> {server.created_at ? format(new Date(server.created_at), 'yyyy-MM-dd HH:mm:ss') : '—'}</p>
+                      <p className="text-sm text-gray-600">
+                        <strong className="font-medium text-gray-800">Created:</strong> {server.created_at ? format(new Date(server.created_at), 'yyyy-MM-dd HH:mm:ss') : '—'}
+                      </p>
                     </div>
 
-                    <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 border border-gray-100">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2M9 19a2 2 0 01-2-2" /></svg>
+                    <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <svg className="w-5 h-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2M9 19a2 2 0 01-2-2" />
+                        </svg>
                         Live Metrics
                       </h3>
                       <ServerMetrics server={server} />
@@ -896,43 +946,43 @@ export default function ServerDetailPage({ initialServer }) {
                 {activeTab === 'mods' && <ModsPluginsTab server={server} />}
 
                 {activeTab === 'files' && (
-                  <div className="bg-white p-4 rounded shadow">
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
                     {fileToken ? (
                       <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} />
                     ) : (
-                      <p className="text-gray-600">Loading file access token...</p>
+                      <p className="text-gray-600 text-center">Loading file access token...</p>
                     )}
                   </div>
                 )}
 
                 {activeTab === 'console' && (
-                  <div className="mt-4">
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
                     <ConsoleViewer server={server} />
                   </div>
                 )}
 
                 {activeTab === 'properties' && (
-                  <div className="mt-4">
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
                     <ServerPropertiesEditor server={server} />
                   </div>
                 )}
 
                 {activeTab === 'players' && (
-                  <div className="mt-4">
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
                     {fileToken ? (
                       <PlayersTab server={server} token={fileToken} />
                     ) : (
-                      <p className="text-gray-600">Loading file access token...</p>
+                      <p className="text-gray-600 text-center">Loading file access token...</p>
                     )}
                   </div>
                 )}
 
                 {activeTab === 'world' && (
-                  <div className="mt-4">
+                  <div className="bg-white p-6 rounded-xl shadow-sm">
                     {fileToken ? (
                       <WorldTab server={server} token={fileToken} />
                     ) : (
-                      <p className="text-gray-600">Loading file access token...</p>
+                      <p className="text-gray-600 text-center">Loading file access token...</p>
                     )}
                   </div>
                 )}
@@ -941,7 +991,6 @@ export default function ServerDetailPage({ initialServer }) {
           </div>
         </div>
       </main>
-
       <Footer />
     </div>
   );

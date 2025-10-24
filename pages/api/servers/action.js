@@ -197,6 +197,40 @@ const deleteS3ServerFolder = async (serverId) => {
   }
 };
 
+async function deductCredits(supabaseAdmin, userId, amount, description) {
+  const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
+  if (error || profile.credits < amount) {
+    throw new Error('Insufficient credits');
+  }
+
+  const newCredits = profile.credits - amount;
+  await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
+
+  await supabaseAdmin.from('credit_transactions').insert({
+    user_id: userId,
+    amount: -amount,
+    type: 'deduction',
+    description,
+    created_at: new Date().toISOString()
+  });
+}
+
+async function billRemainingTime(supabaseAdmin, server) {
+  if (!server.last_billed_at || server.status !== 'Running') return;
+
+  const now = new Date();
+  const lastBilled = new Date(server.last_billed_at);
+  const elapsedSeconds = Math.floor((now - lastBilled) / 1000) + (server.runtime_accumulated_seconds || 0);
+
+  if (elapsedSeconds < 60) return; // Minimum billable unit: 1 minute
+
+  const hours = elapsedSeconds / 3600;
+  const cost = hours * server.cost_per_hour;
+
+  // Deduct and log
+  await deductCredits(supabaseAdmin, server.user_id, cost, `Final runtime charge for server ${server.id} (${elapsedSeconds} seconds)`);
+}
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   try {
@@ -231,7 +265,20 @@ export default async function handler(req, res) {
     }
     console.log(`[API:action] Server data retrieved:`, { id: server.id, subdomain: server.subdomain, hetzner_id: server.hetzner_id, status: server.status, ipv4: server.ipv4 });
 
+    const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
+    if (profileErr || !profile) return res.status(500).json({ error: 'Failed to fetch user profile' });
+
+    if (action === 'start' || action === 'restart') {
+      // Credit check: Require at least 5 min worth
+      const minCost = (server.cost_per_hour / 60) * 5;
+      if (profile.credits < minCost) {
+        return res.status(402).json({ error: 'Insufficient credits to start server' });
+      }
+    }
+
     if (action === 'delete' || action === 'stop') {
+      await billRemainingTime(supabaseAdmin, server);
+
       if (server.hetzner_id && server.status === 'Running') {
         try {
           console.log(`[API:action] Shutting down Hetzner server: ${server.hetzner_id}`);
@@ -327,7 +374,7 @@ export default async function handler(req, res) {
         console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped', clearing hetzner_id and ipv4`);
         const { error: updateErr } = await supabaseAdmin
           .from('servers')
-          .update({ status: 'Stopped', hetzner_id: null, ipv4: null })
+          .update({ status: 'Stopped', hetzner_id: null, ipv4: null, last_billed_at: null, runtime_accumulated_seconds: 0 })
           .eq('id', serverId);
         if (updateErr) {
           console.error('[API:action] Failed to update Supabase after stop:', updateErr.message);
@@ -364,7 +411,12 @@ export default async function handler(req, res) {
     const hetRes = await hetznerDoAction(server.hetzner_id, hetAction);
 
     console.log(`[API:action] Updating server status to ${newStatus} in Supabase`);
-    const { error: statusUpdateErr } = await supabaseAdmin.from('servers').update({ status: newStatus }).eq('id', serverId);
+    const now = new Date().toISOString();
+    const { error: statusUpdateErr } = await supabaseAdmin.from('servers').update({ 
+      status: newStatus,
+      last_billed_at: now,
+      runtime_accumulated_seconds: 0 
+    }).eq('id', serverId);
     if (statusUpdateErr) {
       console.error('[API:action] Failed to update server status in Supabase:', statusUpdateErr.message);
       return res.status(500).json({ error: 'Failed to update server status', detail: statusUpdateErr.message });

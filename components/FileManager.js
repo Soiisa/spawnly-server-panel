@@ -1,6 +1,7 @@
 // components/FileManager.js
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { read, write } from 'nbtify';
 
 export default function FileManager({ server, token, setActiveTab }) {
   const [currentPath, setCurrentPath] = useState('');
@@ -15,7 +16,7 @@ export default function FileManager({ server, token, setActiveTab }) {
   const [isOffline, setIsOffline] = useState(false);
 
   const apiBase = `/api/servers/${server.id}`; // Always use backend
-  const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md'];
+  const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md', '.dat'];
 
   // List of files and folders to mask (case-insensitive, normalized)
   const maskedItems = [
@@ -37,6 +38,27 @@ export default function FileManager({ server, token, setActiveTab }) {
 
   // Special case for server.properties
   const specialFiles = ['server.properties'].map(item => item.toLowerCase());
+
+  // Custom JSON replacer to handle BigInt
+  const bigIntReplacer = (key, value) => {
+    if (typeof value === 'bigint') {
+      return value.toString(); // Convert BigInt to string
+    }
+    return value;
+  };
+
+  // Custom JSON reviver to convert stringified BigInt back to BigInt
+  const bigIntReviver = (key, value) => {
+    // Check if the value is a string that represents a number too large for JavaScript Number
+    if (typeof value === 'string' && /^-?\d+$/.test(value)) {
+      try {
+        return BigInt(value);
+      } catch (e) {
+        return value; // Return as string if BigInt conversion fails
+      }
+    }
+    return value;
+  };
 
   useEffect(() => {
     if (!token || !server) return;
@@ -76,6 +98,8 @@ export default function FileManager({ server, token, setActiveTab }) {
     return textFileExtensions.includes(extension);
   };
 
+  const isNbtFile = (fileName) => fileName.toLowerCase().endsWith('.dat');
+
   const openFileForEditing = async (file) => {
     const normalizedName = file.name.toLowerCase().replace(/\/+$/, '');
     if (maskedItems.includes(normalizedName)) {
@@ -86,10 +110,11 @@ export default function FileManager({ server, token, setActiveTab }) {
     try {
       setLoading(true);
       setError(null);
+      const responseType = isNbtFile(file.name) ? 'arraybuffer' : 'text';
       const res = await axios.get(`${apiBase}/file`, {
         params: { path: relPath },
         headers: { Authorization: `Bearer ${token}` },
-        responseType: 'text', // Attempt to enforce text response
+        responseType,
       });
 
       let content = res.data;
@@ -97,38 +122,49 @@ export default function FileManager({ server, token, setActiveTab }) {
       // Debug: Log the raw response to inspect its type and value
       console.log(`Raw response for ${file.name}:`, content, `Type: ${typeof content}`);
 
-      // Handle non-string responses (e.g., parsed JSON object)
-      if (typeof content !== 'string') {
+      if (isNbtFile(file.name)) {
         try {
-          // Convert object to formatted JSON string
-          content = JSON.stringify(content, null, 2);
-        } catch (e) {
-          setError(`File ${file.name} could not be read: Invalid response format (expected text or valid JSON, got ${typeof content}).`);
+          const nbtData = await read(new Uint8Array(content), { compression: 'gzip', endian: 'big' });
+          content = JSON.stringify(nbtData.data, bigIntReplacer, 2);
+        } catch (parseErr) {
+          console.error(`Failed to read NBT in ${file.name}:`, parseErr);
+          setError(`File ${file.name} contains invalid NBT data. Cannot edit.`);
+          return;
+        }
+      } else {
+        // Handle non-string responses (e.g., parsed JSON object)
+        if (typeof content !== 'string') {
+          try {
+            // Convert object to formatted JSON string
+            content = JSON.stringify(content, bigIntReplacer, 2);
+          } catch (e) {
+            setError(`File ${file.name} could not be read: Invalid response format (expected text or valid JSON, got ${typeof content}).`);
+            setEditingFile(file);
+            setFileContent('');
+            return;
+          }
+        }
+
+        // Check if content is empty
+        if (content.trim() === '') {
+          setError(`File ${file.name} is empty or could not be read.`);
           setEditingFile(file);
           setFileContent('');
           return;
         }
-      }
 
-      // Check if content is empty
-      if (content.trim() === '') {
-        setError(`File ${file.name} is empty or could not be read.`);
-        setEditingFile(file);
-        setFileContent('');
-        return;
-      }
-
-      // If the file is a JSON file, try to parse and re-stringify for pretty printing
-      if (file.name.toLowerCase().endsWith('.json')) {
-        try {
-          // Parse the text to ensure it's valid JSON
-          const parsed = JSON.parse(content);
-          // Stringify with indentation for pretty printing
-          content = JSON.stringify(parsed, null, 2);
-        } catch (e) {
-          console.warn(`Failed to parse JSON in ${file.name}:`, e);
-          setError(`File ${file.name} contains invalid JSON. Displaying raw content.`);
-          // Display raw content if JSON is invalid
+        // If the file is a JSON file, try to parse and re-stringify for pretty printing
+        if (file.name.toLowerCase().endsWith('.json')) {
+          try {
+            // Parse the text to ensure it's valid JSON
+            const parsed = JSON.parse(content);
+            // Stringify with indentation for pretty printing
+            content = JSON.stringify(parsed, bigIntReplacer, 2);
+          } catch (e) {
+            console.warn(`Failed to parse JSON in ${file.name}:`, e);
+            setError(`File ${file.name} contains invalid JSON. Displaying raw content.`);
+            // Display raw content if JSON is invalid
+          }
         }
       }
 
@@ -153,17 +189,42 @@ export default function FileManager({ server, token, setActiveTab }) {
     try {
       setIsSaving(true);
       setError(null);
-      await axios.put(`${apiBase}/files`, fileContent, {
+
+      let body = fileContent;
+      let contentType = 'text/plain';
+
+      if (isNbtFile(editingFile.name)) {
+        let parsedJson;
+        try {
+          parsedJson = JSON.parse(fileContent, bigIntReviver);
+        } catch (parseErr) {
+          console.error('Invalid JSON for NBT:', parseErr);
+          setError('Invalid JSON format for NBT data.');
+          return;
+        }
+        try {
+          const nbtBuffer = await write(parsedJson, { compression: 'gzip', endian: 'big', name: '' });
+          body = nbtBuffer;
+          contentType = 'application/octet-stream';
+        } catch (writeErr) {
+          console.error('Failed to write NBT data:', writeErr);
+          setError('Failed to convert JSON to NBT format.');
+          return;
+        }
+      }
+
+      await axios.put(`${apiBase}/files`, body, {
         params: { path: relPath },
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'text/plain',
+          'Content-Type': contentType,
         },
       });
       setEditingFile(null);
       setFileContent('');
     } catch (err) {
       setError(`Failed to save file: ${err.response?.data?.error || err.message}`);
+      console.error(`Error saving file ${editingFile.name}:`, err);
     } finally {
       setIsSaving(false);
     }

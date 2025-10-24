@@ -1,13 +1,294 @@
-// components/ServerPropertiesEditor.js
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, memo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Move constants and pure functions outside the component to prevent re-renders
+const KEY_ORDER = [
+  'max-players',
+  'gamemode',
+  'difficulty',
+  'online-mode',
+  'white-list',
+  'pvp',
+  'allow-flight',
+  'enable-command-block',
+  'spawn-animals',
+  'spawn-monsters',
+  'spawn-npcs',
+  'force-gamemode',
+  'player-idle-timeout',
+  'require-resource-pack',
+  'resource-pack',
+  'resource-pack-prompt',
+  'spawn-protection',
+  'view-distance',
+];
+
+const GAMEMODE_OPTIONS = [
+  { label: 'Survival', value: 'survival' },
+  { label: 'Creative', value: 'creative' },
+  { label: 'Adventure', value: 'adventure' },
+  { label: 'Spectator', value: 'spectator' },
+];
+
+const DIFFICULTY_OPTIONS = [
+  { label: 'Peaceful', value: 'peaceful' },
+  { label: 'Easy', value: 'easy' },
+  { label: 'Normal', value: 'normal' },
+  { label: 'Hard', value: 'hard' },
+];
+
+const prettyLabels = {
+  'max-players': 'Vagas',
+  'gamemode': 'Modo de jogo',
+  'difficulty': 'Dificuldade',
+  'online-mode': 'Pirata',
+  'white-list': 'Whitelist',
+  pvp: 'PVP',
+  'allow-flight': 'Voar',
+  'enable-command-block': 'Blocos de Comando',
+  'spawn-animals': 'Animais',
+  'spawn-monsters': 'Monstro',
+  'spawn-npcs': 'Aldeões',
+  'force-gamemode': 'Forçar modo de jogo',
+  'player-idle-timeout': 'Tempo limite de inatividade',
+  'require-resource-pack': 'É necessário um pacote de recursos',
+  'resource-pack': 'Resource pack',
+  'resource-pack-prompt': "Prompt do 'resource pack'",
+  'spawn-protection': 'Proteção de Spawn',
+  'view-distance': 'Distância de visão',
+};
+
+// Pure helper functions - defined outside component
+const boolValue = (val) => {
+  if (val === undefined || val === null || val === '') return false;
+  const v = String(val).toLowerCase();
+  return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+};
+
+const numberValue = (val, fallback = 0) => {
+  const n = Number(val);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+// Memoized card components with stable references
+const Toggle = memo(({ checked, onChange, label }) => (
+  <div className="relative group">
+    <button
+      onClick={() => onChange(!checked)}
+      className={`w-12 h-6 rounded-full flex items-center px-1 transition-all duration-300 ${checked ? 'bg-green-500' : 'bg-gray-300'}`}
+      aria-pressed={checked}
+      title={label}
+    >
+      <motion.span
+        className="inline-block w-4 h-4 rounded-full bg-white shadow"
+        animate={{ x: checked ? 24 : 2 }}
+        transition={{ type: 'spring', stiffness: 700, damping: 30 }}
+      />
+    </button>
+    <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-xs text-gray-200 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+      {label}
+    </span>
+  </div>
+));
+
+const Stepper = memo(({ value, min = 0, max = 1000, onChange, label }) => (
+  <div className="relative group flex items-center space-x-2">
+    <button
+      onClick={() => onChange(Math.max(min, value - 1))}
+      className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 transition-colors"
+      title="Decrease"
+    >
+      −
+    </button>
+    <input
+      type="number"
+      value={value}
+      onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value || 0))))}
+      className="w-20 text-center bg-white border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+    />
+    <button
+      onClick={() => onChange(Math.min(max, value + 1))}
+      className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 transition-colors"
+      title="Increase"
+    >
+      +
+    </button>
+    <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-xs text-gray-200 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+      {label}
+    </span>
+  </div>
+));
+
+const MemoCard = memo(function Card({ propKey, value, setProperty }) {
+  const pretty = prettyLabels[propKey] || propKey;
+
+  switch (propKey) {
+    case 'max-players': {
+      const v = numberValue(value || 20, 20);
+      return (
+        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
+              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
+            </div>
+            <Stepper value={v} min={0} max={1000} onChange={(nv) => setProperty(propKey, nv)} label="Maximum players" />
+          </div>
+        </div>
+      );
+    }
+
+    case 'gamemode': {
+      const v = value || 'survival';
+      return (
+        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
+              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
+            </div>
+            <select
+              value={v}
+              onChange={(e) => setProperty(propKey, e.target.value)}
+              className="w-44 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+            >
+              {GAMEMODE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      );
+    }
+
+    case 'difficulty': {
+      const v = value || 'easy';
+      return (
+        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
+              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
+            </div>
+            <select
+              value={v}
+              onChange={(e) => setProperty(propKey, e.target.value)}
+              className="w-44 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+            >
+              {DIFFICULTY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      );
+    }
+
+    case 'online-mode':
+    case 'white-list':
+    case 'pvp':
+    case 'allow-flight':
+    case 'enable-command-block':
+    case 'spawn-animals':
+    case 'spawn-monsters':
+    case 'spawn-npcs':
+    case 'force-gamemode':
+    case 'require-resource-pack': {
+      const v = boolValue(value);
+      return (
+        <div className="bg-gray-100 rounded-lg p-5 shadow-sm flex justify-between items-center">
+          <div>
+            <div className="text-lg font-semibold text-gray-900">{pretty}</div>
+            <div className="text-xs text-gray-500 mt-1">{propKey}</div>
+          </div>
+          <Toggle checked={v} onChange={(nv) => setProperty(propKey, nv ? 'true' : 'false')} label={pretty} />
+        </div>
+      );
+    }
+
+    case 'player-idle-timeout': {
+      const v = numberValue(value || 0, 0);
+      return (
+        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
+              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
+            </div>
+            <Stepper value={v} min={0} max={1440} onChange={(nv) => setProperty(propKey, nv)} label="Idle timeout (minutes)" />
+          </div>
+        </div>
+      );
+    }
+
+    case 'resource-pack':
+    case 'resource-pack-prompt': {
+      const v = value || '';
+      return (
+        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
+          <div>
+            <div className="text-lg font-semibold text-gray-900">{pretty}</div>
+            <div className="text-xs text-gray-500 mt-1">{propKey}</div>
+            <input
+              value={v}
+              onChange={(e) => setProperty(propKey, e.target.value)}
+              placeholder={propKey === 'resource-pack' ? 'https://example.com/resource-pack.zip' : ''}
+              className="mt-3 w-full bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    case 'spawn-protection': {
+      const v = numberValue(value || 0, 0);
+      return (
+        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
+              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
+            </div>
+            <Stepper value={v} min={0} max={100} onChange={(nv) => setProperty(propKey, nv)} label="Spawn protection radius" />
+          </div>
+        </div>
+      );
+    }
+
+    case 'view-distance': {
+      const v = numberValue(value || 10, 10);
+      return (
+        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
+              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
+            </div>
+            <Stepper value={v} min={3} max={32} onChange={(nv) => setProperty(propKey, nv)} label="View distance (chunks)" />
+          </div>
+        </div>
+      );
+    }
+
+    default:
+      return null;
+  }
+});
 
 /**
  * ServerPropertiesEditor
  * - Parses server.properties text -> key/value map
  * - Renders two-column card UI for common keys (toggles, selects, steppers)
  * - Keeps textarea and cards in sync
+ * - White background with high-contrast colors
+ * - Animations only on initial mount of container or specific state changes
+ * - Memoized cards to prevent unnecessary re-renders and animation triggers
  *
- * Requires Tailwind CSS.
+ * Requires Tailwind CSS and Framer Motion.
  */
 export default function ServerPropertiesEditor({ server }) {
   const [propertiesText, setPropertiesText] = useState('');
@@ -18,44 +299,8 @@ export default function ServerPropertiesEditor({ server }) {
   const [isServerOffline, setIsServerOffline] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
 
-  // Keys we want to show as cards in this UI (order matters)
-  const KEY_ORDER = [
-    'max-players',
-    'gamemode',
-    'difficulty',
-    'online-mode',
-    'white-list',
-    'pvp',
-    'allow-flight',
-    'enable-command-block',
-    'spawn-animals',
-    'spawn-monsters',
-    'spawn-npcs',
-    'force-gamemode',
-    'player-idle-timeout',
-    'require-resource-pack',
-    'resource-pack',
-    'resource-pack-prompt',
-    'spawn-protection',
-    'view-distance',
-  ];
-
-  const GAMEMODE_OPTIONS = [
-    { label: 'Survival', value: 'survival' },
-    { label: 'Creative', value: 'creative' },
-    { label: 'Adventure', value: 'adventure' },
-    { label: 'Spectator', value: 'spectator' },
-  ];
-
-  const DIFFICULTY_OPTIONS = [
-    { label: 'Peaceful', value: 'peaceful' },
-    { label: 'Easy', value: 'easy' },
-    { label: 'Normal', value: 'normal' },
-    { label: 'Hard', value: 'hard' },
-  ];
-
   // ------------ Parsing Utilities ------------
-  const parseProperties = (text) => {
+  const parseProperties = useCallback((text) => {
     const lines = text.split(/\r?\n/);
     const map = {};
     for (const line of lines) {
@@ -68,18 +313,18 @@ export default function ServerPropertiesEditor({ server }) {
       map[key] = value;
     }
     return map;
-  };
+  }, []);
 
-  const serializeProperties = (map) => {
+  const serializeProperties = useCallback((map) => {
     const keys = [...KEY_ORDER.filter((k) => k in map), ...Object.keys(map).filter((k) => !KEY_ORDER.includes(k))];
     return keys.map((k) => `${k}=${map[k]}`).join('\n');
-  };
+  }, []);
 
   // parsedProperties derived from propertiesText
-  const parsed = useMemo(() => parseProperties(propertiesText || ''), [propertiesText]);
+  const parsed = useMemo(() => parseProperties(propertiesText || ''), [propertiesText, parseProperties]);
 
-  // Helper to update a single key and sync textarea
-  const setProperty = (key, value) => {
+  // Helper to update a single key and sync textarea - memoized with useCallback
+  const setProperty = useCallback((key, value) => {
     const next = { ...parsed };
     if (value === '' || value === null || value === undefined) {
       delete next[key];
@@ -88,7 +333,13 @@ export default function ServerPropertiesEditor({ server }) {
     }
     const serialized = serializeProperties(next);
     setPropertiesText(serialized);
-  };
+  }, [parsed, serializeProperties]);
+
+  // Build a list of cards to render in order - memoized
+  const cards = useMemo(() => 
+    KEY_ORDER.map((key) => ({ key, value: parsed[key] ?? '' })),
+    [parsed]
+  );
 
   // Fetch properties
   useEffect(() => {
@@ -171,98 +422,68 @@ export default function ServerPropertiesEditor({ server }) {
 
   if (isLoading) {
     return (
-      <div className="bg-gray-900 rounded-lg shadow p-6 text-white">
+      <div className="bg-white rounded-xl shadow-lg p-6 text-gray-900">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold">Server Properties</h2>
         </div>
         <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-400 mx-auto"></div>
-          <p className="mt-4 text-gray-300">Loading server properties...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading server properties...</p>
         </div>
       </div>
     );
   }
 
-  // Build a list of cards to render in order
-  const cards = KEY_ORDER.map((key) => {
-    return { key, value: parsed[key] ?? '' };
-  });
-
-  // Helpers
-  const boolValue = (val) => {
-    if (val === undefined || val === null || val === '') return false;
-    const v = String(val).toLowerCase();
-    return v === 'true' || v === '1' || v === 'yes' || v === 'on';
-  };
-
-  const numberValue = (val, fallback = 0) => {
-    const n = Number(val);
-    return Number.isFinite(n) ? n : fallback;
-  };
-
-  // Card components
-  const Toggle = ({ checked, onChange }) => (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`w-12 h-7 rounded-full flex items-center px-1 transition-colors ${checked ? 'bg-green-500 justify-end' : 'bg-gray-700 justify-start'}`}
-      aria-pressed={checked}
-      title={checked ? 'Enabled' : 'Disabled'}
-    >
-      <span className={`inline-block w-5 h-5 rounded-full bg-white shadow`} />
-    </button>
-  );
-
-  const Stepper = ({ value, min = 0, max = 1000, onChange }) => (
-    <div className="flex items-center space-x-2">
-      <button
-        onClick={() => onChange(Math.max(min, value - 1))}
-        className="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700"
-        title="Decrease"
-      >
-        −
-      </button>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value || 0))))}
-        className="w-20 text-center bg-gray-900 border border-gray-800 rounded px-2 py-1"
-      />
-      <button
-        onClick={() => onChange(Math.min(max, value + 1))}
-        className="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700"
-        title="Increase"
-      >
-        +
-      </button>
-    </div>
-  );
-
   return (
-    <div className="bg-gray-900 text-white rounded-lg shadow p-6">
-      <div className="flex items-start justify-between mb-6">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="bg-white text-gray-900 rounded-xl shadow-lg p-6"
+    >
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Server Properties {isServerOffline && <span className="text-sm text-yellow-600">(Offline Mode)</span>}</h2>
-          <p className="text-sm text-gray-400">
-            {isServerOffline && ' Changes will be applied when the server is restarted.'}
+          <h2 className="text-3xl font-bold">Server Properties</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {isServerOffline
+              ? 'Server is offline. Changes will apply on restart.'
+              : 'Edit server settings. Some changes require a restart.'}
           </p>
         </div>
-
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-4">
           {isServerOffline && (
-            <div className="px-3 py-1 bg-yellow-600 text-gray-900 rounded text-sm font-semibold">Server Offline</div>
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="px-3 py-1 bg-yellow-400 text-gray-900 rounded-full text-sm font-semibold"
+            >
+              Offline
+            </motion.div>
           )}
-          <button
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowRaw(!showRaw)}
+            className="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition-colors"
+          >
+            {showRaw ? 'Hide Raw' : 'Edit Raw'}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={handleReset}
             disabled={isSaving}
-            className="px-4 py-2 bg-gray-800 text-gray-200 rounded hover:bg-gray-700 disabled:opacity-50"
-            title="Re-fetch properties"
+            className="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 disabled:opacity-50 transition-colors"
+            title="Reset to original properties"
           >
             Reset
-          </button>
-          <button
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={handleSave}
             disabled={isSaving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-500 disabled:opacity-50 flex items-center"
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50 flex items-center transition-colors"
           >
             {isSaving && (
               <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -271,208 +492,70 @@ export default function ServerPropertiesEditor({ server }) {
               </svg>
             )}
             Save Changes
-          </button>
+          </motion.button>
         </div>
       </div>
 
-      <div className="space-y-3 mb-6">
+      <AnimatePresence>
         {error && (
-          <div className="p-3 bg-red-800 text-red-100 rounded">
-            <strong>Error:</strong> {error}
-            <button onClick={() => setError('')} className="float-right text-red-200 font-bold">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="p-4 bg-red-100 text-red-800 rounded-lg mb-6 flex justify-between items-center"
+          >
+            <span>
+              <strong>Error:</strong> {error}
+            </span>
+            <button onClick={() => setError('')} className="text-red-600 font-bold hover:text-red-700">
               ×
             </button>
-          </div>
+          </motion.div>
         )}
         {message && (
-          <div className="p-3 bg-green-800 text-green-100 rounded">
-            {message}
-            <button onClick={() => setMessage('')} className="float-right text-green-200 font-bold">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="p-4 bg-green-100 text-green-800 rounded-lg mb-6 flex justify-between items-center"
+          >
+            <span>{message}</span>
+            <button onClick={() => setMessage('')} className="text-green-600 font-bold hover:text-green-700">
               ×
             </button>
-          </div>
+          </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showRaw && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-6"
+          >
+            <textarea
+              value={propertiesText}
+              onChange={(e) => setPropertiesText(e.target.value)}
+              className="w-full h-48 bg-white border border-gray-300 rounded-lg p-4 font-mono text-sm resize-y focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              placeholder="Raw server.properties content"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {cards.map(({ key, value }) => (
+          <MemoCard
+            key={key}
+            propKey={key}
+            value={value}
+            setProperty={setProperty}
+          />
+        ))}
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {cards.map(({ key, value }) => {
-          switch (key) {
-            case 'max-players': {
-              const v = numberValue(value || 20, 20);
-              return (
-                <div key={key} className="bg-gray-800 rounded-lg p-4 shadow-inner">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="text-lg font-semibold">{key === 'max-players' ? 'Vagas' : key}</div>
-                      <div className="text-xs text-gray-400 mt-1">{key}</div>
-                    </div>
-                    <div>
-                      <Stepper value={v} min={0} max={1000} onChange={(nv) => setProperty(key, nv)} />
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            case 'gamemode': {
-              const v = value || 'survival';
-              return (
-                <div key={key} className="bg-gray-800 rounded-lg p-4 shadow-inner">
-                  <div className="flex justify-between">
-                    <div>
-                      <div className="text-lg font-semibold">Modo de jogo</div>
-                      <div className="text-xs text-gray-400 mt-1">{key}</div>
-                    </div>
-                    <div className="w-44">
-                      <select
-                        value={v}
-                        onChange={(e) => setProperty(key, e.target.value)}
-                        className="w-full bg-gray-900 border border-gray-800 rounded px-3 py-2"
-                      >
-                        {GAMEMODE_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            case 'difficulty': {
-              const v = value || 'easy';
-              return (
-                <div key={key} className="bg-gray-800 rounded-lg p-4 shadow-inner">
-                  <div className="flex justify-between">
-                    <div>
-                      <div className="text-lg font-semibold">Dificuldade</div>
-                      <div className="text-xs text-gray-400 mt-1">{key}</div>
-                    </div>
-                    <div className="w-44">
-                      <select
-                        value={v}
-                        onChange={(e) => setProperty(key, e.target.value)}
-                        className="w-full bg-gray-900 border border-gray-800 rounded px-3 py-2"
-                      >
-                        {DIFFICULTY_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            case 'online-mode':
-            case 'white-list':
-            case 'pvp':
-            case 'allow-flight':
-            case 'enable-command-block':
-            case 'spawn-animals':
-            case 'spawn-monsters':
-            case 'spawn-npcs':
-            case 'force-gamemode':
-            case 'require-resource-pack': {
-              const v = boolValue(value);
-              const pretty = {
-                'online-mode': 'Pirata',
-                'white-list': 'Whitelist',
-                pvp: 'PVP',
-                'allow-flight': 'Voar',
-                'enable-command-block': 'Blocos de Comando',
-                'spawn-animals': 'Animais',
-                'spawn-monsters': 'Monstro',
-                'spawn-npcs': 'Aldeões',
-                'force-gamemode': 'Forçar modo de jogo',
-                'require-resource-pack': "É necessário um pacote de recursos",
-              }[key] || key;
-
-              return (
-                <div key={key} className="bg-gray-800 rounded-lg p-4 shadow-inner flex justify-between items-center">
-                  <div>
-                    <div className="text-lg font-semibold">{pretty}</div>
-                    <div className="text-xs text-gray-400 mt-1">{key}</div>
-                  </div>
-                  <Toggle checked={v} onChange={(nv) => setProperty(key, nv ? 'true' : 'false')} />
-                </div>
-              );
-            }
-
-            case 'player-idle-timeout': {
-              const v = numberValue(value || 0, 0);
-              return (
-                <div key={key} className="bg-gray-800 rounded-lg p-4 shadow-inner">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="text-lg font-semibold">Tempo limite de inatividade</div>
-                      <div className="text-xs text-gray-400 mt-1">{key}</div>
-                    </div>
-                    <Stepper value={v} min={0} max={1440} onChange={(nv) => setProperty(key, nv)} />
-                  </div>
-                </div>
-              );
-            }
-
-            case 'resource-pack':
-            case 'resource-pack-prompt': {
-              const v = value || '';
-              const pretty = key === 'resource-pack' ? 'Resource pack' : "Prompt do 'resource pack'";
-              return (
-                <div key={key} className="bg-gray-800 rounded-lg p-4 shadow-inner">
-                  <div>
-                    <div className="text-lg font-semibold">{pretty}</div>
-                    <div className="text-xs text-gray-400 mt-1">{key}</div>
-                    <input
-                      value={v}
-                      onChange={(e) => setProperty(key, e.target.value)}
-                      placeholder={key === 'resource-pack' ? 'https://example.com/resource-pack.zip' : ''}
-                      className="mt-3 w-full bg-gray-900 border border-gray-800 rounded px-3 py-2"
-                    />
-                  </div>
-                </div>
-              );
-            }
-
-            case 'spawn-protection': {
-              const v = numberValue(value || 0, 0);
-              return (
-                <div key={key} className="bg-gray-800 rounded-lg p-4 shadow-inner flex justify-between items-center">
-                  <div>
-                    <div className="text-lg font-semibold">Proteção de Spawn</div>
-                    <div className="text-xs text-gray-400 mt-1">{key}</div>
-                  </div>
-                  <div>
-                    <Stepper value={v} min={0} max={100} onChange={(nv) => setProperty(key, nv)} />
-                  </div>
-                </div>
-              );
-            }
-
-            case 'view-distance': {
-              const v = numberValue(value || 10, 10);
-              return (
-                <div key={key} className="bg-gray-800 rounded-lg p-4 shadow-inner flex justify-between items-center">
-                  <div>
-                    <div className="text-lg font-semibold">Distância de visão</div>
-                    <div className="text-xs text-gray-400 mt-1">{key}</div>
-                  </div>
-                  <div>
-                    <Stepper value={v} min={3} max={32} onChange={(nv) => setProperty(key, nv)} />
-                  </div>
-                </div>
-              );
-            }
-
-            default:
-              return null;
-          }
-        })}
-      </div>
-    </div>
+    </motion.div>
   );
 }

@@ -7,11 +7,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const [serverType, setServerType] = useState(server?.type || 'vanilla');
   const [version, setVersion] = useState(server?.version || '');
   const [availableVersions, setAvailableVersions] = useState([]);
+  const [filteredVersions, setFilteredVersions] = useState([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showVersionWarning, setShowVersionWarning] = useState(false);
   const [versionChangeInfo, setVersionChangeInfo] = useState(null);
+  const [showAllVersions, setShowAllVersions] = useState(false); // New state for toggle
   const isInitialMount = useRef(true);
 
   // Helper function to fetch with CORS proxy
@@ -46,6 +48,55 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     });
   };
 
+  // Helper function to filter out snapshots and non-stable versions
+  const filterStableVersions = (versions, type) => {
+    if (type === 'vanilla') {
+      // For vanilla, filter out snapshots, pre-releases, and only keep proper releases
+      return versions.filter(v => {
+        // Keep versions that match standard release pattern (1.X, 1.X.X)
+        // and exclude snapshots, pre-releases, experimental versions
+        return /^\d+\.\d+(\.\d+)?$/.test(v) && 
+               !v.includes('snapshot') && 
+               !v.includes('pre') && 
+               !v.includes('rc') &&
+               !v.includes('experimental') &&
+               !v.includes('w') && // Exclude snapshot versions like 23w45a
+               !v.includes('a') && // Exclude alpha versions
+               !v.includes('b');   // Exclude beta versions
+      });
+    } else if (type === 'paper' || type === 'spigot') {
+      // For Paper/Spigot, filter out experimental and snapshot builds
+      return versions.filter(v => {
+        return /^\d+\.\d+(\.\d+)?$/.test(v) && 
+               !v.includes('snapshot') && 
+               !v.includes('pre') && 
+               !v.includes('rc') &&
+               !v.includes('experimental');
+      });
+    } else if (type === 'forge' || type === 'fabric') {
+      // For Forge/Fabric, use the same filtering logic
+      return versions.filter(v => {
+        return /^\d+\.\d+(\.\d+)?$/.test(v) && 
+               !v.includes('snapshot') && 
+               !v.includes('pre') && 
+               !v.includes('rc') &&
+               !v.includes('experimental');
+      });
+    }
+    
+    return versions; // Return all if no specific filtering
+  };
+
+  // Update filtered versions when availableVersions or showAllVersions changes
+  useEffect(() => {
+    if (showAllVersions) {
+      setFilteredVersions(availableVersions);
+    } else {
+      const stableVersions = filterStableVersions(availableVersions, serverType);
+      setFilteredVersions(stableVersions);
+    }
+  }, [availableVersions, showAllVersions, serverType]);
+
   // Check if version change or software switch requires server recreation or file deletion
   const checkVersionChangeImpact = (newType, newVersion) => {
     console.log('Checking version change impact:', { newType, newVersion, currentType: server?.type, currentVersion: server?.version });
@@ -57,7 +108,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         requiresFileDeletion: false,
         severity: 'none',
         message: 'This server has not been started yet. The selected software type and version will be applied when you start the server.',
-        backupMessage: 'No data exists yet, but ensure you have a backup strategy for future world data stored in the server’s storage path.'
+        backupMessage: 'No data exists yet, but ensure you have a backup strategy for future world data stored in the server\'s storage path.'
       };
     }
 
@@ -89,19 +140,19 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         requiresFileDeletion = true;
         severity = 'high';
         baseMessage = `Switching from ${currentType} to ${newType} requires new software, which will delete all existing server files, including your world data, configuration files, and plugins. This action cannot be undone.`;
-        backupMessage = `Please back up your world data and configurations before proceeding. Your data is stored at ${server?.storage_path || 'the server’s storage path'}. You can download it using your server management tools or contact support for assistance.`;
+        backupMessage = `Please back up your world data and configurations before proceeding. Your data is stored at ${server?.storage_path || 'the server\'s storage path'}. You can download it using your server management tools or contact support for assistance.`;
       } else if (newType === 'vanilla') {
         console.log('Vanilla version change detected');
         requiresFileDeletion = false;
         severity = isDowngrade ? 'high' : 'medium';
         baseMessage = `Changing the Vanilla version from ${currentVersion} to ${newVersion} requires new server software. Your existing world data and configurations will be preserved and loaded on the new server. However, ${isDowngrade ? 'downgrading' : 'upgrading'} may cause compatibility issues with your existing world, such as missing blocks or features.`;
-        backupMessage = `We strongly recommend backing up your world data before proceeding to avoid potential issues. Your data is stored at ${server?.storage_path || 'the server’s storage path'}. You can download it using your server management tools or contact support for assistance.`;
+        backupMessage = `We strongly recommend backing up your world data before proceeding to avoid potential issues. Your data is stored at ${server?.storage_path || 'the server\'s storage path'}. You can download it using your server management tools or contact support for assistance.`;
       } else {
         console.log('Non-Vanilla version change detected');
         requiresFileDeletion = true;
         severity = 'high';
         baseMessage = `Changing the ${newType} version from ${currentVersion} to ${newVersion} requires new software, which will delete all existing server files, including your world data, configuration files, and plugins. This action cannot be undone.`;
-        backupMessage = `Please back up your world data and configurations before proceeding. Your data is stored at ${server?.storage_path || 'the server’s storage path'}. You can download it using your server management tools or contact support for assistance.`;
+        backupMessage = `Please back up your world data and configurations before proceeding. Your data is stored at ${server?.storage_path || 'the server\'s storage path'}. You can download it using your server management tools or contact support for assistance.`;
       }
 
       let message = baseMessage;
@@ -126,7 +177,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       requiresFileDeletion: false,
       severity: 'none',
       message: 'No significant changes detected. The current software type and version will remain unchanged.',
-      backupMessage: `As a precaution, ensure your world data is backed up regularly. Your data is stored at ${server?.storage_path || 'the server’s storage path'}.`
+      backupMessage: `As a precaution, ensure your world data is backed up regularly. Your data is stored at ${server?.storage_path || 'the server\'s storage path'}.`
     };
   };
 
@@ -135,6 +186,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     console.log('Server type changed to:', newType);
     setServerType(newType);
     setVersion(''); // Reset version when type changes to ensure valid selection
+    setShowAllVersions(false); // Reset the toggle when server type changes
   };
 
   // Handle version change
@@ -286,7 +338,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             {
               const vanillaRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
               const vanillaData = await vanillaRes.json();
-              versions = vanillaData.versions.map(v => v.id).filter(v => v.startsWith('1.'));
+              versions = vanillaData.versions.map(v => v.id);
             }
             break;
 
@@ -338,15 +390,21 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
         setAvailableVersions(versions);
 
-        // Set version: prioritize server.version, then current version if valid, else latest
-        if (isInitialMount.current && server?.version && versions.includes(server.version)) {
+        // Set version: prioritize server.version, then current version if valid, else latest from filtered versions
+        const stableVersions = filterStableVersions(versions, serverType);
+        const versionsToUse = showAllVersions ? versions : stableVersions;
+
+        if (isInitialMount.current && server?.version && versionsToUse.includes(server.version)) {
           console.log('Initial mount, setting version from server prop:', server.version);
           setVersion(server.version);
-        } else if (version && versions.includes(version)) {
+        } else if (version && versionsToUse.includes(version)) {
           console.log('Retaining current version:', version);
           // Version already set and valid, no change needed
+        } else if (versionsToUse.length > 0) {
+          console.log('Setting default version:', versionsToUse[0]);
+          setVersion(versionsToUse[0]);
         } else if (versions.length > 0) {
-          console.log('Setting default version:', versions[0]);
+          console.log('No stable versions available, setting first available version:', versions[0]);
           setVersion(versions[0]);
         } else {
           console.log('No versions available, setting fallback version');
@@ -498,12 +556,26 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
         {/* Bottom Row: Version Selection */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Select Version</label>
+          <div className="flex justify-between items-center mb-2">
+            <label className="block text-sm font-medium text-gray-700">Select Version</label>
+            <button
+              type="button"
+              onClick={() => setShowAllVersions(!showAllVersions)}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                showAllVersions
+                  ? 'bg-gray-200 border-gray-400 text-gray-700 hover:bg-gray-300'
+                  : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {showAllVersions ? 'Showing All Versions' : 'Show All Versions'}
+            </button>
+          </div>
+          
           {loadingVersions ? (
             <div className="animate-pulse bg-gray-200 rounded h-24 w-full" />
-          ) : availableVersions.length > 0 ? (
+          ) : filteredVersions.length > 0 ? (
             <div className="grid grid-cols-5 gap-4 auto-rows-fr">
-              {availableVersions.map((v) => (
+              {filteredVersions.map((v) => (
                 <div
                   key={v}
                   onClick={() => handleVersionChange(v)}
@@ -511,9 +583,17 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     version === v
                       ? 'bg-indigo-100 border-indigo-500 text-indigo-700'
                       : 'bg-white border-gray-300 hover:bg-gray-50'
+                  } ${
+                    // Add visual indicator for non-stable versions
+                    !filterStableVersions([v], serverType).includes(v) 
+                      ? 'border-yellow-300 bg-yellow-50' 
+                      : ''
                   }`}
                 >
                   <div className="font-medium">{v}</div>
+                  {!filterStableVersions([v], serverType).includes(v) && (
+                    <div className="text-xs text-yellow-600 mt-1">Experimental</div>
+                  )}
                 </div>
               ))}
             </div>

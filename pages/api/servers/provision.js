@@ -1,3 +1,4 @@
+// pages/api/servers/provision.js
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 import axios from 'axios';
@@ -480,6 +481,7 @@ write_files:
       ENDPOINT_OPT="${endpointCliOption}"
       AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
       AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+      REQUESTED_VERSION='${escapedVersion}'
       if [ "${needsFileDeletion}" = "true" ]; then
         echo "[mc-sync-from-s3] File deletion requested, skipping S3 sync."
         exit 0
@@ -488,8 +490,22 @@ write_files:
         echo "[mc-sync-from-s3] Missing S3 configuration, skipping sync."
         exit 0
       fi
-      echo "[mc-sync-from-s3] Starting sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
-      sudo -u minecraft bash -lc "aws s3 sync \"s3://$BUCKET/$SERVER_PATH/\" \"$DEST\" $ENDPOINT_OPT --exact-timestamps --exclude 'node_modules/*'"
+      # Check if server.jar version matches requested version (basic check)
+      check_server_version() {
+        if [ ! -f "/opt/minecraft/server.jar" ]; then
+          echo "none"
+          return
+        fi
+        java -jar /opt/minecraft/server.jar --version 2>/dev/null | grep -oP '\\d+\\.\\d+\\.\\d+' || echo "unknown"
+      }
+      CURRENT_VERSION=$(check_server_version)
+      if [ "$CURRENT_VERSION" != "$REQUESTED_VERSION" ] && [ "$CURRENT_VERSION" != "none" ] && [ "$CURRENT_VERSION" != "unknown" ]; then
+        echo "[mc-sync-from-s3] Requested version ($REQUESTED_VERSION) does not match current server.jar version ($CURRENT_VERSION), skipping server.jar sync"
+        sudo -u minecraft bash -lc "aws s3 sync \"s3://$BUCKET/$SERVER_PATH/\" \"$DEST\" $ENDPOINT_OPT --exact-timestamps --exclude 'server.jar' --exclude 'node_modules/*'"
+      else
+        echo "[mc-sync-from-s3] Starting sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
+        sudo -u minecraft bash -lc "aws s3 sync \"s3://$BUCKET/$SERVER_PATH/\" \"$DEST\" $ENDPOINT_OPT --exact-timestamps --exclude 'node_modules/*'"
+      fi
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 0 ]; then
         echo "[mc-sync-from-s3] Sync complete."
@@ -538,7 +554,7 @@ write_files:
       HEAP_GB=${heapGb}
       RCON_PASSWORD='${escapedRconPassword}'
       software='${software}'
-      SERVER_ID='${serverId}'
+      SERVER_ID='${serverId}'  # Fixed: Properly interpolate serverId
       version='${escapedVersion}'
       IS_MODERN_FORGE=${isModernForge}
       echo "[DEBUG] startup.sh invoked at $(date)"
@@ -556,36 +572,28 @@ write_files:
         export PATH=$PATH:/root/.local/bin:/home/minecraft/.local/bin
       fi
 
-      if [ "$software" = "forge" ] && [ "$IS_MODERN_FORGE" = "true" ] && [ -f "/opt/minecraft/run.sh" ]; then
-        echo "[startup] Modern Forge (1.17+) run.sh found, skipping setup"
-      elif [ "$software" = "forge" ] && [ -f "/opt/minecraft/server.jar" ]; then
-        echo "[startup] Legacy Forge server.jar found, checking validity..."
-        if [ ! -f "/opt/minecraft/libraries/net/minecraftforge/forge"/*"/forge-"*".jar" ]; then
-          echo "[startup] Forge libraries missing, running installer..."
-          if [ -n "$DOWNLOAD_URL" ]; then
-            sudo -u minecraft wget -O server-installer.jar "$DOWNLOAD_URL" || echo "DOWNLOAD FAILED: $?"
-            java -jar server-installer.jar --installServer
-            if [ "$IS_MODERN_FORGE" = "true" ]; then
-              echo "[startup] Modern Forge (1.17+), keeping run.sh"
-              rm -f server-installer.jar
-            else
-              echo "[startup] Legacy Forge (<1.17), renaming to server.jar"
-              FORGE_JAR=$(ls forge-*.jar | head -n 1)
-              if [ -n "$FORGE_JAR" ]; then
-                rm -f server-installer.jar
-                mv "$FORGE_JAR" server.jar
-              else
-                echo "[startup] No Forge JAR found after installation"
-                exit 1
-              fi
-            fi
-          else
-            echo "[startup] No DOWNLOAD_URL provided, cannot reinstall Forge"
-            exit 1
-          fi
+      # Function to check server.jar version (basic implementation for vanilla)
+      check_server_version() {
+        if [ ! -f "/opt/minecraft/server.jar" ]; then
+          echo "none"
+          return
         fi
-      elif [ ! -f "/opt/minecraft/server.jar" ]; then
-        echo "[startup] No server.jar found in /opt/minecraft, downloading fresh..."
+        if [ "$software" = "vanilla" ]; then
+          java -jar server.jar --version 2>/dev/null | grep -oP '\\d+\\.\\d+\\.\\d+' || echo "unknown"
+        else
+          # For Forge, Fabric, etc., version detection may need server.properties or mod metadata
+          echo "unknown"
+        fi
+      }
+
+      # Check if server.jar exists and matches the requested version
+      CURRENT_VERSION=$(check_server_version)
+      echo "[DEBUG] Current server.jar version: $CURRENT_VERSION"
+      echo "[DEBUG] Requested version: $version"
+
+      # Force re-download if version doesn't match or server.jar is missing
+      if [ "$CURRENT_VERSION" != "$version" ] || [ ! -f "/opt/minecraft/server.jar" ]; then
+        echo "[startup] Version mismatch or no server.jar, downloading fresh..."
         if [ -n "$DOWNLOAD_URL" ]; then
           sudo -u minecraft wget -O server-installer.jar "$DOWNLOAD_URL" || echo "DOWNLOAD FAILED: $?"
           if [ "$software" = "forge" ]; then
@@ -604,30 +612,29 @@ write_files:
                 exit 1
               fi
             fi
+          elif [ "$software" = "fabric" ]; then
+            echo "[startup] Setting up Fabric server"
+            mv server-installer.jar server.jar
           else
             mv server-installer.jar server.jar
+          fi
+          # Optionally delete old server.jar from S3 to prevent re-syncing
+          if [ -n "${S3_BUCKET}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
+            echo "[startup] Deleting old server.jar from S3..."
+            aws s3 rm "s3://${S3_BUCKET}/servers/${serverId}/server.jar" ${endpointCliOption} || echo "[startup] Failed to delete server.jar from S3"
+          fi
+          # Sync new server.jar to S3
+          if [ -n "${S3_BUCKET}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
+            echo "[startup] Syncing new server.jar to S3..."
+            aws s3 cp /opt/minecraft/server.jar "s3://${S3_BUCKET}/servers/${serverId}/server.jar" ${endpointCliOption} || echo "[startup] Failed to sync server.jar to S3"
           fi
         else
           echo "[startup] NO DOWNLOAD_URL PROVIDED"
           exit 1
         fi
       else
-        echo "[startup] server.jar found"
+        echo "[startup] server.jar found with matching version $CURRENT_VERSION"
       fi
-
-      ${isFabric ? `
-      if [ "$software" = "fabric" ]; then
-        echo "[startup] Setting up Fabric server"
-        if [ ! -f "/opt/minecraft/server.jar" ]; then
-          if [ -n "$DOWNLOAD_URL" ]; then
-            sudo -u minecraft wget -O server.jar "$DOWNLOAD_URL" || echo "DOWNLOAD FAILED: $?"
-          else
-            echo "[startup] NO DOWNLOAD_URL PROVIDED FOR FABRIC"
-            exit 1
-          fi
-        fi
-      fi
-      ` : ''}
 
       echo "eula=true" > eula.txt
       chown minecraft:minecraft eula.txt
@@ -692,7 +699,7 @@ write_files:
       Environment=SERVER_ID=${serverId}
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
-      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
+      Environment=SUBDOMAIN=${escapedSubdomain}-api
       ExecStart=/usr/bin/node /opt/minecraft/status-reporter.js
       Restart=always
       RestartSec=5
@@ -711,7 +718,7 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
-      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
+      Environment=SUBDOMAIN=${escapedSubdomain}-api
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
       Environment=CONSOLE_PORT=3002
@@ -733,7 +740,7 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
-      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
+      Environment=SUBDOMAIN=${escapedSubdomain}-api
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
       Environment=PROPERTIES_API_PORT=3003
@@ -755,7 +762,7 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
-      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
+      Environment=SUBDOMAIN=${escapedSubdomain}-api
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
       Environment=METRICS_PORT=3004
@@ -777,7 +784,7 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/minecraft
-      Environment=SUBDOMAIN=${escapedSubdomain}-api # Updated to <subdomain>-api
+      Environment=SUBDOMAIN=${escapedSubdomain}-api
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
       Environment=FILE_API_PORT=3005

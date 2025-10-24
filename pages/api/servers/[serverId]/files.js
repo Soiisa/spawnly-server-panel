@@ -45,7 +45,7 @@ async function getRawBody(req) {
       chunks.push(chunk);
     });
     req.on('end', () => {
-      resolve(Buffer.concat(chunks).toString('utf8'));
+      resolve(Buffer.concat(chunks));
     });
     req.on('error', reject);
   });
@@ -210,7 +210,7 @@ export default async function handler(req, res) {
           Bucket: S3_BUCKET,
           Key: s3Key,
           Body: body,
-          ContentType: 'text/plain',
+          ContentType: req.headers['content-type'] || 'application/octet-stream',
         })
         .promise();
       console.log('S3 file updated successfully:', s3Key);
