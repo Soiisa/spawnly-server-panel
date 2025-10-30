@@ -216,12 +216,24 @@ async function deductCredits(supabaseAdmin, userId, amount, description) {
 }
 
 async function billRemainingTime(supabaseAdmin, server) {
-  if (!server.last_billed_at || server.status !== 'Running') return;
+  // Compute a sensible base time for billing: prefer last_billed_at, fall back to running_since if last_billed_at is missing
+  if (server.status !== 'Running') return;
 
   const now = new Date();
-  const lastBilled = new Date(server.last_billed_at);
-  const elapsedSeconds = Math.floor((now - lastBilled) / 1000) + (server.runtime_accumulated_seconds || 0);
+  let baseTime = null;
+  if (server.last_billed_at) {
+    try { baseTime = new Date(server.last_billed_at); } catch (e) { baseTime = null; }
+  }
+  if (!baseTime && server.running_since) {
+    try { baseTime = new Date(server.running_since); } catch (e) { baseTime = null; }
+  }
 
+  if (!baseTime) {
+    // No basis to compute billing (no last_billed_at or running_since)
+    return;
+  }
+
+  const elapsedSeconds = Math.floor((now - baseTime) / 1000) + (server.runtime_accumulated_seconds || 0);
   if (elapsedSeconds < 60) return; // Minimum billable unit: 1 minute
 
   const hours = elapsedSeconds / 3600;
@@ -229,6 +241,13 @@ async function billRemainingTime(supabaseAdmin, server) {
 
   // Deduct and log
   await deductCredits(supabaseAdmin, server.user_id, cost, `Final runtime charge for server ${server.id} (${elapsedSeconds} seconds)`);
+
+  // Persist billing anchor so the DB reflects that we billed through 'now'
+  try {
+    await supabaseAdmin.from('servers').update({ last_billed_at: now.toISOString(), runtime_accumulated_seconds: 0 }).eq('id', server.id);
+  } catch (e) {
+    console.error('[billRemainingTime] Failed to update server billing fields:', e && e.message);
+  }
 }
 
 export default async function handler(req, res) {
@@ -372,9 +391,18 @@ export default async function handler(req, res) {
       } else {
         // For stop action, update Supabase to reflect stopped state
         console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped', clearing hetzner_id and ipv4`);
+        const nowIso = new Date().toISOString();
         const { error: updateErr } = await supabaseAdmin
           .from('servers')
-          .update({ status: 'Stopped', hetzner_id: null, ipv4: null, last_billed_at: null, runtime_accumulated_seconds: 0 })
+          .update({
+            status: 'Stopped',
+            hetzner_id: null,
+            ipv4: null,
+            last_billed_at: null,
+            runtime_accumulated_seconds: 0,
+            running_since: null,
+            last_heartbeat_at: nowIso
+          })
           .eq('id', serverId);
         if (updateErr) {
           console.error('[API:action] Failed to update Supabase after stop:', updateErr.message);

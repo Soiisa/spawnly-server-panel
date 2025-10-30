@@ -35,7 +35,18 @@ export default async function handler(req, res) {
   if (error) return res.status(500).json({ error: 'Failed to fetch running servers' });
 
   for (const server of runningServers || []) {
-    if (!server.last_billed_at) continue;
+    // Ensure last_billed_at is initialized. If it's missing, initialize it to when the server started running
+    // (running_since if available) or now. This prevents the cron from skipping newly-started servers.
+    if (!server.last_billed_at) {
+      const initial = server.running_since || new Date().toISOString();
+      try {
+        await supabaseAdmin.from('servers').update({ last_billed_at: initial, runtime_accumulated_seconds: server.runtime_accumulated_seconds || 0 }).eq('id', server.id);
+      } catch (e) {
+        console.error('Failed to initialize last_billed_at for server', server.id, e && e.message);
+      }
+      // skip billing this run; billing starts from the next iteration
+      continue;
+    }
 
     const now = new Date();
     const lastBilled = new Date(server.last_billed_at);

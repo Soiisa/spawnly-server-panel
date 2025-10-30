@@ -53,6 +53,46 @@ export default function CreditsPage() {
     });
   };
 
+  const parseUsage = (description) => {
+    if (!description) return {};
+    // Try to extract server id and seconds from known description formats
+    // Examples:
+    // "Runtime charge for server <id> (300 seconds)"
+    // "Final runtime charge for server <id> (487 seconds)"
+    const serverMatch = description.match(/server\s+([a-f0-9-]{8,36})/i);
+    const secondsMatch = description.match(/(\d+)\s*seconds/i);
+    return {
+      serverId: serverMatch ? serverMatch[1] : null,
+      seconds: secondsMatch ? parseInt(secondsMatch[1], 10) : null,
+      raw: description,
+    };
+  };
+
+  const fmtSeconds = (s) => {
+    if (s == null) return null;
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${mins}m ${secs}s`;
+  };
+
+  const renderUsageCell = (description) => {
+    const { serverId, seconds, raw } = parseUsage(description || "");
+    return (
+      <div>
+        {serverId ? (
+          <a href={`/server/${serverId}`} className="text-indigo-600 hover:underline">
+            Server {serverId.slice(0, 8)}
+          </a>
+        ) : (
+          <span className="text-gray-600">—</span>
+        )}
+        <div className="text-sm text-gray-500">
+          {seconds != null ? fmtSeconds(seconds) : raw || "-"}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -110,7 +150,7 @@ export default function CreditsPage() {
                       Amount
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Description
+                      Server / Usage
                     </th>
                   </tr>
                 </thead>
@@ -127,7 +167,7 @@ export default function CreditsPage() {
                         {tx.amount > 0 ? `+${tx.amount.toFixed(2)}` : tx.amount.toFixed(2)} credits
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        {tx.description || "-"}
+                        {renderUsageCell(tx.description)}
                       </td>
                     </tr>
                   ))}
