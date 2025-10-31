@@ -61,7 +61,7 @@ export default async function handler(req, res) {
     const elapsedSeconds = Math.floor((now - lastBilled) / 1000);
     const totalAccumulated = elapsedSeconds + (server.runtime_accumulated_seconds || 0);
 
-    const intervalSeconds = 300; // 5 minutes
+    const intervalSeconds = 60; // 1 minute (semi-live billing)
     const billableIntervals = Math.floor(totalAccumulated / intervalSeconds);
       console.log(`Server ${server.id} elapsedSeconds=${elapsedSeconds} accumulated=${totalAccumulated} billableIntervals=${billableIntervals}`);
     if (billableIntervals === 0) continue;
