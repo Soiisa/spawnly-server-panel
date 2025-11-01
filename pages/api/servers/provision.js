@@ -699,6 +699,8 @@ write_files:
       Environment=SERVER_ID=${serverId}
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
+      # Explicit API endpoint used by in-server reporters (avoid path guessing)
+      Environment=NEXTJS_API_URL=${appBaseUrl.replace(/\/+$/,'')}/api/servers/update-status
       Environment=SUBDOMAIN=${escapedSubdomain}-api
       ExecStart=/usr/bin/node /opt/minecraft/status-reporter.js
       Restart=always
