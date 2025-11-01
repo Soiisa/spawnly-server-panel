@@ -6,7 +6,8 @@ const RCON_PASSWORD = process.env.RCON_PASSWORD || '';
 // Prefer an explicit NEXTJS_API_URL env var so deployments can override exactly
 // where the update-status API lives. Fall back to the older APP_BASE_URL
 // patterns for backward compatibility.
-const NEXTJS_API_URL = process.env.NEXTJS_API_URL || (process.env.APP_BASE_URL ? `${process.env.APP_BASE_URL.replace(/\/+$/,'')}/spawnly/api/servers/update-status` : 'https://spawnly.net/spawnly/api/servers/update-status');
+const NEXTJS_API_URL = process.env.NEXTJS_API_URL || 
+  `${(process.env.APP_BASE_URL || 'https://spawnly.net').replace(/\/+$/,'')}/api/servers/update-status`;
 const STATUS_WS_PORT = 3006;
 
 const wss = new WebSocket.Server({ port: STATUS_WS_PORT }, () => {
