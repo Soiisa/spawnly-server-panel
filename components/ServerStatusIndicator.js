@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 export default function ServerStatusIndicator({ server }) {
   const [status, setStatus] = useState(server.status || 'Unknown');
@@ -7,96 +8,45 @@ export default function ServerStatusIndicator({ server }) {
   const [disk, setDisk] = useState(0);
   const [connected, setConnected] = useState(false);
   const [debug, setDebug] = useState('');
-  const wsRef = useRef(null);
 
   useEffect(() => {
-    if (!server?.ipv4) {
-      setDebug('No IPv4 address available');
+    if (!server?.id) {
+      setDebug('No server id available');
       return;
     }
 
-    const connectToStatusServer = () => {
-      const wsUrl = `wss://${server.subdomain}-api.spawnly.net/status`;
-      setDebug(`Connecting to: ${wsUrl}`);
-      console.log('Connecting to status WebSocket:', wsUrl);
-      
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    setDebug('Subscribing to server updates via Supabase');
 
-      ws.onopen = () => {
-        setDebug('WebSocket connected successfully');
-        console.log('Status WebSocket connected');
-        setConnected(true);
-      };
-
-      ws.onmessage = async (event) => {
-  try {
-    const data = JSON.parse(event.data);
-    if (data.type === 'status_update') {
-      setStatus(data.status);
-      setCpu(data.cpu || 0);
-      setMemory(data.memory || 0);
-      setDisk(data.disk || 0);
-
-      // UPDATE SUPABASE WITH THE NEW STATUS
-      try {
-        console.log('Calling update-status API for server:', server.id);
-        const response = await fetch('/api/servers/update-status', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            serverId: server.id,
-            status: data.status,
-            cpu: data.cpu || 0,
-            memory: data.memory || 0,
-            disk: data.disk || 0
-          })
-        });
-
-        const responseData = await response.json();
-        
-        if (!response.ok) {
-          console.error('API failed:', response.status, responseData);
-          throw new Error(responseData.error || `HTTP ${response.status}`);
+    const channel = supabase
+      .channel(`server-status-${server.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'servers',
+        filter: `id=eq.${server.id}`
+      }, (payload) => {
+        try {
+          const newRow = payload.new;
+          if (!newRow) return;
+          setStatus(newRow.status || status);
+          setCpu(newRow.cpu || 0);
+          setMemory(newRow.memory || 0);
+          setDisk(newRow.disk || 0);
+          setConnected(true);
+        } catch (e) {
+          console.error('Error handling realtime payload', e);
         }
-
-        console.log('API success:', responseData);
-        
-      } catch (apiError) {
-        console.error('Error calling update-status API:', apiError.message);
-        // You could add retry logic here
-      }
-    }
-  } catch (error) {
-    console.error('Error parsing status message:', error);
-  }
-};
-
-      ws.onerror = (error) => {
-        setDebug(`WebSocket error: ${error.message || 'Unknown error'}`);
-        console.error('Status WebSocket error:', error);
-        setConnected(false);
-      };
-
-      ws.onclose = (event) => {
-        setDebug(`WebSocket closed: ${event.code} ${event.reason || 'No reason'}`);
-        console.log('Status WebSocket disconnected', event.code, event.reason);
-        setConnected(false);
-        // Attempt to reconnect after a delay
-        setTimeout(connectToStatusServer, 5000);
-      };
-    };
-
-    connectToStatusServer();
+      })
+      .subscribe();
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
+      try {
+        supabase.removeChannel(channel);
+      } catch (e) {
+        // fallback: nothing
       }
     };
-  }, [server.ipv4, server.id]);
+  }, [server.id]);
 
   if (!server.ipv4) {
     return (

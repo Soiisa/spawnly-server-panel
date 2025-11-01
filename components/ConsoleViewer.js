@@ -19,8 +19,52 @@ export default function ConsoleViewer({ server }) {
   }, [paused]);
 
   useEffect(() => {
-    if (!server || !server.ipv4) return;
-    
+    if (!server || !server.id) return;
+
+    const useEventSource = typeof window !== 'undefined' && window.EventSource;
+
+    if (useEventSource) {
+      // Use SSE (EventSource) via our proxy endpoint
+      const url = `/sse/console/${server.id}`;
+      setStatusMsg(`Connecting to console (EventSource) ...`);
+      const es = new EventSource(url);
+      wsRef.current = es; // reuse ref for cleanup purposes
+
+      es.onopen = () => {
+        setConnected(true);
+        setLines([]);
+        setStatusMsg('Connected (EventSource)');
+      };
+
+      es.onmessage = (ev) => {
+        if (pausedRef.current) return;
+        const text = String(ev.data || '');
+        const newLines = text.split(/\r?\n/).filter(Boolean);
+        if (newLines.length === 0) return;
+        const processedLines = newLines.map(line => {
+          const timestampMatch = line.match(/\[(\d{2}:\d{2}:\d{2})\]/);
+          if (timestampMatch) {
+            const timestampIndex = line.indexOf(timestampMatch[0]);
+            return line.substring(timestampIndex);
+          }
+          return line;
+        });
+        setLines((prev) => prev.concat(processedLines));
+      };
+
+      es.onerror = (err) => {
+        console.warn('Console EventSource error', err);
+        setStatusMsg('EventSource error, attempting to reconnect...');
+        setConnected(false);
+        // browser EventSource will auto-reconnect; we simply show status
+      };
+
+      return () => {
+        try { es.close(); } catch (e) {}
+      };
+    }
+
+    // Fallback to existing WebSocket behavior if EventSource not available
     const connectToServer = () => {
       // Use the server's IP directly
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';

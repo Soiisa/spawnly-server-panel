@@ -1,6 +1,7 @@
 // components/MetricsViewer.js
 
 import { useEffect, useRef, useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 export default function MetricsViewer({ server }) {
   const wsRef = useRef(null);
@@ -13,71 +14,31 @@ export default function MetricsViewer({ server }) {
   const reconnectTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!server || !server.ipv4) return;
+    if (!server || !server.id) return;
 
-    const connectToServer = () => {
-      // Use the server's IP directly
-      const wsUrl = `wss://${server.subdomain}-api.spawnly.net/metrics`;
-      
-      setStatusMsg(`Connecting to ${server.ipv4}:3004...`);
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setConnected(true);
-        setStatusMsg(`Connected to ${server.ipv4}:3004`);
-        // Clear any reconnect timeout
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = null;
-        }
-      };
-
-      ws.onmessage = (ev) => {
+    // Subscribe to servers table updates for this server to receive metrics
+    const channel = supabase
+      .channel(`server-metrics-${server.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'servers',
+        filter: `id=eq.${server.id}`
+      }, (payload) => {
         try {
-          const data = JSON.parse(ev.data);
-          // Handle the actual data format: {cpu: number, ram: string, timestamp: string}
-          if (data.cpu !== undefined && data.ram !== undefined) {
-            setMetrics({
-              cpu: data.cpu,
-              ram: parseFloat(data.ram) || 0
-            });
-          }
+          const newRow = payload.new;
+          if (!newRow) return;
+          setMetrics({ cpu: newRow.cpu || 0, ram: newRow.memory || 0 });
+          setConnected(true);
+          setStatusMsg('Receiving metrics via Supabase');
         } catch (e) {
-          console.error('Metrics parse error', e);
+          console.error('Error handling metrics payload', e);
         }
-      };
-
-      ws.onerror = (err) => {
-        console.warn('Metrics WS error', err);
-        setStatusMsg('Connection error, retrying...');
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        setStatusMsg('Disconnected, attempting to reconnect...');
-        
-        // Try to reconnect after a delay
-        if (!reconnectTimeoutRef.current) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectTimeoutRef.current = null;
-            connectToServer();
-          }, 3000);
-        }
-      };
-    };
-
-    connectToServer();
+      })
+      .subscribe();
 
     return () => {
-      try {
-        wsRef.current?.close();
-      } catch (e) {}
-      
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
+      try { supabase.removeChannel(channel); } catch (e) {}
     };
   }, [server]);
 

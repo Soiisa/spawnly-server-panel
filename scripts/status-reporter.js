@@ -8,6 +8,7 @@ const STATUS_WS_PORT = 3006;
 
 const wss = new WebSocket.Server({ port: STATUS_WS_PORT }, () => {
   console.log(`Status WebSocket server listening on port ${STATUS_WS_PORT} (HTTP, proxied by Cloudflare)`);
+  console.log('STATUS-REPORTER: SERVER_ID =', SERVER_ID);
 });
 
 function getServerStatus() {
@@ -37,26 +38,60 @@ function getServerStatus() {
 
 async function updateStatusInSupabase(statusData) {
   try {
+    const payload = {
+      serverId: SERVER_ID,
+      status: statusData.status,
+      cpu: statusData.cpu,
+      memory: statusData.memory,
+      disk: statusData.disk,
+      error: statusData.error
+    };
+
+    console.log('STATUS-REPORTER: posting status payload ->', JSON.stringify(payload));
+
     const response = await fetch(NEXTJS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${RCON_PASSWORD}`
       },
-      body: JSON.stringify({
-        serverId: SERVER_ID,
-        status: statusData.status,
-        cpu: statusData.cpu,
-        memory: statusData.memory,
-        disk: statusData.disk,
-        error: statusData.error
-      })
+      body: JSON.stringify(payload)
     });
 
+    let text = await response.text().catch(() => '');
     if (!response.ok) {
-      console.error('Failed to update status in Supabase:', response.statusText);
+      console.error('Failed to update status in Supabase:', response.status, text);
+
+      // If we got a 404, try a fallback URL without the `/spawnly` prefix —
+      // this repo exposes the API at /api/servers/update-status, but some
+      // deployments use a /spawnly prefix. Try the alternate and log the result.
+      if (response.status === 404) {
+        const altBase = process.env.APP_BASE_URL || 'https://spawnly.net';
+        const altUrl = `${altBase.replace(/\/+$/,'')}/api/servers/update-status`;
+        if (altUrl !== NEXTJS_API_URL) {
+          try {
+            console.log('STATUS-REPORTER: attempting fallback POST to', altUrl);
+            const resp2 = await fetch(altUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${RCON_PASSWORD}`
+              },
+              body: JSON.stringify(payload)
+            });
+            const text2 = await resp2.text().catch(() => '');
+            if (!resp2.ok) {
+              console.error('Fallback POST failed:', resp2.status, text2);
+            } else {
+              console.log('Fallback POST succeeded:', text2);
+            }
+          } catch (e) {
+            console.error('Fallback POST exception:', e && e.message);
+          }
+        }
+      }
     } else {
-      console.log('Status updated in Supabase successfully');
+      console.log('Status updated in Supabase successfully:', text);
     }
   } catch (error) {
     console.error('Error updating status in Supabase:', error);
@@ -78,6 +113,17 @@ function broadcastStatus() {
   
   updateStatusInSupabase(status);
 }
+
+// Send an initial immediate status update on startup to ensure the DB row is populated quickly
+(async () => {
+  try {
+    const initial = getServerStatus();
+    console.log('STATUS-REPORTER: sending initial status on startup ->', initial.status);
+    await updateStatusInSupabase(initial);
+  } catch (e) {
+    console.error('STATUS-REPORTER: initial status update failed', e && e.message);
+  }
+})();
 
 wss.on('connection', (clientWs) => {
   console.log('Status client connected');

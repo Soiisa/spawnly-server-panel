@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { serverId, status, timestamp } = req.body;
+  const { serverId, status, timestamp, cpu, memory, disk } = req.body;
 
     console.log('Received status update:', { serverId, status, timestamp });
 
@@ -38,6 +38,11 @@ export default async function handler(req, res) {
       status: status || 'Unknown',
       last_heartbeat_at: now.toISOString()
     };
+
+    // Accept optional metric fields and store them for realtime clients
+    if (cpu !== undefined) updates.cpu = cpu;
+    if (memory !== undefined) updates.memory = memory;
+    if (disk !== undefined) updates.disk = disk;
 
     // When server becomes Running, set running_since if not already set and ensure last_billed_at is initialized
     if (status === 'Running') {
