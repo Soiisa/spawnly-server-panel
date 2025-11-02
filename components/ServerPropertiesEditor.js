@@ -20,6 +20,7 @@ const KEY_ORDER = [
   'resource-pack',
   'resource-pack-prompt',
   'spawn-protection',
+  'simulation-distance',
   'view-distance',
 ];
 
@@ -55,6 +56,7 @@ const prettyLabels = {
   'resource-pack': 'Resource pack',
   'resource-pack-prompt': "Prompt do 'resource pack'",
   'spawn-protection': 'Proteção de Spawn',
+  'simulation-distance': 'Distância de simulação',
   'view-distance': 'Distância de visão',
 };
 
@@ -269,6 +271,21 @@ const MemoCard = memo(function Card({ propKey, value, setProperty }) {
               <div className="text-xs text-gray-500 mt-1">{propKey}</div>
             </div>
             <Stepper value={v} min={3} max={32} onChange={(nv) => setProperty(propKey, nv)} label="View distance (chunks)" />
+          </div>
+        </div>
+      );
+    }
+
+    case 'simulation-distance': {
+      const v = numberValue(value || 10, 10);
+      return (
+        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
+              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
+            </div>
+            <Stepper value={v} min={3} max={32} onChange={(nv) => setProperty(propKey, nv)} label="Simulation distance (chunks)" />
           </div>
         </div>
       );

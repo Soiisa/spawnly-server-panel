@@ -66,10 +66,6 @@ async function updateStatusInSupabase(statusData) {
     let text = await response.text().catch(() => '');
     if (!response.ok) {
       console.error('Failed to update status in Supabase:', response.status, text);
-
-      // If we got a 404, try a fallback URL without the `/spawnly` prefix —
-      // this repo exposes the API at /api/servers/update-status, but some
-      // deployments use a /spawnly prefix. Try the alternate and log the result.
       if (response.status === 404) {
         const altBase = process.env.APP_BASE_URL || 'https://spawnly.net';
         const altUrl = `${altBase.replace(/\/+$/,'')}/api/servers/update-status`;
@@ -143,7 +139,7 @@ wss.on('connection', (clientWs) => {
   });
 });
 
-setInterval(broadcastStatus, 30000);
+setInterval(broadcastStatus, 10000);
 
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
