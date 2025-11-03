@@ -674,7 +674,7 @@ write_files:
       Environment=VERSION=${escapedVersion}
       Environment=IS_MODERN_FORGE=${isModernForge}
       ExecStartPre=/usr/local/bin/mc-sync-from-s3.sh
-      ExecStart=/bin/bash -c 'if [ "$SOFTWARE" = "forge" ] && [ "$IS_MODERN_FORGE" = "true" ] && [ -f "/opt/minecraft/run.sh" ]; then /bin/bash ./run.sh; else /usr/bin/java -Xmx${heapGb}G -Xms${heapGb}G -jar server.jar nogui; fi'
+      ExecStart=/bin/bash -c 'if [ "$SOFTWARE" = "forge" ] && [ "$IS_MODERN_FORGE" = "true" ] && [ -f "/opt/minecraft/run.sh" ]; then /bin/bash ./run.sh; else /usr/bin/java -Xmx1G -Xms${heapGb}G -jar server.jar nogui; fi'
       ExecStop=/bin/bash -c 'echo stop | /usr/bin/mcrcon -H 127.0.0.1 -P 25575 -p "${rconPassword}"'
       ExecStopPost=/usr/local/bin/mc-sync.sh
       Restart=always
