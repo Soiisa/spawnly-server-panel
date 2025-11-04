@@ -818,7 +818,7 @@ runcmd:
   - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
   - apt-get install -y nodejs awscli || true
   - cd /opt/minecraft || true
-  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors || true
+  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors node-fetch dotenv || true
   - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption} || echo "[ERROR] Failed to download status-reporter.js"
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js ${endpointCliOption} || echo "[ERROR] Failed to download console-server.js"
@@ -841,10 +841,9 @@ runcmd:
   - systemctl start mc-metrics || true
   - systemctl enable mc-file-api || true
   - systemctl start mc-file-api || true
-  - echo "[DEBUG] Setting up firewall for Cloudflare IPs"
+  - echo "[DEBUG] Setting up firewall (NO PORT 3002)"
   - ufw allow 25565
   - ufw allow 25575
-  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3002; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3003; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3004; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3005; done
@@ -853,7 +852,6 @@ runcmd:
   - ufw --force enable
   - echo "[DEBUG] Running quick startup checks"
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":25565\\b"; then echo "PORT 25565 OPEN"; break; fi; sleep 2; done;'
-  - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3002\\b"; then echo "CONSOLE PORT 3002 OPEN"; break; fi; sleep 2; done;'
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3003\\b"; then echo "PROPERTIES API PORT 3003 OPEN"; break; fi; sleep 2; done;'
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3004\\b"; then echo "METRICS PORT 3004 OPEN"; break; fi; sleep 2; done;'
   - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3005\\b"; then echo "FILE API PORT 3005 OPEN"; break; fi; sleep 2; done;'
