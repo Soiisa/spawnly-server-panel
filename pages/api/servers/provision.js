@@ -690,6 +690,30 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
+  - path: /etc/systemd/system/mc-status-reporter.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Minecraft Status WebSocket Server
+      After=network.target minecraft.service
+
+      [Service]
+      WorkingDirectory=/opt/minecraft
+      Environment=SERVER_ID=${serverId}
+      Environment=RCON_PASSWORD=${escapedRconPassword}
+      Environment=APP_BASE_URL=${appBaseUrl}
+      # Explicit API endpoint used by in-server reporters (avoid path guessing)
+      Environment=NEXTJS_API_URL=${appBaseUrl.replace(/\/+$/,'')}/api/servers/update-status
+      Environment=SUBDOMAIN=${escapedSubdomain}-api
+      ExecStart=/usr/bin/node /opt/minecraft/status-reporter.js
+      Restart=always
+      RestartSec=5
+      User=minecraft
+      StandardOutput=journal
+      StandardError=journal
+
+      [Install]
+      WantedBy=multi-user.target
   - path: /etc/systemd/system/mc-console.service
     permissions: '0644'
     content: |
@@ -702,29 +726,6 @@ write_files:
       Environment=SERVER_ID=${serverId}
       Environment=SUPABASE_URL=${escapedSupabaseUrl}
       Environment=SUPABASE_SERVICE_ROLE_KEY=${escapedSupabaseKey}
-      ExecStart=/usr/bin/node /opt/minecraft/console-server.js
-      Restart=always
-      RestartSec=5
-      User=minecraft
-      StandardOutput=journal
-      StandardError=journal
-
-      [Install]
-      WantedBy=multi-user.target
-
-  - path: /etc/systemd/system/mc-console.service
-    permissions: '0644'
-    content: |
-      [Unit]
-      Description=Minecraft Console WebSocket
-      After=network.target minecraft.service
-
-      [Service]
-      WorkingDirectory=/opt/minecraft
-      Environment=SUBDOMAIN=${escapedSubdomain}-api
-      Environment=RCON_PASSWORD=${escapedRconPassword}
-      Environment=APP_BASE_URL=${appBaseUrl}
-      Environment=CONSOLE_PORT=3002
       ExecStart=/usr/bin/node /opt/minecraft/console-server.js
       Restart=always
       RestartSec=5
