@@ -357,6 +357,9 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const escapedRconPassword = escapeForSingleQuotes(rconPassword);
   const escapedSubdomain = escapeForSingleQuotes(subdomain.toLowerCase() || '');
   const appBaseUrl = process.env.APP_BASE_URL || 'https://spawnly.net';
+  const escapedSupabaseUrl = escapeForSingleQuotes(process.env.SUPABASE_URL);
+  const escapedSupabaseKey = escapeForSingleQuotes(process.env.SUPABASE_SERVICE_ROLE_KEY);
+
   console.log(`[DEBUG] Generating cloud-init with subdomain: ${escapedSubdomain || 'none'}`);
   if (!escapedSubdomain) {
     console.warn('[WARN] Subdomain is empty, services will use insecure mode unless proxied');
