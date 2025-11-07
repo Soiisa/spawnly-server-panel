@@ -1,55 +1,86 @@
 // console-server.js
 require('dotenv').config();
-const WebSocket = require('ws');
 const { spawn } = require('child_process');
+const fetch = require('node-fetch');
 
-const SERVER_ID   = process.env.SERVER_ID;          // UUID from Supabase
-const PROXY_URL   = process.env.PROXY_URL;          // wss://spawnly.net/ws/console
-const SERVER_TOKEN = process.env.SERVER_TOKEN;      // shared secret
-const PORT        = Number(process.env.CONSOLE_PORT) || 3002;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SERVER_ID = process.env.SERVER_ID;
 
-if (!SERVER_ID || !PROXY_URL || !SERVER_TOKEN) {
-  console.error('Missing env: SERVER_ID, PROXY_URL, SERVER_TOKEN');
+if (!SUPABASE_URL || !SUPABASE_KEY || !SERVER_ID) {
+  console.error('Missing env: SUPABASE_URL, SUPABASE_KEY, SERVER_ID');
   process.exit(1);
 }
 
-const wsUrl = `${PROXY_URL}/${SERVER_ID}?token=${encodeURIComponent(SERVER_TOKEN)}`;
-let ws = null;
-let reconnectTimer = null;
+const SUPABASE_API = `${SUPABASE_URL}/rest/v1/console_logs`;
+const HEADERS = {
+  'apikey': SUPABASE_KEY,
+  'Authorization': `Bearer ${SUPABASE_KEY}`,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=minimal',
+};
 
-function connect() {
-  ws = new WebSocket(wsUrl);
+let batch = [];
+let buffer = '';
+const BATCH_INTERVAL = 3000; // 3s
 
-  ws.on('open', () => {
-    console.log('Connected to proxy');
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  });
+const sendBatch = async () => {
+  if (batch.length === 0) return;
+  try {
+    const resp = await fetch(SUPABASE_API, {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify(batch.map(line => ({ server_id: SERVER_ID, line }))),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${text}`);
+    }
+    console.log(`Sent ${batch.length} logs to Supabase`);
+    batch = [];
+  } catch (err) {
+    console.error('Failed to send batch:', err.message);
+  }
+};
 
-  ws.on('close', () => {
-    console.warn('Proxy WS closed – reconnecting in 3 s');
-    if (!reconnectTimer) reconnectTimer = setTimeout(connect, 3000);
-  });
+setInterval(sendBatch, BATCH_INTERVAL);
 
-  ws.on('error', err => console.error('WS error', err.message));
-}
-connect();
+console.log('Tailing Minecraft logs to Supabase');
 
-// ---- journalctl tail -------------------------------------------------
-let lineBuffer = '';
-const tail = spawn('journalctl', ['-u', 'minecraft', '-f', '-n', '0', '-o', 'cat']);
+// Use screen -S minecraft -p 0 -X hardcopy to get logs
+const tail = spawn('bash', ['-c', `
+  while true; do
+    if screen -ls | grep -q minecraft; then
+      screen -S minecraft -p 0 -X hardcopy /tmp/mc.log.tmp
+      if [ -f /tmp/mc.log.tmp ]; then
+        tail -n +1 /tmp/mc.log.tmp | grep -v "^$" || true
+        mv /tmp/mc.log.tmp /tmp/mc.log.prev 2>/dev/null || true
+      fi
+    fi
+    sleep 1
+  done
+`]);
 
-tail.stdout.on('data', chunk => {
-  lineBuffer += chunk.toString();
-  const lines = lineBuffer.split('\n');
-  lineBuffer = lines.pop() || '';
+let lastLine = '';
 
-  lines.filter(l => l.trim()).forEach(line => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'log', line }));
+tail.stdout.on('data', (chunk) => {
+  const text = chunk.toString();
+  const lines = text.split('\n').filter(Boolean);
+  lines.forEach(line => {
+    if (line !== lastLine) {
+      batch.push(line.trim());
+      lastLine = line;
     }
   });
 });
 
-tail.stderr.on('data', d => console.error('journalctl stderr:', d.toString()));
-tail.on('error', e => console.error('journalctl spawn error', e));
+tail.stderr.on('data', d => console.error('tail stderr:', d.toString()));
+tail.on('close', code => {
+  console.error(`tail exited with code ${code}`);
+  process.exit(1);
+});
+
+process.on('SIGTERM', () => {
+  tail.kill();
+  sendBatch().finally(() => process.exit(0));
+});
