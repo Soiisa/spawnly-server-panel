@@ -672,13 +672,14 @@ write_files:
       After=network.target
 
       [Service]
+      Type=forking  # Added: Handles detached/forked processes like screen -dmS
       WorkingDirectory=/opt/minecraft
       Environment=SOFTWARE=${software}
       Environment=VERSION=${escapedVersion}
       Environment=IS_MODERN_FORGE=${isModernForge}
       ExecStartPre=/usr/local/bin/mc-sync-from-s3.sh
       ExecStart=/usr/bin/screen -dmS minecraft /bin/bash -c 'if [ "$SOFTWARE" = "forge" ] && [ "$IS_MODERN_FORGE" = "true" ] && [ -f "/opt/minecraft/run.sh" ]; then /bin/bash ./run.sh; else /usr/bin/java -Xmx${heapGb}G -Xms1G -jar server.jar nogui; fi'
-      ExecStop=/bin/bash -c 'echo stop | /usr/bin/mcrcon -H 127.0.0.1 -P 25575 -p "${rconPassword}"'
+      ExecStop=/bin/bash -c 'echo stop | /usr/local/bin/mcrcon -H 127.0.0.1 -P 25575 -p "${rconPassword}"'  # Updated: Correct path to mcrcon
       ExecStopPost=/usr/local/bin/mc-sync.sh
       Restart=always
       RestartSec=10
