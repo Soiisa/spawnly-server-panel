@@ -672,14 +672,13 @@ write_files:
       After=network.target
 
       [Service]
-      Type=forking  # Added: Handles detached/forked processes like screen -dmS
       WorkingDirectory=/opt/minecraft
       Environment=SOFTWARE=${software}
       Environment=VERSION=${escapedVersion}
       Environment=IS_MODERN_FORGE=${isModernForge}
       ExecStartPre=/usr/local/bin/mc-sync-from-s3.sh
-      ExecStart=/usr/bin/screen -dmS minecraft /bin/bash -c 'if [ "$SOFTWARE" = "forge" ] && [ "$IS_MODERN_FORGE" = "true" ] && [ -f "/opt/minecraft/run.sh" ]; then /bin/bash ./run.sh; else /usr/bin/java -Xmx${heapGb}G -Xms1G -jar server.jar nogui; fi'
-      ExecStop=/bin/bash -c 'echo stop | /usr/local/bin/mcrcon -H 127.0.0.1 -P 25575 -p "${rconPassword}"'  # Updated: Correct path to mcrcon
+      ExecStart=/bin/bash -c 'if [ "$SOFTWARE" = "forge" ] && [ "$IS_MODERN_FORGE" = "true" ] && [ -f "/opt/minecraft/run.sh" ]; then /bin/bash ./run.sh; else /usr/bin/java -Xmx${heapGb}G -Xms1G -jar server.jar nogui; fi'
+      ExecStop=/bin/bash -c 'echo stop | /usr/bin/mcrcon -H 127.0.0.1 -P 25575 -p "${rconPassword}"'
       ExecStopPost=/usr/local/bin/mc-sync.sh
       Restart=always
       RestartSec=10
@@ -719,8 +718,8 @@ write_files:
     permissions: '0644'
     content: |
       [Unit]
-      Description=Minecraft Console to Supabase
-      After=network.target minecraft.service
+      Description=Minecraft Console to Supabase (Single Row)
+      After=network.target
 
       [Service]
       WorkingDirectory=/opt/minecraft
@@ -807,20 +806,17 @@ runcmd:
   - chown -R minecraft:minecraft /opt/minecraft
   - mkdir -p /home/minecraft/.aws
   - chown -R minecraft:minecraft /home/minecraft
+  - apt-get update || true
+  - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
+  - apt-get install -y nodejs awscli || true
+  - cd /opt/minecraft || true
+  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors dotenv || true
+  - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
   - wget -O /usr/local/bin/mcrcon.tar.gz https://github.com/Tiiffi/mcrcon/releases/download/v0.7.2/mcrcon-0.7.2-linux-x86-64.tar.gz || true
   - tar -xzf /usr/local/bin/mcrcon.tar.gz -C /usr/local/bin/ || true
   - chmod +x /usr/local/bin/mcrcon || true
   - rm /usr/local/bin/mcrcon.tar.gz || true
-  - systemctl daemon-reload
-  - systemctl enable minecraft || true
-  - systemctl start minecraft || true
-  - apt-get update || true
-  - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
-  - apt-get install -y nodejs awscli || true
-  - cd /opt/minecraft || true
-  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors node-fetch dotenv || true
-  - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption} || echo "[ERROR] Failed to download status-reporter.js"
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js ${endpointCliOption} || echo "[ERROR] Failed to download console-server.js"
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js ${endpointCliOption} || echo "[ERROR] Failed to download properties-api.js"
@@ -832,10 +828,12 @@ runcmd:
   - systemctl enable mc-sync.service || true
   - systemctl enable mc-sync.timer || true
   - systemctl start mc-sync.timer || true
-  - systemctl enable mc-status-reporter || true
-  - systemctl start mc-status-reporter || true
   - systemctl enable mc-console || true
   - systemctl start mc-console || true
+  - systemctl enable minecraft || true
+  - systemctl start minecraft || true
+  - systemctl enable mc-status-reporter || true
+  - systemctl start mc-status-reporter || true
   - systemctl enable mc-properties-api || true
   - systemctl start mc-properties-api || true
   - systemctl enable mc-metrics || true

@@ -1,7 +1,7 @@
 // console-server.js
 require('dotenv').config();
 const { spawn } = require('child_process');
-const fetch = require('node-fetch');
+const fetch = globalThis.fetch;
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -12,75 +12,81 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !SERVER_ID) {
   process.exit(1);
 }
 
-const SUPABASE_API = `${SUPABASE_URL}/rest/v1/console_logs`;
+const SUPABASE_API = `${SUPABASE_URL}/rest/v1/server_console`;
 const HEADERS = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
   'Content-Type': 'application/json',
-  'Prefer': 'return=minimal',
+  'Prefer': 'resolution=merge-duplicates',
 };
 
-let batch = [];
-let buffer = '';
-const BATCH_INTERVAL = 3000; // 3s
+// Config
+const MAX_LOG_LINES = 500;        // Max lines to keep
+const UPDATE_INTERVAL = 3000;     // Send update every 3s
+let logBuffer = [];
 
-const sendBatch = async () => {
-  if (batch.length === 0) return;
+// Append new lines and truncate
+const appendLog = (line) => {
+  logBuffer.push(line.trim());
+  if (logBuffer.length > MAX_LOG_LINES) {
+    logBuffer = logBuffer.slice(-MAX_LOG_LINES);
+  }
+};
+
+// Send current buffer to Supabase (UPSERT via POST)
+const sendUpdate = async () => {
+  if (logBuffer.length === 0) return;
+
+  const fullLog = logBuffer.join('\n');
+
   try {
     const resp = await fetch(SUPABASE_API, {
       method: 'POST',
       headers: HEADERS,
-      body: JSON.stringify(batch.map(line => ({ server_id: SERVER_ID, line }))),
+      body: JSON.stringify({
+        server_id: SERVER_ID,
+        console_log: fullLog,
+        updated_at: new Date().toISOString(),
+      }),
     });
+
     if (!resp.ok) {
       const text = await resp.text();
       throw new Error(`HTTP ${resp.status}: ${text}`);
     }
-    console.log(`Sent ${batch.length} logs to Supabase`);
-    batch = [];
+
+    console.log(`Updated console log for server ${SERVER_ID} (${logBuffer.length} lines)`);
   } catch (err) {
-    console.error('Failed to send batch:', err.message);
+    console.error('Failed to update console:', err.message);
   }
 };
 
-setInterval(sendBatch, BATCH_INTERVAL);
+setInterval(sendUpdate, UPDATE_INTERVAL);
 
-console.log('Tailing Minecraft logs to Supabase');
+console.log('Streaming console to single Supabase row (per server)');
 
-// Use screen -S minecraft -p 0 -X hardcopy to get logs
-const tail = spawn('bash', ['-c', `
-  while true; do
-    if screen -ls | grep -q minecraft; then
-      screen -S minecraft -p 0 -X hardcopy /tmp/mc.log.tmp
-      if [ -f /tmp/mc.log.tmp ]; then
-        tail -n +1 /tmp/mc.log.tmp | grep -v "^$" || true
-        mv /tmp/mc.log.tmp /tmp/mc.log.prev 2>/dev/null || true
-      fi
-    fi
-    sleep 1
-  done
-`]);
+const journalctl = spawn('journalctl', ['-u', 'minecraft.service', '-f', '-o', 'cat']);
 
-let lastLine = '';
+let buffer = '';
+journalctl.stdout.on('data', (chunk) => {
+  buffer += chunk.toString();
+  const lines = buffer.split('\n');
+  buffer = lines.pop(); // incomplete line
 
-tail.stdout.on('data', (chunk) => {
-  const text = chunk.toString();
-  const lines = text.split('\n').filter(Boolean);
-  lines.forEach(line => {
-    if (line !== lastLine) {
-      batch.push(line.trim());
-      lastLine = line;
-    }
-  });
+  lines
+    .filter(Boolean)
+    .map(l => l.trim())
+    .filter(l => l)
+    .forEach(appendLog);
 });
 
-tail.stderr.on('data', d => console.error('tail stderr:', d.toString()));
-tail.on('close', code => {
-  console.error(`tail exited with code ${code}`);
+journalctl.stderr.on('data', d => console.error('journalctl stderr:', d.toString()));
+journalctl.on('close', code => {
+  console.error(`journalctl exited with code ${code}`);
   process.exit(1);
 });
 
 process.on('SIGTERM', () => {
-  tail.kill();
-  sendBatch().finally(() => process.exit(0));
+  journalctl.kill();
+  sendUpdate().finally(() => process.exit(0));
 });

@@ -1,214 +1,144 @@
 // components/ConsoleViewer.js
 import { useEffect, useRef, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export default function ConsoleViewer({ server }) {
   const logRef = useRef(null);
-  const wsRef = useRef(null);
+  const subscriptionRef = useRef(null);
   const [lines, setLines] = useState([]);
   const [connected, setConnected] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [paused, setPaused] = useState(false);
   const [command, setCommand] = useState('');
   const [status, setStatus] = useState('Connecting...');
-  const pausedRef = useRef(paused);
 
-  // Keep ref in sync
-  useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
-
-  // === CONNECTION LOGIC ===
   useEffect(() => {
     if (!server?.id) return;
 
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${location.host}/ws/console/${server.id}`;
-    let source = null;
+    // Load initial console log
+    const loadConsole = async () => {
+      const { data, error } = await supabase
+        .from('server_console')
+        .select('console_log')
+        .eq('server_id', server.id)
+        .single();
 
-    const connect = () => {
-      setStatus('Connecting...');
-
-      // Prefer WebSocket
-      if (typeof WebSocket !== 'undefined') {
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-        setupWebSocket(ws);
-      } else {
-        // Fallback to SSE
-        const es = new EventSource(`/sse/console/${server.id}`);
-        wsRef.current = es;
-        es.onmessage = (e) => {
-          try {
-            const msg = JSON.parse(e.data);
-            if (msg.type === 'log') handleLine(msg.line);
-          } catch {}
-        };
-        es.onerror = () => {
-          setStatus('SSE error, retrying...');
-          setTimeout(() => es.close(), 2000);
-        };
-        es.onopen = () => setStatus('Connected via SSE');
+      if (error && error.code !== 'PGRST116') { // Ignore if no row exists yet
+        console.error('Error loading console:', error);
+        return;
       }
+
+      const logText = data?.console_log || '';
+      setLines(logText ? logText.split('\n') : []);
     };
 
-    const setupWebSocket = (ws) => {
-      ws.onopen = () => {
-        setConnected(true);
-        setLines([]);
-        setStatus('Live');
-      };
+    loadConsole();
 
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg.type === 'log') handleLine(msg.line);
-        } catch (err) {
-          console.warn('Invalid message:', ev.data);
+    // Subscribe to realtime updates via Postgres changes
+    const channel = supabase.channel(`console:${server.id}`);
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'server_console',
+          filter: `server_id=eq.${server.id}`,
+        },
+        (payload) => {
+          if (paused) return;
+          if (payload.eventType === 'DELETE') return; // Ignore deletes
+          const newLog = payload.new?.console_log || '';
+          setLines(newLog.split('\n'));
         }
-      };
+      )
+      .subscribe((subStatus) => {
+        setConnected(subStatus === 'SUBSCRIBED');
+        setStatus(subStatus === 'SUBSCRIBED' ? 'Live' : subStatus);
+      });
 
-      ws.onclose = () => {
-        setConnected(false);
-        setStatus('Reconnecting...');
-        setTimeout(connect, 2500);
-      };
-
-      ws.onerror = () => {
-        setStatus('Connection error');
-      };
-    };
-
-    const handleLine = (line) => {
-      if (pausedRef.current) return;
-      setLines((prev) => [...prev, line]);
-    };
-
-    connect();
+    subscriptionRef.current = channel;
 
     return () => {
-      if (wsRef.current instanceof WebSocket) {
-        wsRef.current.close();
-      } else if (wsRef.current instanceof EventSource) {
-        wsRef.current.close();
-      }
-      wsRef.current = null;
+      supabase.removeChannel(channel);
     };
-  }, [server?.id]);
+  }, [server?.id, paused]);
 
-  // === AUTO-SCROLL ===
+  // Auto-scroll
   useEffect(() => {
-    if (!autoScroll || !logRef.current) return;
-    const el = logRef.current;
-    el.scrollTop = el.scrollHeight;
+    if (autoScroll && logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
   }, [lines, autoScroll]);
 
-  // === SEND RCON COMMAND ===
+  // RCON (unchanged)
   const sendCommand = async (e) => {
     e?.preventDefault();
     if (!command.trim()) return;
-
-    const cmd = command.trim();
-    setCommand('');
-    setStatus('Sending command...');
-
     try {
+      setStatus('Sending...');
       const resp = await fetch('/api/servers/rcon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverId: server.id, command: cmd }),
+        body: JSON.stringify({ serverId: server.id, command: command.trim() }),
       });
-
-      const json = await resp.json().catch(() => ({}));
-
-      if (!resp.ok) {
-        setStatus(`Error: ${json.error || resp.statusText}`);
-      } else {
-        setStatus('Command sent');
-        if (json.response) {
-          setLines((prev) => [...prev, `[RCON →] ${cmd}`, `[RCON ←] ${json.response}`]);
-        } else {
-          setLines((prev) => [...prev, `[RCON] ${cmd}`]);
-        }
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.error || 'Failed');
+      setStatus('Sent');
+      if (json.response) {
+        setLines(prev => [...prev, `[rcon] ${json.response}`]);
       }
     } catch (err) {
-      setStatus(`Failed: ${err.message}`);
+      setStatus(`Error: ${err.message}`);
     } finally {
-      setTimeout(() => setStatus(connected ? 'Live' : 'Disconnected'), 2000);
+      setCommand('');
+      setTimeout(() => setStatus('Connected'), 2000);
     }
   };
 
-  // === UI ===
   return (
-    <div className="bg-white rounded-lg shadow p-4 max-w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-white rounded-lg shadow p-4">
+      <div className="flex items-center justify-between mb-2">
         <div>
           <strong className="text-lg">{server?.name || 'Server Console'}</strong>
           <div className="text-sm text-gray-500">
             {connected ? 'Live' : 'Disconnected'} — {status}
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setAutoScroll((s) => !s)}
-            className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition"
-          >
-            {autoScroll ? 'Auto ON' : 'Auto OFF'}
+        <div className="flex items-center space-x-2">
+          <button onClick={() => setAutoScroll(s => !s)} className="px-2 py-1 bg-gray-100 rounded">
+            {autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
           </button>
-          <button
-            onClick={() => setPaused((p) => !p)}
-            className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition"
-          >
+          <button onClick={() => setPaused(p => !p)} className="px-2 py-1 bg-gray-100 rounded">
             {paused ? 'Resume' : 'Pause'}
           </button>
-          <button
-            onClick={() => setLines([])}
-            className="px-3 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition"
-          >
-            Clear
-          </button>
+          <button onClick={() => setLines([])} className="px-2 py-1 bg-gray-100 rounded">Clear</button>
         </div>
       </div>
 
-      {/* Log Display */}
       <div
         ref={logRef}
-        className="h-96 overflow-y-auto p-3 bg-black text-green-400 font-mono text-xs leading-tight rounded border border-gray-300 whitespace-pre-wrap"
+        style={{ height: 360, overflowY: 'auto', fontFamily: 'monospace', whiteSpace: 'pre-wrap', fontSize: 12 }}
+        className="p-2 border rounded bg-black text-white"
       >
         {lines.length === 0 ? (
-          <div className="text-gray-500 italic">Waiting for logs...</div>
+          <div className="text-gray-400">No logs yet — waiting for data...</div>
         ) : (
-          lines.map((line, i) => (
-            <div key={i} className="truncate">
-              {line}
-            </div>
-          ))
+          lines.map((l, i) => <div key={i}>{l}</div>)
         )}
       </div>
 
-      {/* Command Input */}
       <form onSubmit={sendCommand} className="mt-3 flex gap-2">
         <input
-          type="text"
-          className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm font-mono placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder='e.g. "say Hello players!"'
+          className="flex-1 px-3 py-2 border rounded"
+          placeholder='Type a command (e.g. "say hello")'
           value={command}
           onChange={(e) => setCommand(e.target.value)}
-          disabled={!connected}
         />
-        <button
-          type="submit"
-          disabled={!connected || !command.trim()}
-          className="px-4 py-2 bg-indigo-600 text-white rounded font-medium hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
-        >
-          Send
-        </button>
+        <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded">Send</button>
       </form>
-
-      {/* Footer Note */}
-      <div className="mt-2 text-xs text-gray-500">
-        Logs are streamed live and persisted for instant reload.
-      </div>
     </div>
   );
 }
