@@ -6,7 +6,6 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.
 
 export default function ConsoleViewer({ server }) {
   const logRef = useRef(null);
-  const subscriptionRef = useRef(null);
   const [lines, setLines] = useState([]);
   const [connected, setConnected] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -36,65 +35,83 @@ export default function ConsoleViewer({ server }) {
 
     loadConsole();
 
-    // Subscribe to realtime updates via Postgres changes
-    const channel = supabase.channel(`console:${server.id}`);
-    channel
+    // Subscribe to realtime updates - FIXED VERSION
+    const channel = supabase
+      .channel(`console:${server.id}`)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: '*', // Listen for INSERT, UPDATE, DELETE
           schema: 'public',
           table: 'server_console',
           filter: `server_id=eq.${server.id}`,
         },
         (payload) => {
           if (paused) return;
-          if (payload.eventType === 'DELETE') return; // Ignore deletes
+          
+          console.log('Realtime update received:', payload);
+          
+          // Handle different event types
+          if (payload.eventType === 'DELETE') {
+            setLines([]);
+            return;
+          }
+          
+          // For INSERT or UPDATE
           const newLog = payload.new?.console_log || '';
-          setLines(newLog.split('\n'));
+          if (newLog) {
+            setLines(newLog.split('\n'));
+          }
         }
       )
-      .subscribe((subStatus) => {
-        setConnected(subStatus === 'SUBSCRIBED');
-        setStatus(subStatus === 'SUBSCRIBED' ? 'Live' : subStatus);
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+        setConnected(status === 'SUBSCRIBED');
+        setStatus(status === 'SUBSCRIBED' ? 'Live' : status);
       });
 
-    subscriptionRef.current = channel;
-
     return () => {
+      console.log('Cleaning up subscription');
       supabase.removeChannel(channel);
     };
   }, [server?.id, paused]);
 
-  // Auto-scroll
+  // Auto-scroll to bottom when new lines are added
   useEffect(() => {
     if (autoScroll && logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [lines, autoScroll]);
 
-  // RCON (unchanged)
   const sendCommand = async (e) => {
     e?.preventDefault();
     if (!command.trim()) return;
+    
     try {
       setStatus('Sending...');
       const resp = await fetch('/api/servers/rcon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverId: server.id, command: command.trim() }),
+        body: JSON.stringify({ 
+          serverId: server.id, 
+          command: command.trim() 
+        }),
       });
+      
       const json = await resp.json();
-      if (!resp.ok) throw new Error(json.error || 'Failed');
+      if (!resp.ok) throw new Error(json.error || 'Failed to send command');
+      
       setStatus('Sent');
       if (json.response) {
+        // Add command response to console
         setLines(prev => [...prev, `[rcon] ${json.response}`]);
       }
     } catch (err) {
+      console.error('Command error:', err);
       setStatus(`Error: ${err.message}`);
     } finally {
       setCommand('');
-      setTimeout(() => setStatus('Connected'), 2000);
+      setTimeout(() => setStatus(connected ? 'Live' : 'Disconnected'), 2000);
     }
   };
 
@@ -104,40 +121,75 @@ export default function ConsoleViewer({ server }) {
         <div>
           <strong className="text-lg">{server?.name || 'Server Console'}</strong>
           <div className="text-sm text-gray-500">
-            {connected ? 'Live' : 'Disconnected'} — {status}
+            Status: {connected ? 'Live' : 'Disconnected'} — {status}
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <button onClick={() => setAutoScroll(s => !s)} className="px-2 py-1 bg-gray-100 rounded">
-            {autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
+          <button 
+            onClick={() => setAutoScroll(s => !s)} 
+            className={`px-3 py-1 rounded text-sm ${
+              autoScroll ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+            }`}
+          >
+            Auto-scroll: {autoScroll ? 'ON' : 'OFF'}
           </button>
-          <button onClick={() => setPaused(p => !p)} className="px-2 py-1 bg-gray-100 rounded">
+          <button 
+            onClick={() => setPaused(p => !p)} 
+            className={`px-3 py-1 rounded text-sm ${
+              paused ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
+            }`}
+          >
             {paused ? 'Resume' : 'Pause'}
           </button>
-          <button onClick={() => setLines([])} className="px-2 py-1 bg-gray-100 rounded">Clear</button>
+          <button 
+            onClick={() => setLines([])} 
+            className="px-3 py-1 bg-red-100 text-red-800 rounded text-sm"
+          >
+            Clear
+          </button>
         </div>
       </div>
 
       <div
         ref={logRef}
-        style={{ height: 360, overflowY: 'auto', fontFamily: 'monospace', whiteSpace: 'pre-wrap', fontSize: 12 }}
-        className="p-2 border rounded bg-black text-white"
+        style={{ 
+          height: '400px', 
+          overflowY: 'auto', 
+          fontFamily: 'monospace', 
+          whiteSpace: 'pre-wrap', 
+          fontSize: '12px',
+          lineHeight: '1.2'
+        }}
+        className="p-3 border rounded bg-black text-green-400"
       >
         {lines.length === 0 ? (
-          <div className="text-gray-400">No logs yet — waiting for data...</div>
+          <div className="text-gray-500 italic">
+            {connected ? 'Waiting for logs...' : 'Connecting to console...'}
+          </div>
         ) : (
-          lines.map((l, i) => <div key={i}>{l}</div>)
+          lines.map((line, index) => (
+            <div key={index} className="console-line">
+              {line}
+            </div>
+          ))
         )}
       </div>
 
       <form onSubmit={sendCommand} className="mt-3 flex gap-2">
         <input
-          className="flex-1 px-3 py-2 border rounded"
-          placeholder='Type a command (e.g. "say hello")'
+          className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder='Type a Minecraft command (e.g., "say hello", "list", "time set day")'
           value={command}
           onChange={(e) => setCommand(e.target.value)}
+          disabled={!connected}
         />
-        <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded">Send</button>
+        <button 
+          type="submit" 
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+          disabled={!connected || !command.trim()}
+        >
+          Send
+        </button>
       </form>
     </div>
   );
