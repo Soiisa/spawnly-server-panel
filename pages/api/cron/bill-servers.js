@@ -1,3 +1,5 @@
+// pages/api/cron/bill-servers.js
+
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -5,21 +7,31 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CRON_SECRET = process.env.CRON_SECRET; // Set this in env for security
 
 async function deductCredits(supabaseAdmin, userId, amount, description) {
-  const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
-  if (error || profile.credits < amount) {
+  const { data: profile, error: profileError } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
+  if (profileError) {
+    throw new Error(`Failed to fetch profile: ${profileError.message}`);
+  }
+  if (profile.credits < amount) {
     throw new Error('Insufficient credits');
   }
 
   const newCredits = profile.credits - amount;
-  await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
 
-  await supabaseAdmin.from('credit_transactions').insert({
+  const { error: updateError } = await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
+  if (updateError) {
+    throw new Error(`Failed to update credits: ${updateError.message}`);
+  }
+
+  const { error: insertError } = await supabaseAdmin.from('credit_transactions').insert({
     user_id: userId,
     amount: -amount,
-    type: 'deduction',
+    type: 'usage',
     description,
     created_at: new Date().toISOString()
   });
+  if (insertError) {
+    throw new Error(`Failed to insert transaction: ${insertError.message}`);
+  }
 }
 
 export default async function handler(req, res) {

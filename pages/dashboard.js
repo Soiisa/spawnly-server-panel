@@ -560,7 +560,7 @@ export default function Dashboard() {
                       </svg>
                       <span className="text-gray-600">IP Address:</span>
                     </div>
-                    <span className="font-medium text-sm">{server.ipv4 || 'Not assigned'}</span>
+                    <span className="font-medium text-sm">{server.name + ".spawnly.net" || 'Not assigned'}</span>
                   </div>
                 </div>
                 

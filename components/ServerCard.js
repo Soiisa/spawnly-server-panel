@@ -6,7 +6,7 @@ export default function ServerCard({ server, onStart, onStop, onDelete }) {
         <h3 className="text-lg font-semibold text-indigo-900">{server.name}</h3>
         <p className="text-sm text-neutral-600">RAM: <span className="font-medium">{server.ram} GB</span></p>
         <p className="text-sm text-neutral-600">Status: <span className={server.status === "running" ? "text-green-600 font-medium" : "text-orange-600 font-medium"}>{server.status}</span></p>
-        <p className="text-sm text-neutral-500">IP: <span className="font-mono">{server.ip || "—"}</span></p>
+        <p className="text-sm text-neutral-500">IP: <span className="font-mono">{server.name + ".spawnly.net" || '—'}</span></p>
       </div>
 
       <div className="flex items-center space-x-3">

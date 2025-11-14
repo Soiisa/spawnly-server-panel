@@ -48,18 +48,18 @@ export default function MetricsViewer({ server }) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="font-bold">CPU Usage</div>
-          <div className="text-2xl">{metrics.cpu}%</div>
+          <div className="text-2xl">{Math.round(metrics.cpu)}%</div>
           <div className="text-sm text-gray-500">Usage</div>
           <div className="bg-gray-200 h-4 rounded">
-            <div className="bg-blue-500 h-4 rounded" style={{ width: `${Math.min(metrics.cpu, 100)}%` }} />
+            <div className="bg-blue-500 h-4 rounded" style={{ width: `${Math.min(Math.round(metrics.cpu), 100)}%` }} />
           </div>
         </div>
         <div>
           <div className="font-bold">RAM Usage</div>
-          <div className="text-2xl">{metrics.ram}%</div>
+          <div className="text-2xl">{Math.round(metrics.ram)}%</div>
           <div className="text-sm text-gray-500">Usage</div>
           <div className="bg-gray-200 h-4 rounded">
-            <div className="bg-green-500 h-4 rounded" style={{ width: `${Math.min(metrics.ram, 100)}%` }} />
+            <div className="bg-green-500 h-4 rounded" style={{ width: `${Math.min(Math.round(metrics.ram), 100)}%` }} />
           </div>
         </div>
       </div>
