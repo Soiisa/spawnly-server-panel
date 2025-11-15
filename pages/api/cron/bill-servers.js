@@ -6,32 +6,23 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABAS
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CRON_SECRET = process.env.CRON_SECRET; // Set this in env for security
 
-async function deductCredits(supabaseAdmin, userId, amount, description) {
-  const { data: profile, error: profileError } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
-  if (profileError) {
-    throw new Error(`Failed to fetch profile: ${profileError.message}`);
-  }
-  if (profile.credits < amount) {
+async function deductCredits(supabaseAdmin, userId, amount, description, sessionId) { // Added sessionId param
+  const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
+  if (error || profile.credits < amount) {
     throw new Error('Insufficient credits');
   }
 
   const newCredits = profile.credits - amount;
+  await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
 
-  const { error: updateError } = await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
-  if (updateError) {
-    throw new Error(`Failed to update credits: ${updateError.message}`);
-  }
-
-  const { error: insertError } = await supabaseAdmin.from('credit_transactions').insert({
+  await supabaseAdmin.from('credit_transactions').insert({
     user_id: userId,
     amount: -amount,
-    type: 'usage',
+    type: 'usage', // Changed from 'deduction'
     description,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    session_id: sessionId // New
   });
-  if (insertError) {
-    throw new Error(`Failed to insert transaction: ${insertError.message}`);
-  }
 }
 
 export default async function handler(req, res) {
@@ -43,7 +34,7 @@ export default async function handler(req, res) {
   const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   // Fetch all running servers
-  const { data: runningServers, error } = await supabaseAdmin.from('servers').select('*').eq('status', 'Running');
+  const { data: runningServers, error } = await supabaseAdmin.from('servers').select('*, current_session_id').eq('status', 'Running'); // Added current_session_id
   if (error) return res.status(500).json({ error: 'Failed to fetch running servers' });
 
   console.log('Cron bill-servers triggered; running servers count:', (runningServers || []).length);
@@ -107,7 +98,7 @@ export default async function handler(req, res) {
 
     // Deduct
     try {
-      await deductCredits(supabaseAdmin, server.user_id, cost, `Runtime charge for server ${server.id} (${billableSeconds} seconds)`);
+      await deductCredits(supabaseAdmin, server.user_id, cost, `Runtime charge for server ${server.id} (${billableSeconds} seconds)`, server.current_session_id); // Pass session_id
       processedCount++;
       console.log(`Charged user ${server.user_id} ${cost} credits for server ${server.id}`);
     } catch (deductErr) {

@@ -1,3 +1,4 @@
+// pages/api/servers/action.js
 import { createClient } from '@supabase/supabase-js';
 import { S3Client, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
@@ -197,7 +198,7 @@ const deleteS3ServerFolder = async (serverId) => {
   }
 };
 
-async function deductCredits(supabaseAdmin, userId, amount, description) {
+async function deductCredits(supabaseAdmin, userId, amount, description, sessionId) { // Added sessionId param
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
   if (error || profile.credits < amount) {
     throw new Error('Insufficient credits');
@@ -209,9 +210,10 @@ async function deductCredits(supabaseAdmin, userId, amount, description) {
   await supabaseAdmin.from('credit_transactions').insert({
     user_id: userId,
     amount: -amount,
-    type: 'deduction',
+    type: 'usage', // Changed from 'deduction'
     description,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    session_id: sessionId // New
   });
 }
 
@@ -240,7 +242,7 @@ async function billRemainingTime(supabaseAdmin, server) {
   const cost = hours * server.cost_per_hour;
 
   // Deduct and log
-  await deductCredits(supabaseAdmin, server.user_id, cost, `Final runtime charge for server ${server.id} (${elapsedSeconds} seconds)`);
+  await deductCredits(supabaseAdmin, server.user_id, cost, `Final runtime charge for server ${server.id} (${elapsedSeconds} seconds)`, server.current_session_id); // Pass session_id
 
   // Persist billing anchor so the DB reflects that we billed through 'now'
   try {
@@ -401,6 +403,7 @@ export default async function handler(req, res) {
             last_billed_at: null,
             runtime_accumulated_seconds: 0,
             running_since: null,
+            current_session_id: null, // Clear session
             last_heartbeat_at: nowIso
           })
           .eq('id', serverId);
@@ -435,16 +438,27 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Unknown action' });
     }
 
+    // Before hetznerDoAction, for 'start': Generate session_id if none
+    let sessionId = server.current_session_id;
+    if (action === 'start' && !sessionId) {
+      sessionId = crypto.randomUUID();
+      console.log(`[API:action] Generating new session_id: ${sessionId}`);
+    }
+
     console.log(`[API:action] Performing Hetzner action: ${hetAction} for server: ${server.hetzner_id}`);
     const hetRes = await hetznerDoAction(server.hetzner_id, hetAction);
 
     console.log(`[API:action] Updating server status to ${newStatus} in Supabase`);
     const now = new Date().toISOString();
-    const { error: statusUpdateErr } = await supabaseAdmin.from('servers').update({ 
+    const updateFields = { 
       status: newStatus,
       last_billed_at: now,
       runtime_accumulated_seconds: 0 
-    }).eq('id', serverId);
+    };
+    if (action === 'start' && sessionId !== server.current_session_id) {
+      updateFields.current_session_id = sessionId;  // New session on fresh start
+    }
+    const { error: statusUpdateErr } = await supabaseAdmin.from('servers').update(updateFields).eq('id', serverId);
     if (statusUpdateErr) {
       console.error('[API:action] Failed to update server status in Supabase:', statusUpdateErr.message);
       return res.status(500).json({ error: 'Failed to update server status', detail: statusUpdateErr.message });

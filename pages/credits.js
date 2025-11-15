@@ -21,7 +21,7 @@ export default function CreditsPage() {
       try {
         const { data, error } = await supabase
           .from("credit_transactions")
-          .select("id, amount, type, description, created_at")
+          .select("id, amount, type, description, created_at, session_id") // Added session_id
           .eq("user_id", session.user.id)
           .order("created_at", { ascending: false })
           .limit(50); // Limit to recent 50 transactions
@@ -93,6 +93,66 @@ export default function CreditsPage() {
     );
   };
 
+  // New: Group transactions
+  const groupedTransactions = () => {
+    const groups = [];
+    const sessionMap = new Map();
+    const nonSession = [];
+
+    transactions.forEach((tx) => {
+      if (tx.session_id && tx.type === 'usage') {
+        if (!sessionMap.has(tx.session_id)) {
+          sessionMap.set(tx.session_id, []);
+        }
+        sessionMap.get(tx.session_id).push(tx);
+      } else {
+        nonSession.push(tx);
+      }
+    });
+
+    sessionMap.forEach((txs, sessionId) => {
+      // Sort txs by created_at asc for chronology
+      txs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+      const totalAmount = txs.reduce((sum, tx) => sum + tx.amount, 0);
+      const totalSeconds = txs.reduce((sum, tx) => {
+        const { seconds } = parseUsage(tx.description);
+        return sum + (seconds || 0);
+      }, 0);
+      const startDate = formatDate(txs[0].created_at);
+      const endDate = formatDate(txs[txs.length - 1].created_at);
+      const serverId = parseUsage(txs[0].description).serverId;  // Assume consistent
+
+      groups.push({
+        sessionId,
+        totalAmount,
+        totalSeconds,
+        startDate,
+        endDate,
+        serverId,
+        details: txs,
+      });
+    });
+
+    // Add non-session as individual "groups"
+    nonSession.forEach((tx) => {
+      const { seconds, serverId } = parseUsage(tx.description);
+      groups.push({
+        sessionId: null,
+        totalAmount: tx.amount,
+        totalSeconds: seconds || 0,
+        startDate: formatDate(tx.created_at),
+        endDate: formatDate(tx.created_at),
+        serverId,
+        details: [tx],
+      });
+    });
+
+    // Sort groups by startDate desc
+    groups.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    return groups;
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -155,21 +215,43 @@ export default function CreditsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {transactions.map((tx) => (
-                    <tr key={tx.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatDate(tx.created_at)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 capitalize">
-                        {tx.type}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {tx.amount > 0 ? `+${tx.amount.toFixed(2)}` : tx.amount.toFixed(2)} credits
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {renderUsageCell(tx.description)}
-                      </td>
-                    </tr>
+                  {groupedTransactions().map((group) => (
+                    <React.Fragment key={group.sessionId || group.details[0].id}>
+                      <tr>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {group.startDate} {group.startDate !== group.endDate ? `to ${group.endDate}` : ''}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 capitalize">
+                          {group.details[0].type} Session
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {group.totalAmount > 0 ? `+${group.totalAmount.toFixed(2)}` : group.totalAmount.toFixed(2)} credits
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {group.serverId ? (
+                            <details>
+                              <summary className="cursor-pointer">
+                                <a href={`/server/${group.serverId}`} className="text-indigo-600 hover:underline">
+                                  Server {group.serverId.slice(0, 8)}
+                                </a>
+                                <div className="text-sm text-gray-500">
+                                  {fmtSeconds(group.totalSeconds)}
+                                </div>
+                              </summary>
+                              <ul className="mt-2 pl-4 list-disc text-sm text-gray-600">
+                                {group.details.map((tx) => (
+                                  <li key={tx.id}>
+                                    {formatDate(tx.created_at)}: {tx.amount.toFixed(2)} credits ({fmtSeconds(parseUsage(tx.description).seconds) || tx.description})
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          ) : (
+                            <span className="text-gray-600">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
