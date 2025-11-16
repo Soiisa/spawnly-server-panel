@@ -1,6 +1,7 @@
 // pages/api/servers/action.js
 import { createClient } from '@supabase/supabase-js';
 import { S3Client, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { v4 as uuidv4 } from 'uuid'; // ← Reliable UUID generator
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -27,14 +28,12 @@ const s3Client = new S3Client({
 const deleteCloudflareRecords = async (subdomain, maxRetries = 3) => {
   console.log(`[deleteCloudflareRecords] Attempting to delete DNS records for subdomain: ${subdomain}`);
   
-  // Extract subdomain prefix if full domain is provided
   let subdomainPrefix = subdomain;
   if (subdomain.endsWith(DOMAIN_SUFFIX)) {
     subdomainPrefix = subdomain.replace(DOMAIN_SUFFIX, '');
     console.log(`[deleteCloudflareRecords] Extracted subdomain prefix: ${subdomainPrefix}`);
   }
 
-  // Validate subdomain prefix (allow uppercase letters)
   if (!subdomainPrefix || typeof subdomainPrefix !== 'string' || !subdomainPrefix.match(/^[a-zA-Z0-9-]+$/)) {
     console.warn(`[deleteCloudflareRecords] Invalid or missing subdomain prefix: ${subdomainPrefix}, skipping DNS deletion`);
     return false;
@@ -86,7 +85,7 @@ const deleteCloudflareRecords = async (subdomain, maxRetries = 3) => {
             console.log(`[deleteCloudflareRecords] Successfully deleted ${record.type} record ${record.id} for ${recordType.name}`);
           }
         }
-        break; // Success, move to next record type
+        break;
       } catch (err) {
         attempt++;
         console.error(`[deleteCloudflareRecords] Attempt ${attempt} failed for ${recordType.type} record: ${err.message}`);
@@ -94,7 +93,7 @@ const deleteCloudflareRecords = async (subdomain, maxRetries = 3) => {
           console.error(`[deleteCloudflareRecords] Failed to delete ${recordType.type} records for ${recordType.name} after ${maxRetries} attempts: ${err.message}`);
           allDeleted = false;
         }
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
   }
@@ -198,7 +197,7 @@ const deleteS3ServerFolder = async (serverId) => {
   }
 };
 
-async function deductCredits(supabaseAdmin, userId, amount, description, sessionId) { // Added sessionId param
+async function deductCredits(supabaseAdmin, userId, amount, description, sessionId) {
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
   if (error || profile.credits < amount) {
     throw new Error('Insufficient credits');
@@ -210,15 +209,14 @@ async function deductCredits(supabaseAdmin, userId, amount, description, session
   await supabaseAdmin.from('credit_transactions').insert({
     user_id: userId,
     amount: -amount,
-    type: 'usage', // Changed from 'deduction'
+    type: 'usage',
     description,
     created_at: new Date().toISOString(),
-    session_id: sessionId // New
+    session_id: sessionId
   });
 }
 
 async function billRemainingTime(supabaseAdmin, server) {
-  // Compute a sensible base time for billing: prefer last_billed_at, fall back to running_since if last_billed_at is missing
   if (server.status !== 'Running') return;
 
   const now = new Date();
@@ -230,21 +228,16 @@ async function billRemainingTime(supabaseAdmin, server) {
     try { baseTime = new Date(server.running_since); } catch (e) { baseTime = null; }
   }
 
-  if (!baseTime) {
-    // No basis to compute billing (no last_billed_at or running_since)
-    return;
-  }
+  if (!baseTime) return;
 
   const elapsedSeconds = Math.floor((now - baseTime) / 1000) + (server.runtime_accumulated_seconds || 0);
-  if (elapsedSeconds < 60) return; // Minimum billable unit: 1 minute
+  if (elapsedSeconds < 60) return;
 
   const hours = elapsedSeconds / 3600;
   const cost = hours * server.cost_per_hour;
 
-  // Deduct and log
-  await deductCredits(supabaseAdmin, server.user_id, cost, `Final runtime charge for server ${server.id} (${elapsedSeconds} seconds)`, server.current_session_id); // Pass session_id
+  await deductCredits(supabaseAdmin, server.user_id, cost, `Final runtime charge for server ${server.id} (${elapsedSeconds} seconds)`, server.current_session_id);
 
-  // Persist billing anchor so the DB reflects that we billed through 'now'
   try {
     await supabaseAdmin.from('servers').update({ last_billed_at: now.toISOString(), runtime_accumulated_seconds: 0 }).eq('id', server.id);
   } catch (e) {
@@ -284,13 +277,11 @@ export default async function handler(req, res) {
       console.error('[API:action] Server not found or error:', serverErr?.message);
       return res.status(404).json({ error: 'Server not found', detail: serverErr?.message || null });
     }
-    console.log(`[API:action] Server data retrieved:`, { id: server.id, subdomain: server.subdomain, hetzner_id: server.hetzner_id, status: server.status, ipv4: server.ipv4 });
 
     const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
     if (profileErr || !profile) return res.status(500).json({ error: 'Failed to fetch user profile' });
 
     if (action === 'start' || action === 'restart') {
-      // Credit check: Require at least 5 min worth
       const minCost = (server.cost_per_hour / 60) * 5;
       if (profile.credits < minCost) {
         return res.status(402).json({ error: 'Insufficient credits to start server' });
@@ -391,7 +382,6 @@ export default async function handler(req, res) {
           return res.status(500).json({ error: 'Failed to delete server from Supabase', detail: delErr.message });
         }
       } else {
-        // For stop action, update Supabase to reflect stopped state
         console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped', clearing hetzner_id and ipv4`);
         const nowIso = new Date().toISOString();
         const { error: updateErr } = await supabaseAdmin
@@ -403,7 +393,7 @@ export default async function handler(req, res) {
             last_billed_at: null,
             runtime_accumulated_seconds: 0,
             running_since: null,
-            current_session_id: null, // Clear session
+            current_session_id: null, // ← CLEARED ON STOP
             last_heartbeat_at: nowIso
           })
           .eq('id', serverId);
@@ -438,10 +428,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Unknown action' });
     }
 
-    // Before hetznerDoAction, for 'start': Generate session_id if none
+    // Generate new session ID on fresh start (after stop)
     let sessionId = server.current_session_id;
     if (action === 'start' && !sessionId) {
-      sessionId = crypto.randomUUID();
+      sessionId = uuidv4(); // ← NEW UUID EVERY FRESH START
       console.log(`[API:action] Generating new session_id: ${sessionId}`);
     }
 
@@ -456,7 +446,7 @@ export default async function handler(req, res) {
       runtime_accumulated_seconds: 0 
     };
     if (action === 'start' && sessionId !== server.current_session_id) {
-      updateFields.current_session_id = sessionId;  // New session on fresh start
+      updateFields.current_session_id = sessionId; // ← SET NEW SESSION ID
     }
     const { error: statusUpdateErr } = await supabaseAdmin.from('servers').update(updateFields).eq('id', serverId);
     if (statusUpdateErr) {
