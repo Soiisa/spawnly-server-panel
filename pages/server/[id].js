@@ -1,3 +1,4 @@
+// pages/server/[id].js
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';

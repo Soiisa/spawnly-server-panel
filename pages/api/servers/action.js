@@ -431,7 +431,7 @@ export default async function handler(req, res) {
 
     // Generate new session ID on fresh start (after stop)
     let sessionId = server.current_session_id;
-    if (action === 'start' && sessionId === null) { // Explicit null check
+    if (action === 'start' && !sessionId) { // Falsy check for null/undefined
       sessionId = uuidv4(); // ← NEW UUID EVERY FRESH START
       console.log(`[API:action] Generating new session_id: ${sessionId}`);
     }
@@ -446,7 +446,7 @@ export default async function handler(req, res) {
       last_billed_at: now,
       runtime_accumulated_seconds: 0 
     };
-    if (action === 'start' && sessionId !== server.current_session_id) {
+    if (action === 'start' && sessionId && sessionId !== server.current_session_id) {
       updateFields.current_session_id = sessionId; // ← SET NEW SESSION ID
     }
     const { error: statusUpdateErr } = await supabaseAdmin.from('servers').update(updateFields).eq('id', serverId);

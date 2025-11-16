@@ -65,7 +65,7 @@ const getVanillaDownloadUrl = async (version) => {
       targetVersion = manifest.latest.release;
     }
 
-    const entry = manifest.versions.find((v) => v.id === targetVersion);
+    let entry = manifest.versions.find((v) => v.id === targetVersion);
     if (!entry) throw new Error(`Vanilla: version ${targetVersion} not found in manifest`);
     const versionJsonRes = await fetch(entry.url);
     if (!versionJsonRes.ok) throw new Error(`Failed to fetch vanilla version data: ${versionJsonRes.status}`);
@@ -85,7 +85,7 @@ const getForgeDownloadUrl = async (version) => {
     if (!manifestRes.ok) throw new Error(`Failed to fetch Forge version manifest: ${manifestRes.status}`);
     const manifestText = await manifestRes.text();
     
-    const versionMatch = manifestText.match(/<version>([\d.]+-[\d.]+(?:-[\w.-]+)?)<\/version>/g);
+    let versionMatch = manifestText.match(/<version>([\d.]+-[\d.]+(?:-[\w.-]+)?)<\/version>/g);
     if (!versionMatch) throw new Error('No versions found in Forge manifest');
     
     const versions = versionMatch.map(v => v.match(/<version>([\d.]+-[\d.]+(?:-[\w.-]+)?)/)[1]);
@@ -591,8 +591,8 @@ write_files:
 
       # Check if server.jar exists and matches the requested version
       CURRENT_VERSION=$(check_server_version)
-      echo "[DEBUG] Current server.jar version: $CURRENT_VERSION"
-      echo "[DEBUG] Requested version: $version"
+      echo "Current server.jar version: $CURRENT_VERSION"
+      echo "Requested version: $version"
 
       # Force re-download if version doesn't match or server.jar is missing
       if [ "$CURRENT_VERSION" != "$version" ] || [ ! -f "/opt/minecraft/server.jar" ]; then
@@ -615,7 +615,7 @@ write_files:
                 exit 1
               fi
             fi
-          elif [ "$software" = "fabric" ]; then
+          } elif [ "$software" = "fabric" ]; then
             echo "[startup] Setting up Fabric server"
             mv server-installer.jar server.jar
           else
@@ -849,12 +849,6 @@ runcmd:
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3006; done
   - ufw allow 22
   - ufw --force enable
-  - echo "[DEBUG] Running quick startup checks"
-  - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":25565\\b"; then echo "PORT 25565 OPEN"; break; fi; sleep 2; done;'
-  - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3003\\b"; then echo "PROPERTIES API PORT 3003 OPEN"; break; fi; sleep 2; done;'
-  - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3004\\b"; then echo "METRICS PORT 3004 OPEN"; break; fi; sleep 2; done;'
-  - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3005\\b"; then echo "FILE API PORT 3005 OPEN"; break; fi; sleep 2; done;'
-  - bash -c 'for i in {1..30}; do if ss -tuln | grep -q ":3006\\b"; then echo "STATUS PORT 3006 OPEN"; break; fi; sleep 2; done;'
   - echo "[FINAL DEBUG] Cloud-init finished at $(date)"
 `;
 
