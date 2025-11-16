@@ -277,6 +277,7 @@ export default async function handler(req, res) {
       console.error('[API:action] Server not found or error:', serverErr?.message);
       return res.status(404).json({ error: 'Server not found', detail: serverErr?.message || null });
     }
+    console.log(`[API:action] Server data retrieved:`, { id: server.id, subdomain: server.subdomain, hetzner_id: server.hetzner_id, status: server.status, ipv4: server.ipv4, current_session_id: server.current_session_id });
 
     const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
     if (profileErr || !profile) return res.status(500).json({ error: 'Failed to fetch user profile' });
@@ -430,7 +431,7 @@ export default async function handler(req, res) {
 
     // Generate new session ID on fresh start (after stop)
     let sessionId = server.current_session_id;
-    if (action === 'start' && !sessionId) {
+    if (action === 'start' && sessionId === null) { // Explicit null check
       sessionId = uuidv4(); // ← NEW UUID EVERY FRESH START
       console.log(`[API:action] Generating new session_id: ${sessionId}`);
     }
