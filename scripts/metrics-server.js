@@ -1,3 +1,4 @@
+// scripts/metrics-server.js
 const WebSocket = require('ws');
 const os = require('os');
 

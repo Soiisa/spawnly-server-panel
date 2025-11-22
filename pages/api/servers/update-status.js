@@ -1,10 +1,15 @@
+// pages/api/servers/update-status.js
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('Missing Supabase env vars');
+}
+
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false }
+  auth: { autoRefreshToken: false, persistSession: false },
 });
 
 export default async function handler(req, res) {
@@ -14,15 +19,39 @@ export default async function handler(req, res) {
   }
 
   try {
-  const { serverId, status, timestamp, cpu, memory, disk } = req.body;
+    const {
+      serverId,
+      status,
+      cpu,
+      memory,
+      disk,
+      player_count,
+      players_online,
+      tps,
+      tps_1m,
+      tps_5m,
+      tps_15m,
+      error: reporterError,
+      timestamp,
+    } = req.body;
 
-    console.log('Received status update:', { serverId, status, timestamp });
+    console.log('Status update received:', {
+      serverId,
+      status,
+      cpu,
+      memory,
+      player_count,
+      players_online,
+      tps,
+    });
 
-    if (!serverId) return res.status(400).json({ error: 'Missing serverId' });
+    if (!serverId) {
+      return res.status(400).json({ error: 'Missing serverId' });
+    }
 
     const now = timestamp ? new Date(timestamp) : new Date();
 
-    // Fetch current server row
+    // Fetch current server state
     const { data: server, error: fetchErr } = await supabaseAdmin
       .from('servers')
       .select('*')
@@ -30,64 +59,79 @@ export default async function handler(req, res) {
       .single();
 
     if (fetchErr || !server) {
-      console.error('Failed to fetch server for status update:', fetchErr);
+      console.error('Server not found:', serverId, fetchErr?.message);
       return res.status(404).json({ error: 'Server not found' });
     }
 
+    // Base updates
     const updates = {
       status: status || 'Unknown',
-      last_heartbeat_at: now.toISOString()
+      last_heartbeat_at: now.toISOString(),
+      error_message: reporterError || null,
     };
 
-    // Accept optional metric fields and store them for realtime clients
-    if (cpu !== undefined) updates.cpu = cpu;
-    if (memory !== undefined) updates.memory = memory;
-    if (disk !== undefined) updates.disk = disk;
+    // Optional metrics – only update if provided
+    if (cpu !== undefined && cpu !== null) updates.cpu = Number(cpu.toFixed(1));
+    if (memory !== undefined && memory !== null) updates.memory = Number(memory.toFixed(1));
+    if (disk !== undefined && disk !== null) updates.disk = Number(disk);
 
-    // When server becomes Running, set running_since if not already set and ensure last_billed_at is initialized
+    if (player_count !== undefined) updates.player_count = Number(player_count);
+    if (players_online !== undefined) updates.players_online = players_online || '';
+    if (tps !== undefined && tps !== null) updates.tps = Number(tps);
+    if (tps_1m !== undefined && tps_1m !== null) updates.tps_1m = Number(tps_1m);
+    if (tps_5m !== undefined && tps_5m !== null) updates.tps_5m = Number(tps_5m);
+    if (tps_15m !== undefined && tps_15m !== null) updates.tps_15m = Number(tps_15m);
+
+    // Runtime tracking logic (same as before)
     if (status === 'Running') {
       if (!server.running_since) {
         updates.running_since = now.toISOString();
-        // If there's no last_billed_at, initialize it so billing can start from this point
-        if (!server.last_billed_at) updates.last_billed_at = now.toISOString();
-        // Reset runtime_accumulated_seconds if absent
-        if (server.runtime_accumulated_seconds == null) updates.runtime_accumulated_seconds = 0;
+        if (!server.last_billed_at) {
+          updates.last_billed_at = now.toISOString();
+        }
+        if (server.runtime_accumulated_seconds == null) {
+          updates.runtime_accumulated_seconds = 0;
+        }
       }
     } else {
-      // When server stops or errors, accumulate runtime and clear running_since
+      // Server stopped or errored → accumulate runtime
       if (server.running_since) {
         try {
           const runningSince = new Date(server.running_since);
           const deltaSeconds = Math.max(0, Math.floor((now - runningSince) / 1000));
-          updates.runtime_accumulated_seconds = (server.runtime_accumulated_seconds || 0) + deltaSeconds;
+          updates.runtime_accumulated_seconds =
+            (server.runtime_accumulated_seconds || 0) + deltaSeconds;
         } catch (e) {
-          // fallback: don't change accumulated seconds on parse error
-          console.error('Error parsing running_since for accumulation:', e && e.message);
+          console.error('Failed to parse running_since:', e.message);
         }
         updates.running_since = null;
       }
     }
 
-    const { data, error: updateError } = await supabaseAdmin
+    // Perform update
+    const { data, error: updateErr } = await supabaseAdmin
       .from('servers')
       .update(updates)
       .eq('id', serverId)
-      .select();
+      .select()
+      .single();
 
-    if (updateError) {
-      console.error('Supabase update error:', updateError);
-      return res.status(500).json({ error: 'Failed to update server status', details: updateError.message });
+    if (updateErr) {
+      console.error('Supabase update failed:', updateErr);
+      return res.status(500).json({ error: 'Failed to update server', details: updateErr.message });
     }
 
-    console.log('Successfully updated server status:', data[0]?.status);
+    console.log(`Server ${serverId} status updated → ${data.status} | ${data.player_count} players | TPS ${data.tps || 'N/A'}`);
 
-    return res.status(200).json({ success: true, status: data[0]?.status });
-
+    return res.status(200).json({
+      success: true,
+      server: data,
+    });
   } catch (error) {
-    console.error('Status update API error:', error);
-    return res.status(500).json({ 
+    console.error('Unexpected error in update-status API:', error);
+    return res.status(500).json({
       error: 'Internal server error',
-      details: error.message 
+      details: error.message,
     });
   }
 }
