@@ -648,6 +648,8 @@ write_files:
       rcon.password=${rconPassword}
       broadcast-rcon-to-ops=true
       server-port=25565
+      enable-query=true
+      query.port=25565
       online-mode=false
       max-players=20
       difficulty=easy
@@ -1146,4 +1148,5 @@ export default async function handler(req, res) {
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
+
 }
