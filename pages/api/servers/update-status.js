@@ -33,16 +33,20 @@ export default async function handler(req, res) {
       tps_15m,
       error: reporterError,
       timestamp,
+      // NEW FIELDS from query protocol:
+      max_players,
+      motd,
+      map,
     } = req.body;
 
     console.log('Status update received:', {
       serverId,
       status,
-      cpu,
-      memory,
       player_count,
       players_online,
-      tps,
+      max_players,
+      motd,
+      map,
     });
 
     if (!serverId) {
@@ -63,20 +67,26 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Server not found' });
     }
 
-    // Base updates
+    // Base updates - ALWAYS set these
     const updates = {
       status: status || 'Unknown',
       last_heartbeat_at: now.toISOString(),
       error_message: reporterError || null,
+      // NEW: Always update player fields, default to 0/empty if not provided
+      player_count: player_count !== undefined ? Number(player_count) : 0,
+      players_online: players_online !== undefined ? (players_online || 'None') : 'None',
     };
 
     // Optional metrics – only update if provided
     if (cpu !== undefined && cpu !== null) updates.cpu = Number(cpu.toFixed(1));
     if (memory !== undefined && memory !== null) updates.memory = Number(memory.toFixed(1));
     if (disk !== undefined && disk !== null) updates.disk = Number(disk);
-
-    if (player_count !== undefined) updates.player_count = Number(player_count);
-    if (players_online !== undefined) updates.players_online = players_online || '';
+    
+    // NEW: Add query protocol fields
+    if (max_players !== undefined && max_players !== null) updates.max_players = Number(max_players);
+    if (motd !== undefined) updates.motd = motd || '';
+    if (map !== undefined) updates.map = map || '';
+    
     if (tps !== undefined && tps !== null) updates.tps = Number(tps);
     if (tps_1m !== undefined && tps_1m !== null) updates.tps_1m = Number(tps_1m);
     if (tps_5m !== undefined && tps_5m !== null) updates.tps_5m = Number(tps_5m);
@@ -121,7 +131,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to update server', details: updateErr.message });
     }
 
-    console.log(`Server ${serverId} status updated → ${data.status} | ${data.player_count} players | TPS ${data.tps || 'N/A'}`);
+    console.log(`Server ${serverId} status updated → ${data.status} | ${data.player_count} players | Online: ${data.players_online}`);
 
     return res.status(200).json({
       success: true,
