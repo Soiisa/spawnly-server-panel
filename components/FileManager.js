@@ -14,6 +14,8 @@ export default function FileManager({ server, token, setActiveTab }) {
   const [fileContent, setFileContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [filterEnabled, setFilterEnabled] = useState(true);
+  const [allFiles, setAllFiles] = useState([]);
 
   const apiBase = `/api/servers/${server.id}`; // Always use backend
   const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md', '.dat'];
@@ -62,9 +64,24 @@ export default function FileManager({ server, token, setActiveTab }) {
 
   useEffect(() => {
     if (!token || !server) return;
-    setIsOffline(server.status !== 'Running' || !server.ipv4);
+    // Set offline only when server status is explicitly 'Stopped'
+    setIsOffline(server.status === 'Stopped');
     fetchFiles(currentPath);
   }, [currentPath, token, server]);
+
+  // Re-apply client-side filter when toggled or when we have a fresh listing
+  useEffect(() => {
+    const applyFilter = (filesArray) => {
+      if (!filterEnabled) return filesArray || [];
+      return (filesArray || []).filter(file => {
+        const normalizedName = file.name.toLowerCase().replace(/\/+$/, '');
+        return !maskedItems.includes(normalizedName) &&
+               !maskedItems.some(masked => normalizedName.startsWith(masked + '/'));
+      });
+    };
+
+    setFiles(applyFilter(allFiles));
+  }, [filterEnabled, allFiles]);
 
   const fetchFiles = async (path) => {
     setLoading(true);
@@ -76,13 +93,18 @@ export default function FileManager({ server, token, setActiveTab }) {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 5000,
       });
-      // Filter out masked files/folders in the frontend as a fallback
-      const filteredFiles = res.data.files.filter(file => {
-        const normalizedName = file.name.toLowerCase().replace(/\/+$/, '');
-        return !maskedItems.includes(normalizedName) &&
-               !maskedItems.some(masked => normalizedName.startsWith(masked + '/'));
-      });
-      setFiles(filteredFiles);
+      // Keep the full list so toggling the filter can re-apply client-side
+      setAllFiles(res.data.files || []);
+      const applyFilterToFiles = (filesArray) => {
+        if (!filterEnabled) return filesArray;
+        return (filesArray || []).filter(file => {
+          const normalizedName = file.name.toLowerCase().replace(/\/+$/, '');
+          return !maskedItems.includes(normalizedName) &&
+                 !maskedItems.some(masked => normalizedName.startsWith(masked + '/'));
+        });
+      };
+
+      setFiles(applyFilterToFiles(res.data.files || []));
       setCurrentPath(res.data.path);
     } catch (err) {
       setError(`Failed to load files: ${err.response?.data?.error || err.message}`);
@@ -421,11 +443,12 @@ export default function FileManager({ server, token, setActiveTab }) {
         <h2 className="text-xl font-bold text-gray-800">
           File Manager {isOffline && <span className="text-sm text-yellow-600">(Offline Mode)</span>}
         </h2>
-        <button
-          onClick={() => fetchFiles(currentPath)}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded flex items-center"
-          disabled={loading}
-        >
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchFiles(currentPath)}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded flex items-center"
+            disabled={loading}
+          >
           {loading ? (
             <span className="flex items-center">
               <svg
@@ -446,7 +469,16 @@ export default function FileManager({ server, token, setActiveTab }) {
           ) : (
             'Refresh'
           )}
-        </button>
+          </button>
+
+          <button
+            onClick={() => setFilterEnabled((v) => !v)}
+            className={`px-3 py-1 rounded border text-sm ${filterEnabled ? 'bg-green-100 border-green-300 text-green-800' : 'bg-gray-100 border-gray-300 text-gray-800'}`}
+            title={filterEnabled ? 'File filter is ON. Click to show all files.' : 'File filter is OFF. Click to hide masked files.'}
+          >
+            {filterEnabled ? 'Filter: On' : 'Filter: Off'}
+          </button>
+        </div>
       </div>
 
       <div className="breadcrumbs flex items-center mb-4 text-sm">
