@@ -615,7 +615,7 @@ write_files:
                 exit 1
               fi
             fi
-          } elif [ "$software" = "fabric" ]; then
+          elif [ "$software" = "fabric" ]; then
             echo "[startup] Setting up Fabric server"
             mv server-installer.jar server.jar
           else
