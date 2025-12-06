@@ -19,6 +19,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('API RECEIVED: Status update payload received from reporter:', JSON.stringify(req.body)); // DEBUG ADDITION
     const {
       serverId,
       status,
