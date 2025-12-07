@@ -42,10 +42,11 @@ export default function ServerDetailPage({ initialServer }) {
   const [liveMetrics, setLiveMetrics] = useState({ cpu: 0, memory: 0, disk: 0 });
   const [editingRam, setEditingRam] = useState(false);
   const [newRam, setNewRam] = useState(null);
-  const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer)); // Use helper for initial state
+  const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer));
   const hasReceivedRunningRef = useRef(false);
 
   const profileChannelRef = useRef(null);
+  const serverChannelRef = useRef(null); // ADDED: Ref for server channel
   const mountedRef = useRef(false);
   const metricsWsRef = useRef(null);
   const pollRef = useRef(null);
@@ -118,6 +119,55 @@ export default function ServerDetailPage({ initialServer }) {
     };
   }, [id]);
 
+  // ADDED: New useEffect for Server Realtime Subscription
+  useEffect(() => {
+    if (!id || !user?.id) return;
+    
+    // Cleanup previous subscription if it exists
+    if (serverChannelRef.current) {
+        supabase.removeChannel(serverChannelRef.current);
+        serverChannelRef.current = null;
+    }
+
+    const serverChannel = supabase
+      .channel(`server-changes-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'servers',
+          filter: `id=eq.${id}`
+        },
+        (payload) => {
+          if (!mountedRef.current) return;
+          console.log('Realtime server update received:', payload.new);
+          setServer((prev) => {
+             // Use new data to update the state
+             return payload.new;
+          });
+          setError(null);
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to server updates for ID:', id);
+        } else if (err) {
+          console.error('Server subscription error:', err);
+          setError('Failed to subscribe to server updates.');
+        }
+      });
+
+    serverChannelRef.current = serverChannel;
+
+    return () => {
+      if (serverChannelRef.current) {
+        supabase.removeChannel(serverChannelRef.current);
+        serverChannelRef.current = null;
+      }
+    };
+  }, [id, user?.id]); // Re-run if server ID or user changes
+
   useEffect(() => {
     if (!server?.id || fileToken || !user) return;
 
@@ -187,6 +237,11 @@ export default function ServerDetailPage({ initialServer }) {
       if (profileChannelRef.current) {
         supabase.removeChannel(profileChannelRef.current);
         profileChannelRef.current = null;
+      }
+      // ADDED cleanup for serverChannelRef
+      if (serverChannelRef.current) {
+        supabase.removeChannel(serverChannelRef.current);
+        serverChannelRef.current = null;
       }
       if (metricsWsRef.current) {
         metricsWsRef.current.close();
@@ -830,11 +885,10 @@ export default function ServerDetailPage({ initialServer }) {
                       <p className="text-sm text-gray-600 mb-2">
                         <strong className="font-medium text-gray-800">Game:</strong> {server.game || '—'}
                       </p>
-                      {/* MODIFIED: Use server.player_count/max_players from database status */}
                       <p className="text-sm text-gray-600">
                         <strong className="font-medium text-gray-800">Online Players:</strong> 
                         {server.status === 'Running' ? 
-                          `${server.player_count} / ${server.max_players || '?'}` : 
+                          `${server.player_count || 0} / ${server.max_players || '?'}` : 
                           'Offline'}
                       </p>
                     </div>
@@ -943,7 +997,6 @@ export default function ServerDetailPage({ initialServer }) {
                 {activeTab === 'players' && (
                   <div className="bg-white p-6 rounded-xl shadow-sm">
                     {fileToken ? (
-                      // PlayersTab now reads online status directly from the server prop
                       <PlayersTab server={server} token={fileToken} />
                     ) : (
                       <p className="text-gray-600 text-center">Loading file access token...</p>
