@@ -395,7 +395,8 @@ export default async function handler(req, res) {
             runtime_accumulated_seconds: 0,
             running_since: null,
             current_session_id: null, // ← CLEARED ON STOP
-            last_heartbeat_at: nowIso
+            last_heartbeat_at: nowIso,
+            last_empty_at: null // ← CLEARED ON STOP (Fix for auto-stop loop)
           })
           .eq('id', serverId);
         if (updateErr) {
@@ -444,7 +445,8 @@ export default async function handler(req, res) {
     const updateFields = { 
       status: newStatus,
       last_billed_at: now,
-      runtime_accumulated_seconds: 0 
+      runtime_accumulated_seconds: 0,
+      last_empty_at: null // ← CLEARED ON START/RESTART
     };
     if (action === 'start' && sessionId && sessionId !== server.current_session_id) {
       updateFields.current_session_id = sessionId; // ← SET NEW SESSION ID
