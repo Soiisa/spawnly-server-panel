@@ -18,6 +18,14 @@ import Footer from '../../components/ServersFooter';
 import PlayersTab from '../../components/PlayersTab';
 import WorldTab from '../../components/WorldTab';
 
+// Helper function to convert the database string to an array of players
+const getOnlinePlayersArray = (server) => {
+  if (server?.status !== 'Running' || !server?.players_online) {
+    return [];
+  }
+  return server.players_online.split(', ').filter(Boolean);
+};
+
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
   const { id } = router.query;
@@ -34,7 +42,7 @@ export default function ServerDetailPage({ initialServer }) {
   const [liveMetrics, setLiveMetrics] = useState({ cpu: 0, memory: 0, disk: 0 });
   const [editingRam, setEditingRam] = useState(false);
   const [newRam, setNewRam] = useState(null);
-  const [onlinePlayers, setOnlinePlayers] = useState([]);
+  const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer)); // Use helper for initial state
   const hasReceivedRunningRef = useRef(false);
 
   const profileChannelRef = useRef(null);
@@ -152,15 +160,17 @@ export default function ServerDetailPage({ initialServer }) {
     fetchFileToken();
   }, [server?.id, user]);
 
+  // Update onlinePlayers state whenever the server prop's player list changes
+  useEffect(() => {
+    setOnlinePlayers(getOnlinePlayersArray(server));
+  }, [server?.players_online, server?.status]);
+
   useEffect(() => {
     if (server?.status === 'Running' && server?.ipv4) {
       if (!metricsWsRef.current) {
         connectToMetricsWebSocket();
       }
-      if (!onlinePlayersPollRef.current) {
-        fetchOnlinePlayers();
-        onlinePlayersPollRef.current = setInterval(fetchOnlinePlayers, 30000);
-      }
+      // REMOVED RCON polling logic for online players
     }
 
     return () => {
@@ -168,10 +178,7 @@ export default function ServerDetailPage({ initialServer }) {
         metricsWsRef.current.close();
         metricsWsRef.current = null;
       }
-      if (onlinePlayersPollRef.current) {
-        clearInterval(onlinePlayersPollRef.current);
-        onlinePlayersPollRef.current = null;
-      }
+      // REMOVED RCON polling cleanup for online players
     };
   }, [server?.status, server?.ipv4]);
 
@@ -355,46 +362,7 @@ export default function ServerDetailPage({ initialServer }) {
     }
   };
 
-  const fetchOnlinePlayers = async () => {
-    if (!server?.status === 'Running' || !fileToken) {
-      setOnlinePlayers([]);
-      return;
-    }
-
-    try {
-      console.log('Fetching online players for server:', server.id);
-      const res = await fetch(`/api/servers/rcon`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${fileToken}`,
-        },
-        body: JSON.stringify({ serverId: server.id, command: 'list' }),
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => '');
-        throw new Error(`Failed to fetch online players: ${errorText}`);
-      }
-
-      const { response } = await res.json();
-      const match = response.match(/There are (\d+) of a max of (\d+) players online: (.*)/) ||
-                    response.match(/players online: (.*)/);
-      
-      const players = match && match[3] ? 
-        match[3].split(', ').filter(Boolean) : 
-        (match && match[1] ? match[1].split(', ').filter(Boolean) : []);
-      
-      if (mountedRef.current) {
-        setOnlinePlayers(players);
-        console.log('Online players:', players);
-      }
-    } catch (err) {
-      console.error('Error fetching online players:', err);
-      setOnlinePlayers([]);
-      setError(`Failed to fetch online players: ${err.message}`);
-    }
-  };
+  // REMOVED fetchOnlinePlayers RCON function
 
   const fetchServer = useCallback(
     debounce(async (serverIdParam, userIdParam) => {
@@ -862,8 +830,12 @@ export default function ServerDetailPage({ initialServer }) {
                       <p className="text-sm text-gray-600 mb-2">
                         <strong className="font-medium text-gray-800">Game:</strong> {server.game || '—'}
                       </p>
+                      {/* MODIFIED: Use server.player_count/max_players from database status */}
                       <p className="text-sm text-gray-600">
-                        <strong className="font-medium text-gray-800">Online Players:</strong> {onlinePlayers.length}
+                        <strong className="font-medium text-gray-800">Online Players:</strong> 
+                        {server.status === 'Running' ? 
+                          `${server.player_count} / ${server.max_players || '?'}` : 
+                          'Offline'}
                       </p>
                     </div>
 
@@ -971,6 +943,7 @@ export default function ServerDetailPage({ initialServer }) {
                 {activeTab === 'players' && (
                   <div className="bg-white p-6 rounded-xl shadow-sm">
                     {fileToken ? (
+                      // PlayersTab now reads online status directly from the server prop
                       <PlayersTab server={server} token={fileToken} />
                     ) : (
                       <p className="text-gray-600 text-center">Loading file access token...</p>

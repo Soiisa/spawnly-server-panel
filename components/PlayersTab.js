@@ -10,7 +10,7 @@ export default function PlayersTab({ server, token }) {
   const [bannedPlayers, setBannedPlayers] = useState([]);
   const [bannedIps, setBannedIps] = useState([]);
   const [userCache, setUserCache] = useState([]);
-  const [onlinePlayers, setOnlinePlayers] = useState([]);
+  // REMOVED: const [onlinePlayers, setOnlinePlayers] = useState([]);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerIp, setNewPlayerIp] = useState('');
   const [newPlayerReason, setNewPlayerReason] = useState('Banned by an operator.');
@@ -27,8 +27,7 @@ export default function PlayersTab({ server, token }) {
   useEffect(() => {
     console.log('PlayersTab mounted with server:', server.id, 'token:', token);
     fetchAllData();
-    const interval = setInterval(fetchOnlinePlayers, 30000);
-    return () => clearInterval(interval);
+    // REMOVED RCON-based polling for online players
   }, [server.id, token, isRunning]);
 
   const showError = (message) => {
@@ -177,9 +176,7 @@ export default function PlayersTab({ server, token }) {
       setUserCache(uc);
       console.log('Fetched all data:', { whitelist: wl, ops: op, bannedPlayers: bp, bannedIps: bi, userCache: uc });
       
-      if (isRunning) {
-        await fetchOnlinePlayers();
-      }
+      // REMOVED: await fetchOnlinePlayers();
       
       showSuccess('Data refreshed successfully');
     } catch (err) {
@@ -190,30 +187,7 @@ export default function PlayersTab({ server, token }) {
     }
   };
 
-  const fetchOnlinePlayers = async () => {
-    if (!isRunning) {
-      setOnlinePlayers([]);
-      return;
-    }
-    
-    try {
-      console.log('Fetching online players for server:', server.id);
-      const response = await sendRconCommand('list');
-      const match = response.match(/There are (\d+) of a max of (\d+) players online: (.*)/) || 
-                   response.match(/players online: (.*)/);
-      
-      const players = match && match[3] ? 
-        match[3].split(', ').filter(Boolean) : 
-        (match && match[1] ? match[1].split(', ').filter(Boolean) : []);
-      
-      setOnlinePlayers(players);
-      console.log('Online players:', players);
-    } catch (err) {
-      console.error('Error fetching online players:', err);
-      setOnlinePlayers([]);
-      showError(`Failed to fetch online players: ${err.message}`);
-    }
-  };
+  // REMOVED fetchOnlinePlayers RCON function
 
   const getOfflineUuid = (name) => {
     if (!name || typeof name !== 'string') {
@@ -452,6 +426,11 @@ export default function PlayersTab({ server, token }) {
       console.error('Failed to remove:', err);
     }
   };
+
+  // NEW: Derive onlinePlayers from server prop
+  const onlinePlayers = server.status === 'Running' && server.players_online 
+    ? server.players_online.split(', ').filter(Boolean) 
+    : [];
 
   const offlinePlayers = userCache.filter((user) => 
     !onlinePlayers.some(online => online.toLowerCase() === user.name.toLowerCase())
