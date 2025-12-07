@@ -43,14 +43,18 @@ export default function ServerDetailPage({ initialServer }) {
   const [editingRam, setEditingRam] = useState(false);
   const [newRam, setNewRam] = useState(null);
   const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer));
-  const hasReceivedRunningRef = useRef(false);
+  
+  // NEW: State for Auto Stop
+  const [autoStopCountdown, setAutoStopCountdown] = useState(null);
+  const [savingAutoStop, setSavingAutoStop] = useState(false);
 
+  const hasReceivedRunningRef = useRef(false);
   const profileChannelRef = useRef(null);
-  const serverChannelRef = useRef(null); // ADDED: Ref for server channel
+  const serverChannelRef = useRef(null);
   const mountedRef = useRef(false);
   const metricsWsRef = useRef(null);
   const pollRef = useRef(null);
-  const onlinePlayersPollRef = useRef(null);
+  const countdownIntervalRef = useRef(null);
 
   const throttledSetLiveMetrics = useRef(
     throttle((newMetrics) => {
@@ -66,10 +70,6 @@ export default function ServerDetailPage({ initialServer }) {
       });
     }, 2000)
   ).current;
-
-  useEffect(() => {
-    console.log('Credits state updated:', credits);
-  }, [credits]);
 
   useEffect(() => {
     const qTab = router?.query?.tab;
@@ -95,7 +95,6 @@ export default function ServerDetailPage({ initialServer }) {
 
         const userData = sessionData.session.user;
         setUser(userData);
-        console.log('Fetched user:', userData);
 
         await fetchUserCredits(userData.id);
 
@@ -119,11 +118,10 @@ export default function ServerDetailPage({ initialServer }) {
     };
   }, [id]);
 
-  // ADDED: New useEffect for Server Realtime Subscription
+  // NEW: Realtime Server Subscription
   useEffect(() => {
     if (!id || !user?.id) return;
     
-    // Cleanup previous subscription if it exists
     if (serverChannelRef.current) {
         supabase.removeChannel(serverChannelRef.current);
         serverChannelRef.current = null;
@@ -142,21 +140,11 @@ export default function ServerDetailPage({ initialServer }) {
         (payload) => {
           if (!mountedRef.current) return;
           console.log('Realtime server update received:', payload.new);
-          setServer((prev) => {
-             // Use new data to update the state
-             return payload.new;
-          });
+          setServer((prev) => payload.new);
           setError(null);
         }
       )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to server updates for ID:', id);
-        } else if (err) {
-          console.error('Server subscription error:', err);
-          setError('Failed to subscribe to server updates.');
-        }
-      });
+      .subscribe();
 
     serverChannelRef.current = serverChannel;
 
@@ -166,7 +154,7 @@ export default function ServerDetailPage({ initialServer }) {
         serverChannelRef.current = null;
       }
     };
-  }, [id, user?.id]); // Re-run if server ID or user changes
+  }, [id, user?.id]);
 
   useEffect(() => {
     if (!server?.id || fileToken || !user) return;
@@ -176,8 +164,6 @@ export default function ServerDetailPage({ initialServer }) {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (!session) {
-            console.error('No session found for file token fetch');
-            setError('Session expired. Please log in again.');
             router.push('/login');
             return;
           }
@@ -191,17 +177,9 @@ export default function ServerDetailPage({ initialServer }) {
             setFileToken(data.token);
             setError(null);
             return;
-          } else {
-            console.error(`Failed to fetch file token (attempt ${attempt}/${retries}):`, data.error || 'No token returned');
-            if (attempt === retries) {
-              setError('Failed to fetch file access token after multiple attempts.');
-            }
           }
         } catch (err) {
           console.error(`File token fetch error (attempt ${attempt}/${retries}):`, err.message);
-          if (attempt === retries) {
-            setError('Failed to fetch file access token: ' + err.message);
-          }
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
@@ -215,12 +193,52 @@ export default function ServerDetailPage({ initialServer }) {
     setOnlinePlayers(getOnlinePlayersArray(server));
   }, [server?.players_online, server?.status]);
 
+  // NEW: Countdown Timer Logic
+  useEffect(() => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+
+    if (
+      server?.status === 'Running' &&
+      server?.last_empty_at &&
+      server?.auto_stop_timeout > 0
+    ) {
+      const updateCountdown = () => {
+        const lastEmpty = new Date(server.last_empty_at).getTime();
+        const timeoutMs = server.auto_stop_timeout * 60 * 1000;
+        const stopTime = lastEmpty + timeoutMs;
+        const now = Date.now();
+        const diff = stopTime - now;
+
+        if (diff <= 0) {
+          setAutoStopCountdown('Stopping soon...');
+        } else {
+          const minutes = Math.floor(diff / 60000);
+          const seconds = Math.floor((diff % 60000) / 1000);
+          setAutoStopCountdown(`${minutes}m ${seconds}s`);
+        }
+      };
+
+      updateCountdown();
+      countdownIntervalRef.current = setInterval(updateCountdown, 1000);
+    } else {
+      setAutoStopCountdown(null);
+    }
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout]);
+
   useEffect(() => {
     if (server?.status === 'Running' && server?.ipv4) {
       if (!metricsWsRef.current) {
         connectToMetricsWebSocket();
       }
-      // REMOVED RCON polling logic for online players
     }
 
     return () => {
@@ -228,7 +246,6 @@ export default function ServerDetailPage({ initialServer }) {
         metricsWsRef.current.close();
         metricsWsRef.current = null;
       }
-      // REMOVED RCON polling cleanup for online players
     };
   }, [server?.status, server?.ipv4]);
 
@@ -238,7 +255,6 @@ export default function ServerDetailPage({ initialServer }) {
         supabase.removeChannel(profileChannelRef.current);
         profileChannelRef.current = null;
       }
-      // ADDED cleanup for serverChannelRef
       if (serverChannelRef.current) {
         supabase.removeChannel(serverChannelRef.current);
         serverChannelRef.current = null;
@@ -251,9 +267,8 @@ export default function ServerDetailPage({ initialServer }) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
-      if (onlinePlayersPollRef.current) {
-        clearInterval(onlinePlayersPollRef.current);
-        onlinePlayersPollRef.current = null;
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
       }
     } catch (e) {
       console.error('Cleanup error:', e);
@@ -275,25 +290,12 @@ export default function ServerDetailPage({ initialServer }) {
         },
         (payload) => {
           if (!mountedRef.current) return;
-          console.log('Profile updated, new credits:', payload.new.credits);
           setCredits(payload.new.credits || 0);
           setCreditsLoading(false);
           setError(null);
         }
       )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to profile updates for user:', user.id);
-        } else if (err) {
-          console.error('Profile subscription error:', err);
-          setError('Failed to subscribe to profile updates. Retrying...');
-          setTimeout(() => {
-            if (mountedRef.current) {
-              profileChannel.subscribe();
-            }
-          }, 15000);
-        }
-      });
+      .subscribe();
 
     profileChannelRef.current = profileChannel;
 
@@ -315,33 +317,16 @@ export default function ServerDetailPage({ initialServer }) {
           .eq('id', userId)
           .single();
 
-        console.log('Raw Supabase response for credits:', { data, error });
-
-        if (error) {
-          console.error(`Error fetching credits (attempt ${attempt}/${retries}):`, error.message);
-          if (attempt === retries) {
-            setError('Failed to load credits after multiple attempts. Please try again.');
-          }
-          continue;
-        }
+        if (error) throw error;
 
         if (data && mountedRef.current) {
-          console.log('Fetched credits:', data.credits);
           setCredits(data.credits || 0);
           setCreditsLoading(false);
           setError(null);
           return;
-        } else if (!data) {
-          console.warn('No profile data found for user:', userId);
-          if (attempt === retries) {
-            setError('No profile found. Please contact support.');
-          }
         }
       } catch (err) {
         console.error(`Unexpected error fetching credits (attempt ${attempt}/${retries}):`, err.message);
-        if (attempt === retries) {
-          setError('Unexpected error loading credits: ' + err.message);
-        }
       }
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
@@ -353,14 +338,8 @@ export default function ServerDetailPage({ initialServer }) {
 
     try {
       const wsUrl = `wss://${server.subdomain}.spawnly.net/status`;
-      console.log('Connecting to metrics WebSocket:', wsUrl);
-
       const ws = new WebSocket(wsUrl);
       metricsWsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log('Metrics WebSocket connected');
-      };
 
       ws.onmessage = (event) => {
         try {
@@ -377,12 +356,7 @@ export default function ServerDetailPage({ initialServer }) {
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('Metrics WebSocket error:', error);
-      };
-
       ws.onclose = () => {
-        console.log('Metrics WebSocket disconnected');
         metricsWsRef.current = null;
         if (mountedRef.current && server?.status === 'Running') {
           setTimeout(connectToMetricsWebSocket, 15000);
@@ -405,10 +379,7 @@ export default function ServerDetailPage({ initialServer }) {
       }
       if (!res.ok) {
         const errMsg = json?.error || json?.detail || json?._raw || `HTTP ${res.status}`;
-        const e = new Error(errMsg);
-        e.status = res.status;
-        e.body = json;
-        throw e;
+        throw new Error(errMsg);
       }
       return json;
     } catch (err) {
@@ -417,18 +388,13 @@ export default function ServerDetailPage({ initialServer }) {
     }
   };
 
-  // REMOVED fetchOnlinePlayers RCON function
-
   const fetchServer = useCallback(
     debounce(async (serverIdParam, userIdParam) => {
       setLoading(true);
       try {
         const serverId = serverIdParam || id;
         const userId = userIdParam || user?.id;
-        if (!serverId || !userId) {
-          console.error('Missing serverId or userId');
-          return;
-        }
+        if (!serverId || !userId) return;
 
         const { data, error } = await supabase
           .from('servers')
@@ -438,28 +404,13 @@ export default function ServerDetailPage({ initialServer }) {
           .single();
 
         if (error || !data) {
-          console.error('Server not found:', error);
           router.push('/dashboard');
           return;
         }
 
         if (mountedRef.current) {
-          console.log('Fetched server data:', data);
           setServer((prev) => {
-            if (JSON.stringify(prev) === JSON.stringify(data)) {
-              console.log('No change in server data, skipping update');
-              return prev;
-            }
-            console.log('Checking reload: newStatus=', data.status, 'prevStatus=', prev?.status, 'hasReceivedRunning=', hasReceivedRunningRef.current);
-            if (
-              (data.status === 'Running' && !hasReceivedRunningRef.current) ||
-              (['Running', 'Stopped'].includes(data.status) && prev?.status && !['Running', 'Stopped'].includes(prev.status))
-            ) {
-              console.log('Triggering page reload for status:', data.status);
-              hasReceivedRunningRef.current = true;
-              router.reload();
-              return prev;
-            }
+            if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
             return data;
           });
         }
@@ -476,13 +427,11 @@ export default function ServerDetailPage({ initialServer }) {
   const pollUntilStatus = (expectedStatuses, timeout = 120000) => {
     const startTime = Date.now();
     pollRef.current = setInterval(() => {
-      console.log(`Polling server status: ${server?.status}`);
       fetchServer(id, user?.id);
       if (expectedStatuses.includes(server?.status) || Date.now() - startTime > timeout) {
         clearInterval(pollRef.current);
         pollRef.current = null;
         if (Date.now() - startTime > timeout) {
-          console.log('Polling timed out after 2min');
           setError('Operation timed out. Please refresh the page manually.');
         }
       }
@@ -493,6 +442,29 @@ export default function ServerDetailPage({ initialServer }) {
     setServer((prev) => ({ ...prev, ...newConfig }));
   };
 
+  // Handle Auto Stop Change
+  const handleAutoStopChange = async (e) => {
+    const newValue = parseInt(e.target.value, 10);
+    setSavingAutoStop(true);
+    
+    try {
+      const { error } = await supabase
+        .from('servers')
+        .update({ auto_stop_timeout: newValue })
+        .eq('id', server.id);
+
+      if (error) throw error;
+
+      // Optimistic update
+      setServer(prev => ({ ...prev, auto_stop_timeout: newValue }));
+    } catch (err) {
+      console.error('Failed to update auto-stop:', err);
+      setError('Failed to update auto-stop setting');
+    } finally {
+      setSavingAutoStop(false);
+    }
+  };
+
   const handleStartServer = async () => {
     if (actionLoading) return;
     try {
@@ -501,11 +473,6 @@ export default function ServerDetailPage({ initialServer }) {
       hasReceivedRunningRef.current = false;
 
       const serverId = server?.id || id;
-      if (!serverId) {
-        alert('Server not loaded yet.');
-        return;
-      }
-
       setServer((prev) => (prev ? { ...prev, status: 'Starting' } : prev));
 
       const { data: serverData, error: serverError } = await supabase
@@ -516,20 +483,12 @@ export default function ServerDetailPage({ initialServer }) {
 
       if (serverError) throw serverError;
 
-      const { data: installedSoftware, error: softwareError } = await supabase
+      const { data: installedSoftware } = await supabase
         .from('installed_software')
         .select('name, type, version, source, download_url')
         .eq('server_id', serverId);
 
-      if (softwareError) throw softwareError;
-
-      console.log('Provisioning with config:', {
-        type: serverData.pending_type || serverData.type,
-        version: serverData.pending_version || serverData.version,
-        installedSoftware,
-      });
-
-      const provisionRes = await safeFetchJson('/api/servers/provision', {
+      await safeFetchJson('/api/servers/provision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -539,8 +498,6 @@ export default function ServerDetailPage({ initialServer }) {
           installedSoftware,
         }),
       });
-
-      console.log('Provision response:', provisionRes);
 
       if (serverData.pending_type || serverData.pending_version) {
         await supabase
@@ -553,7 +510,6 @@ export default function ServerDetailPage({ initialServer }) {
     } catch (err) {
       console.error('Start error:', err);
       setError(`Failed to start server: ${err.message}`);
-      alert(`Failed to start server: ${err.message}`);
       await fetchServer(server?.id || id, user?.id);
     } finally {
       setActionLoading(false);
@@ -565,33 +521,19 @@ export default function ServerDetailPage({ initialServer }) {
     try {
       setActionLoading(true);
       setError(null);
-
       const serverId = server?.id || id;
-      if (!serverId) {
-        alert('Server not loaded yet.');
-        return;
-      }
-
-      if (!server?.hetzner_id) {
-        alert('Server is stopped.');
-        return;
-      }
-
       setServer((prev) => (prev ? { ...prev, status: 'Stopping' } : prev));
 
-      const json = await safeFetchJson('/api/servers/action', {
+      await safeFetchJson('/api/servers/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serverId, action: 'stop' }),
       });
 
-      console.log('Stop API response:', json);
-
       pollUntilStatus(['Stopped']);
     } catch (err) {
       console.error('Stop error:', err);
       setError(`Failed to stop server: ${err.message}`);
-      alert(`Failed to stop server: ${err.message}`);
       await fetchServer(server?.id || id, user?.id);
     } finally {
       setActionLoading(false);
@@ -603,34 +545,19 @@ export default function ServerDetailPage({ initialServer }) {
     try {
       setActionLoading(true);
       setError(null);
-      hasReceivedRunningRef.current = false;
-
       const serverId = server?.id || id;
-      if (!serverId) {
-        alert('Server not loaded yet.');
-        return;
-      }
-
-      if (!server?.hetzner_id) {
-        alert('Server is stopped.');
-        return;
-      }
-
       setServer((prev) => (prev ? { ...prev, status: 'Restarting' } : prev));
 
-      const json = await safeFetchJson('/api/servers/action', {
+      await safeFetchJson('/api/servers/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serverId, action: 'restart' }),
       });
 
-      console.log('Restart API response:', json);
-
       pollUntilStatus(['Running']);
     } catch (err) {
       console.error('Restart error:', err);
       setError(`Failed to restart server: ${err.message}`);
-      alert(`Failed to restart server: ${err.message}`);
       await fetchServer(server?.id || id, user?.id);
     } finally {
       setActionLoading(false);
@@ -639,11 +566,9 @@ export default function ServerDetailPage({ initialServer }) {
 
   const refreshServerStatus = async () => {
     if (!server?.id || !user?.id) return;
-
     try {
       await fetchServer(server.id, user.id);
     } catch (err) {
-      console.error('Failed to refresh server status:', err);
       setError('Failed to refresh server status');
     }
   };
@@ -663,16 +588,13 @@ export default function ServerDetailPage({ initialServer }) {
       setError('Server must be stopped to change RAM.');
       return;
     }
-
     if (newRam < 2 || newRam > 32 || !Number.isInteger(newRam)) {
       setError('RAM must be an integer between 2 and 32 GB.');
       return;
     }
-
     try {
       setActionLoading(true);
       setError(null);
-
       const { error: updateError } = await supabase
         .from('servers')
         .update({ ram: newRam })
@@ -684,7 +606,6 @@ export default function ServerDetailPage({ initialServer }) {
       setEditingRam(false);
       await fetchServer(server.id);
     } catch (err) {
-      console.error('RAM update error:', err);
       setError(`Failed to update RAM: ${err.message}`);
     } finally {
       setActionLoading(false);
@@ -726,7 +647,6 @@ export default function ServerDetailPage({ initialServer }) {
   const showModsPluginsTab = isModded || isPlugin;
   const modsPluginsLabel = isModded ? 'Mods' : 'Plugins';
 
-  // UI Enhancement: Show estimated runtime based on credits
   const estimatedHours = credits / (server.cost_per_hour || 1);
   const lowCreditsWarning = estimatedHours < 1 ? 'Low credits: May not run for long.' : '';
 
@@ -885,12 +805,45 @@ export default function ServerDetailPage({ initialServer }) {
                       <p className="text-sm text-gray-600 mb-2">
                         <strong className="font-medium text-gray-800">Game:</strong> {server.game || '—'}
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-gray-600 mb-4">
                         <strong className="font-medium text-gray-800">Online Players:</strong> 
                         {server.status === 'Running' ? 
                           `${server.player_count || 0} / ${server.max_players || '?'}` : 
                           'Offline'}
                       </p>
+
+                      {/* NEW: Auto-Stop Settings UI */}
+                      <div className="border-t border-gray-100 pt-4 mt-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Auto-Stop when empty
+                        </label>
+                        <div className="flex items-center space-x-2">
+                          <select
+                            value={server.auto_stop_timeout ?? 30}
+                            onChange={handleAutoStopChange}
+                            disabled={savingAutoStop}
+                            className="block w-full pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border"
+                          >
+                            <option value="0">Never</option>
+                            <option value="5">5 minutes</option>
+                            <option value="10">10 minutes</option>
+                            <option value="15">15 minutes</option>
+                            <option value="30">30 minutes</option>
+                            <option value="60">1 hour</option>
+                          </select>
+                          {savingAutoStop && <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>}
+                        </div>
+                        
+                        {/* NEW: Countdown Display */}
+                        {autoStopCountdown && (
+                          <div className="mt-2 flex items-center p-2 bg-yellow-50 text-yellow-800 rounded text-sm animate-pulse">
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Stopping in: <strong>{autoStopCountdown}</strong>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-100">
