@@ -812,7 +812,7 @@ runcmd:
   - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
   - apt-get install -y nodejs awscli || true
   - cd /opt/minecraft || true
-  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors dotenv || true
+  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors dotenv minecraft-query || true
   - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
   - wget -O /usr/local/bin/mcrcon.tar.gz https://github.com/Tiiffi/mcrcon/releases/download/v0.7.2/mcrcon-0.7.2-linux-x86-64.tar.gz || true
