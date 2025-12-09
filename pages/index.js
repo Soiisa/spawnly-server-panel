@@ -1,42 +1,128 @@
 // pages/index.js
+import Head from "next/link";
+import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { 
+  RocketLaunchIcon, 
+  CpuChipIcon, 
+  CircleStackIcon, 
+  ServerIcon,
+  CreditCardIcon,
+  ShieldCheckIcon 
+} from "@heroicons/react/24/outline";
 
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-50 text-neutral-900">
+    <div className="min-h-screen flex flex-col bg-gray-50 font-sans text-slate-900">
       <Navbar />
-      <main className="flex-grow container mx-auto px-6 flex flex-col items-center justify-center text-center py-20">
-        {/* Hero Section */}
-        <h1 className="text-5xl font-bold mb-6 text-indigo-900">Spawn a server in seconds</h1>
-        <p className="text-xl mb-8 text-neutral-700 max-w-xl">
-          Pay only for the hours you use. RAM-based pricing. Credits system. Launch Minecraft or other game servers instantly, fully managed.
-        </p>
-        <div className="flex space-x-4">
-          <a href="/register" className="bg-teal-500 hover:bg-teal-400 text-white font-semibold py-3 px-8 rounded-lg shadow-lg transition">
-            Get Started
-          </a>
-          <a href="/pricing" className="bg-indigo-900 hover:bg-indigo-800 text-white font-semibold py-3 px-8 rounded-lg shadow-lg transition">
-            View Pricing
-          </a>
-        </div>
 
-        {/* Features Section */}
-        <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-10">
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-xl font-semibold mb-2 text-indigo-900">Instant Deployment</h3>
-            <p className="text-neutral-700">Spawn your server in under a minute, fully configured and ready to play.</p>
+      <main className="flex-grow">
+        {/* Hero Section */}
+        <section className="relative overflow-hidden pt-16 pb-20 lg:pt-24 lg:pb-28">
+          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
+            <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl md:text-6xl">
+              <span className="block xl:inline">Spawn a server in</span>{" "}
+              <span className="text-indigo-600">seconds</span>
+            </h1>
+            <p className="mx-auto mt-3 max-w-md text-base text-gray-500 sm:text-lg md:mt-5 md:max-w-3xl md:text-xl">
+              Instant game server hosting with flexible, hourly billing. 
+              Pay only for what you use. No monthly contracts, no hidden fees.
+            </p>
+            <div className="mx-auto mt-10 max-w-sm sm:flex sm:max-w-none sm:justify-center gap-4">
+              <Link
+                href="/register"
+                className="flex items-center justify-center rounded-xl border border-transparent bg-indigo-600 px-8 py-3 text-base font-medium text-white hover:bg-indigo-700 md:py-4 md:px-10 md:text-lg shadow-lg shadow-indigo-200 transition-all hover:-translate-y-0.5"
+              >
+                Get Started
+              </Link>
+              <Link
+                href="/pricing"
+                className="mt-3 flex items-center justify-center rounded-xl border border-gray-300 bg-white px-8 py-3 text-base font-medium text-indigo-700 hover:bg-gray-50 md:mt-0 md:py-4 md:px-10 md:text-lg shadow-sm transition-all hover:-translate-y-0.5"
+              >
+                View Pricing
+              </Link>
+            </div>
           </div>
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-xl font-semibold mb-2 text-indigo-900">RAM-Based Pricing</h3>
-            <p className="text-neutral-700">Choose the RAM you need. More RAM = more power, billed per hour.</p>
+        </section>
+
+        {/* Features Grid */}
+        <section className="bg-white py-16 lg:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-base font-semibold uppercase tracking-wide text-indigo-600">Features</h2>
+              <p className="mt-2 text-3xl font-extrabold leading-8 text-gray-900 sm:text-4xl">
+                Everything you need to play
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 lg:grid-cols-3">
+              {/* Feature 1 */}
+              <div className="relative group">
+                <div className="absolute -inset-1 rounded-lg bg-gradient-to-r from-teal-400 to-indigo-500 opacity-25 blur transition duration-200 group-hover:opacity-50"></div>
+                <div className="relative h-full bg-white p-8 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                    <RocketLaunchIcon className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Instant Deployment</h3>
+                  <p className="mt-2 text-gray-500 flex-grow">
+                    Launch Minecraft, Valheim, or Rust servers in under 60 seconds. Our automated provisioning handles the heavy lifting.
+                  </p>
+                </div>
+              </div>
+
+              {/* Feature 2 */}
+              <div className="relative group">
+                <div className="absolute -inset-1 rounded-lg bg-gradient-to-r from-purple-400 to-pink-500 opacity-25 blur transition duration-200 group-hover:opacity-50"></div>
+                <div className="relative h-full bg-white p-8 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
+                    <CreditCardIcon className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Hourly Billing</h3>
+                  <p className="mt-2 text-gray-500 flex-grow">
+                    Stop paying for idle servers. Top up credits and only pay while your server is running. Perfect for weekend gaming sessions.
+                  </p>
+                </div>
+              </div>
+
+              {/* Feature 3 */}
+              <div className="relative group">
+                <div className="absolute -inset-1 rounded-lg bg-gradient-to-r from-orange-400 to-amber-500 opacity-25 blur transition duration-200 group-hover:opacity-50"></div>
+                <div className="relative h-full bg-white p-8 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                    <CircleStackIcon className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Persistent Storage</h3>
+                  <p className="mt-2 text-gray-500 flex-grow">
+                    Your world files are safe even when the server is stopped. We automatically back up your data to secure cloud storage.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-xl font-semibold mb-2 text-indigo-900">Persistent Storage</h3>
-            <p className="text-neutral-700">Your world files are saved securely and ready when you start the server again.</p>
+        </section>
+
+        {/* Stats / Trust Section */}
+        <section className="bg-indigo-900 py-12">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 gap-8 sm:grid-cols-3 text-center">
+              <div>
+                <p className="text-4xl font-bold text-white">99.9%</p>
+                <p className="mt-1 text-indigo-200">Uptime</p>
+              </div>
+              <div>
+                <p className="text-4xl font-bold text-white">NVMe</p>
+                <p className="mt-1 text-indigo-200">Fast Storage</p>
+              </div>
+              <div>
+                <p className="text-4xl font-bold text-white">DDoS</p>
+                <p className="mt-1 text-indigo-200">Protection Included</p>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
       </main>
+
       <Footer />
     </div>
   );
