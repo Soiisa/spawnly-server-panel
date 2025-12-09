@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid'; // Added import
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -1065,6 +1066,9 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     console.log('Updating Supabase with:', { hetznerId, ipv4, newStatus, rconPassword, subdomain: serverRow.subdomain, needsFileDeletion: false });
 
+    // Generate a new session ID for billing
+    const currentSessionId = uuidv4();
+
     const { data: updatedRow, error: updateErr } = await supabaseAdmin
       .from('servers')
       .update({
@@ -1074,6 +1078,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         rcon_password: rconPassword,
         subdomain: serverRow.subdomain,
         needs_file_deletion: false,
+        current_session_id: currentSessionId, // Set the session ID
       })
       .eq('id', serverRow.id)
       .select()
