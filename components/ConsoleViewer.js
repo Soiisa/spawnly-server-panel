@@ -1,47 +1,64 @@
-// components/ConsoleViewer.js
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { 
+  CommandLineIcon, 
+  PaperAirplaneIcon, 
+  TrashIcon, 
+  PauseIcon, 
+  PlayIcon, 
+  ArrowDownCircleIcon, 
+  StopCircleIcon 
+} from '@heroicons/react/24/outline';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export default function ConsoleViewer({ server }) {
+  // --- State ---
   const logRef = useRef(null);
   const [lines, setLines] = useState([]);
   const [connected, setConnected] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [paused, setPaused] = useState(false);
   const [command, setCommand] = useState('');
-  const [status, setStatus] = useState('Connecting...');
+  const [status, setStatus] = useState('Initializing...');
+  const [isSending, setIsSending] = useState(false);
+
+  // --- Effects ---
 
   useEffect(() => {
     if (!server?.id) return;
 
     // Load initial console log
     const loadConsole = async () => {
+      setStatus('Fetching logs...');
       const { data, error } = await supabase
         .from('server_console')
         .select('console_log')
         .eq('server_id', server.id)
         .single();
 
-      if (error && error.code !== 'PGRST116') { // Ignore if no row exists yet
+      if (error && error.code !== 'PGRST116') {
         console.error('Error loading console:', error);
+        setStatus('Error loading logs');
         return;
       }
 
       const logText = data?.console_log || '';
-      setLines(logText ? logText.split('\n') : []);
+      if (logText) {
+        setLines(logText.split('\n'));
+      }
+      setStatus('Ready');
     };
 
     loadConsole();
 
-    // Subscribe to realtime updates - FIXED VERSION
+    // Subscribe to realtime updates
     const channel = supabase
       .channel(`console:${server.id}`)
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen for INSERT, UPDATE, DELETE
+          event: '*',
           schema: 'public',
           table: 'server_console',
           filter: `server_id=eq.${server.id}`,
@@ -49,148 +66,215 @@ export default function ConsoleViewer({ server }) {
         (payload) => {
           if (paused) return;
           
-          console.log('Realtime update received:', payload);
-          
-          // Handle different event types
           if (payload.eventType === 'DELETE') {
             setLines([]);
             return;
           }
           
-          // For INSERT or UPDATE
           const newLog = payload.new?.console_log || '';
           if (newLog) {
             setLines(newLog.split('\n'));
           }
         }
       )
-      .subscribe((status) => {
-        console.log('Subscription status:', status);
-        setConnected(status === 'SUBSCRIBED');
-        setStatus(status === 'SUBSCRIBED' ? 'Live' : status);
+      .subscribe((state) => {
+        const isConnected = state === 'SUBSCRIBED';
+        setConnected(isConnected);
+        setStatus(isConnected ? 'Live Stream Active' : 'Connecting...');
       });
 
     return () => {
-      console.log('Cleaning up subscription');
       supabase.removeChannel(channel);
     };
   }, [server?.id, paused]);
 
-  // Auto-scroll to bottom when new lines are added
+  // Handle Auto-scroll
   useEffect(() => {
     if (autoScroll && logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [lines, autoScroll]);
 
+  // Detect manual scroll to disable auto-scroll
+  const handleScroll = () => {
+    if (!logRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = logRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    
+    // Only update if the user manually scrolled away from bottom
+    if (!isAtBottom && autoScroll) {
+      setAutoScroll(false);
+    } else if (isAtBottom && !autoScroll) {
+      setAutoScroll(true);
+    }
+  };
+
+  // --- Actions ---
+
   const sendCommand = async (e) => {
     e?.preventDefault();
-    if (!command.trim()) return;
+    if (!command.trim() || isSending) return;
     
+    const cmdToSend = command.trim();
+    setCommand(''); // Clear immediately for better UX
+    setIsSending(true);
+    
+    // Optimistic UI update
+    setLines(prev => [...prev, `> ${cmdToSend}`]);
+
     try {
-      setStatus('Sending...');
       const resp = await fetch('/api/servers/rcon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           serverId: server.id, 
-          command: command.trim() 
+          command: cmdToSend 
         }),
       });
       
       const json = await resp.json();
       if (!resp.ok) throw new Error(json.error || 'Failed to send command');
       
-      setStatus('Sent');
       if (json.response) {
-        // Add command response to console
-        setLines(prev => [...prev, `[rcon] ${json.response}`]);
+        setLines(prev => [...prev, json.response]);
       }
     } catch (err) {
-      console.error('Command error:', err);
-      setStatus(`Error: ${err.message}`);
+      setLines(prev => [...prev, `[Error] ${err.message}`]);
     } finally {
-      setCommand('');
-      setTimeout(() => setStatus(connected ? 'Live' : 'Disconnected'), 2000);
+      setIsSending(false);
+      // Force scroll to bottom on command send
+      setAutoScroll(true);
     }
   };
 
+  const clearConsole = () => {
+    setLines([]);
+  };
+
+  // --- Render ---
+
   return (
-    <div className="bg-white rounded-lg shadow p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <strong className="text-lg">{server?.name || 'Server Console'}</strong>
-          <div className="text-sm text-gray-500">
-            Status: {connected ? 'Live' : 'Disconnected'} — {status}
+    <div className="flex flex-col h-[600px] bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      
+      {/* 1. Header & Toolbar */}
+      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3">
+        
+        {/* Title & Status */}
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${connected ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200 text-gray-500'}`}>
+            <CommandLineIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Terminal</h3>
+            <div className="flex items-center gap-2">
+              <span className={`relative flex h-2 w-2`}>
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${connected ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${connected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+              </span>
+              <p className="text-xs text-gray-500 font-mono">{status}</p>
+            </div>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <button 
-            onClick={() => setAutoScroll(s => !s)} 
-            className={`px-3 py-1 rounded text-sm ${
-              autoScroll ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-            }`}
+
+        {/* Controls */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <button
+            onClick={() => setAutoScroll(!autoScroll)}
+            className={`p-2 rounded-md text-xs font-medium border transition-colors flex items-center gap-1.5
+              ${autoScroll 
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-200' 
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}
+            title="Toggle Auto-scroll"
           >
-            Auto-scroll: {autoScroll ? 'ON' : 'OFF'}
+            {autoScroll ? <ArrowDownCircleIcon className="w-4 h-4" /> : <StopCircleIcon className="w-4 h-4" />}
+            <span className="hidden sm:inline">Auto-scroll</span>
           </button>
-          <button 
-            onClick={() => setPaused(p => !p)} 
-            className={`px-3 py-1 rounded text-sm ${
-              paused ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
-            }`}
+
+          <button
+            onClick={() => setPaused(!paused)}
+            className={`p-2 rounded-md text-xs font-medium border transition-colors flex items-center gap-1.5
+              ${paused 
+                ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}
+            title={paused ? "Resume updates" : "Pause updates"}
           >
-            {paused ? 'Resume' : 'Pause'}
+            {paused ? <PlayIcon className="w-4 h-4" /> : <PauseIcon className="w-4 h-4" />}
+            <span className="hidden sm:inline">{paused ? 'Resume' : 'Pause'}</span>
           </button>
-          <button 
-            onClick={() => setLines([])} 
-            className="px-3 py-1 bg-red-100 text-red-800 rounded text-sm"
+
+          <button
+            onClick={clearConsole}
+            className="p-2 rounded-md text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors flex items-center gap-1.5"
+            title="Clear Console"
           >
-            Clear
+            <TrashIcon className="w-4 h-4" />
+            <span className="hidden sm:inline">Clear</span>
           </button>
         </div>
       </div>
 
-      <div
+      {/* 2. Log Window */}
+      <div 
+        className="flex-1 bg-slate-950 p-4 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent"
         ref={logRef}
-        style={{ 
-          height: '400px', 
-          overflowY: 'auto', 
-          fontFamily: 'monospace', 
-          whiteSpace: 'pre-wrap', 
-          fontSize: '12px',
-          lineHeight: '1.2'
-        }}
-        className="p-3 border rounded bg-black text-green-400"
+        onScroll={handleScroll}
       >
-        {lines.length === 0 ? (
-          <div className="text-gray-500 italic">
-            {connected ? 'Waiting for logs...' : 'Connecting to console...'}
-          </div>
-        ) : (
-          lines.map((line, index) => (
-            <div key={index} className="console-line">
-              {line}
+        <div className="font-mono text-xs sm:text-sm leading-relaxed font-normal">
+          {lines.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-3 opacity-50">
+              <CommandLineIcon className="w-12 h-12" />
+              <p>Waiting for logs...</p>
             </div>
-          ))
+          ) : (
+            lines.map((line, i) => (
+              <div key={i} className="break-words whitespace-pre-wrap hover:bg-slate-900/50 px-1 -mx-1 rounded">
+                {/* Basic coloring for common log levels */}
+                {line.includes('INFO') ? <span className="text-slate-300">{line}</span> :
+                 line.includes('WARN') ? <span className="text-amber-400">{line}</span> :
+                 line.includes('ERROR') || line.includes('Exception') ? <span className="text-red-400">{line}</span> :
+                 line.startsWith('>') ? <span className="text-indigo-400 font-bold">{line}</span> :
+                 <span className="text-slate-400">{line}</span>
+                }
+              </div>
+            ))
+          )}
+          {/* Invisible element to scroll to */}
+          {autoScroll && <div className="h-1" />} 
+        </div>
+      </div>
+
+      {/* 3. Input Area */}
+      <div className="bg-white border-t border-gray-200 p-3">
+        <form onSubmit={sendCommand} className="relative flex items-center">
+          <div className="absolute left-3 text-gray-400 select-none font-mono">{'>'}</div>
+          <input
+            type="text"
+            className="w-full pl-7 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            placeholder="Type a command (e.g. /op user, /time set day)..."
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            disabled={!connected}
+          />
+          <button
+            type="submit"
+            disabled={!connected || !command.trim() || isSending}
+            className="absolute right-2 p-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSending ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <PaperAirplaneIcon className="w-4 h-4" />
+            )}
+          </button>
+        </form>
+        {!connected && (
+          <p className="text-xs text-red-500 mt-2 ml-1">
+            * Console is disconnected. Start the server to issue commands.
+          </p>
         )}
       </div>
-
-      <form onSubmit={sendCommand} className="mt-3 flex gap-2">
-        <input
-          className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder='Type a Minecraft command (e.g., "say hello", "list", "time set day")'
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          disabled={!connected}
-        />
-        <button 
-          type="submit" 
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
-          disabled={!connected || !command.trim()}
-        >
-          Send
-        </button>
-      </form>
     </div>
   );
 }

@@ -1,28 +1,84 @@
-import { useState, useEffect, useMemo, memo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  MagnifyingGlassIcon, 
+  CommandLineIcon, 
+  AdjustmentsHorizontalIcon,
+  GlobeAmericasIcon,
+  ShieldCheckIcon,
+  CpuChipIcon,
+  PuzzlePieceIcon,
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon
+} from '@heroicons/react/24/outline';
 
-// Move constants and pure functions outside the component to prevent re-renders
-const KEY_ORDER = [
-  'max-players',
-  'gamemode',
-  'difficulty',
-  'online-mode',
-  'white-list',
-  'pvp',
-  'allow-flight',
-  'enable-command-block',
-  'spawn-animals',
-  'spawn-monsters',
-  'spawn-npcs',
-  'force-gamemode',
-  'player-idle-timeout',
-  'require-resource-pack',
-  'resource-pack',
-  'resource-pack-prompt',
-  'spawn-protection',
-  'simulation-distance',
-  'view-distance',
-];
+// --- Configuration Constants ---
+
+const GROUPS = {
+  GAMEPLAY: {
+    id: 'gameplay',
+    label: 'Gameplay',
+    icon: PuzzlePieceIcon,
+    keys: ['gamemode', 'difficulty', 'pvp', 'allow-flight', 'force-gamemode', 'hardcore']
+  },
+  WORLD: {
+    id: 'world',
+    label: 'World Generation',
+    icon: GlobeAmericasIcon,
+    keys: ['level-name', 'level-seed', 'level-type', 'generate-structures', 'spawn-protection', 'spawn-animals', 'spawn-monsters', 'spawn-npcs']
+  },
+  PERFORMANCE: {
+    id: 'performance',
+    label: 'Performance & Limits',
+    icon: CpuChipIcon,
+    keys: ['max-players', 'view-distance', 'simulation-distance', 'player-idle-timeout', 'rate-limit']
+  },
+  SECURITY: {
+    id: 'security',
+    label: 'Security & Network',
+    icon: ShieldCheckIcon,
+    keys: ['online-mode', 'white-list', 'enable-command-block', 'enforce-whitelist', 'server-port', 'enable-rcon']
+  },
+  ADVANCED: {
+    id: 'advanced',
+    label: 'Advanced / Other',
+    icon: AdjustmentsHorizontalIcon,
+    keys: ['resource-pack', 'resource-pack-prompt', 'require-resource-pack', 'motd']
+  }
+};
+
+// Map keys to their group (helper)
+const KEY_TO_GROUP = Object.values(GROUPS).reduce((acc, group) => {
+  group.keys.forEach(k => acc[k] = group.id);
+  return acc;
+}, {});
+
+const PRETTY_LABELS = {
+  'max-players': 'Max Players',
+  'gamemode': 'Game Mode',
+  'difficulty': 'Difficulty',
+  'online-mode': 'Online Mode (Premium)',
+  'white-list': 'Enable Whitelist',
+  'pvp': 'PvP Enabled',
+  'allow-flight': 'Allow Flight',
+  'enable-command-block': 'Command Blocks',
+  'spawn-animals': 'Spawn Animals',
+  'spawn-monsters': 'Spawn Monsters',
+  'spawn-npcs': 'Spawn NPCs',
+  'force-gamemode': 'Force Game Mode',
+  'player-idle-timeout': 'Idle Timeout (min)',
+  'require-resource-pack': 'Require Resource Pack',
+  'resource-pack': 'Resource Pack URL',
+  'resource-pack-prompt': 'Resource Pack Prompt',
+  'spawn-protection': 'Spawn Protection Radius',
+  'simulation-distance': 'Sim Distance (Chunks)',
+  'view-distance': 'View Distance (Chunks)',
+  'level-seed': 'Level Seed',
+  'level-name': 'Level Name',
+  'motd': 'MOTD',
+  'hardcore': 'Hardcore Mode'
+};
 
 const GAMEMODE_OPTIONS = [
   { label: 'Survival', value: 'survival' },
@@ -38,541 +94,345 @@ const DIFFICULTY_OPTIONS = [
   { label: 'Hard', value: 'hard' },
 ];
 
-const prettyLabels = {
-  'max-players': 'Vagas',
-  'gamemode': 'Modo de jogo',
-  'difficulty': 'Dificuldade',
-  'online-mode': 'Pirata',
-  'white-list': 'Whitelist',
-  pvp: 'PVP',
-  'allow-flight': 'Voar',
-  'enable-command-block': 'Blocos de Comando',
-  'spawn-animals': 'Animais',
-  'spawn-monsters': 'Monstro',
-  'spawn-npcs': 'Aldeões',
-  'force-gamemode': 'Forçar modo de jogo',
-  'player-idle-timeout': 'Tempo limite de inatividade',
-  'require-resource-pack': 'É necessário um pacote de recursos',
-  'resource-pack': 'Resource pack',
-  'resource-pack-prompt': "Prompt do 'resource pack'",
-  'spawn-protection': 'Proteção de Spawn',
-  'simulation-distance': 'Distância de simulação',
-  'view-distance': 'Distância de visão',
+// --- Helper Functions ---
+
+const parseProperties = (text) => {
+  const map = {};
+  text.split(/\r?\n/).forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const idx = trimmed.indexOf('=');
+    if (idx === -1) return;
+    map[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1).trim();
+  });
+  return map;
 };
 
-// Pure helper functions - defined outside component
-const boolValue = (val) => {
-  if (val === undefined || val === null || val === '') return false;
-  const v = String(val).toLowerCase();
-  return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+const serializeProperties = (map) => {
+  return Object.entries(map).map(([k, v]) => `${k}=${v}`).join('\n');
 };
 
-const numberValue = (val, fallback = 0) => {
+const toBool = (val) => ['true', '1', 'yes', 'on'].includes(String(val).toLowerCase());
+const toNum = (val, def = 0) => {
   const n = Number(val);
-  return Number.isFinite(n) ? n : fallback;
+  return Number.isFinite(n) ? n : def;
 };
 
-// Memoized card components with stable references
-const Toggle = memo(({ checked, onChange, label }) => (
-  <div className="relative group">
+// --- Sub-components ---
+
+const ToggleInput = ({ label, value, onChange }) => (
+  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+    <span className="text-sm font-medium text-gray-700">{label}</span>
     <button
-      onClick={() => onChange(!checked)}
-      className={`w-12 h-6 rounded-full flex items-center px-1 transition-all duration-300 ${checked ? 'bg-green-500' : 'bg-gray-300'}`}
-      aria-pressed={checked}
-      title={label}
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${value ? 'bg-indigo-600' : 'bg-gray-200'}`}
     >
-      <motion.span
-        className="inline-block w-4 h-4 rounded-full bg-white shadow"
-        animate={{ x: checked ? 24 : 2 }}
-        transition={{ type: 'spring', stiffness: 700, damping: 30 }}
+      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${value ? 'translate-x-5' : 'translate-x-0'}`} />
+    </button>
+  </div>
+);
+
+const SelectInput = ({ label, value, options, onChange }) => (
+  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{label}</label>
+    <select
+      value={value || options[0].value}
+      onChange={(e) => onChange(e.target.value)}
+      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2"
+    >
+      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+    </select>
+  </div>
+);
+
+const NumberInput = ({ label, value, min = 0, max = 9999, onChange }) => (
+  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{label}</label>
+    <div className="flex items-center">
+      <button 
+        onClick={() => onChange(Math.max(min, Number(value) - 1))}
+        className="w-8 h-8 flex items-center justify-center bg-white border border-gray-300 rounded-l-lg hover:bg-gray-100 text-gray-600"
+      >-</button>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value))))}
+        className="block w-full border-y border-gray-300 text-center focus:ring-0 focus:border-indigo-500 sm:text-sm py-1.5 z-10"
       />
-    </button>
-    <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-xs text-gray-200 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-      {label}
-    </span>
+      <button 
+        onClick={() => onChange(Math.min(max, Number(value) + 1))}
+        className="w-8 h-8 flex items-center justify-center bg-white border border-gray-300 rounded-r-lg hover:bg-gray-100 text-gray-600"
+      >+</button>
+    </div>
   </div>
-));
+);
 
-const Stepper = memo(({ value, min = 0, max = 1000, onChange, label }) => (
-  <div className="relative group flex items-center space-x-2">
-    <button
-      onClick={() => onChange(Math.max(min, value - 1))}
-      className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 transition-colors"
-      title="Decrease"
-    >
-      −
-    </button>
+const TextInput = ({ label, value, placeholder, onChange }) => (
+  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 md:col-span-2">
+    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{label}</label>
     <input
-      type="number"
-      value={value}
-      onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value || 0))))}
-      className="w-20 text-center bg-white border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+      type="text"
+      value={value || ''}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
     />
-    <button
-      onClick={() => onChange(Math.min(max, value + 1))}
-      className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 transition-colors"
-      title="Increase"
-    >
-      +
-    </button>
-    <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-xs text-gray-200 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-      {label}
-    </span>
   </div>
-));
+);
 
-const MemoCard = memo(function Card({ propKey, value, setProperty }) {
-  const pretty = prettyLabels[propKey] || propKey;
+// --- Main Component ---
 
-  switch (propKey) {
-    case 'max-players': {
-      const v = numberValue(value || 20, 20);
-      return (
-        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
-              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
-            </div>
-            <Stepper value={v} min={0} max={1000} onChange={(nv) => setProperty(propKey, nv)} label="Maximum players" />
-          </div>
-        </div>
-      );
-    }
-
-    case 'gamemode': {
-      const v = value || 'survival';
-      return (
-        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
-              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
-            </div>
-            <select
-              value={v}
-              onChange={(e) => setProperty(propKey, e.target.value)}
-              className="w-44 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-600"
-            >
-              {GAMEMODE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      );
-    }
-
-    case 'difficulty': {
-      const v = value || 'easy';
-      return (
-        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
-              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
-            </div>
-            <select
-              value={v}
-              onChange={(e) => setProperty(propKey, e.target.value)}
-              className="w-44 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-600"
-            >
-              {DIFFICULTY_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      );
-    }
-
-    case 'online-mode':
-    case 'white-list':
-    case 'pvp':
-    case 'allow-flight':
-    case 'enable-command-block':
-    case 'spawn-animals':
-    case 'spawn-monsters':
-    case 'spawn-npcs':
-    case 'force-gamemode':
-    case 'require-resource-pack': {
-      const v = boolValue(value);
-      return (
-        <div className="bg-gray-100 rounded-lg p-5 shadow-sm flex justify-between items-center">
-          <div>
-            <div className="text-lg font-semibold text-gray-900">{pretty}</div>
-            <div className="text-xs text-gray-500 mt-1">{propKey}</div>
-          </div>
-          <Toggle checked={v} onChange={(nv) => setProperty(propKey, nv ? 'true' : 'false')} label={pretty} />
-        </div>
-      );
-    }
-
-    case 'player-idle-timeout': {
-      const v = numberValue(value || 0, 0);
-      return (
-        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
-              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
-            </div>
-            <Stepper value={v} min={0} max={1440} onChange={(nv) => setProperty(propKey, nv)} label="Idle timeout (minutes)" />
-          </div>
-        </div>
-      );
-    }
-
-    case 'resource-pack':
-    case 'resource-pack-prompt': {
-      const v = value || '';
-      return (
-        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
-          <div>
-            <div className="text-lg font-semibold text-gray-900">{pretty}</div>
-            <div className="text-xs text-gray-500 mt-1">{propKey}</div>
-            <input
-              value={v}
-              onChange={(e) => setProperty(propKey, e.target.value)}
-              placeholder={propKey === 'resource-pack' ? 'https://example.com/resource-pack.zip' : ''}
-              className="mt-3 w-full bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-600"
-            />
-          </div>
-        </div>
-      );
-    }
-
-    case 'spawn-protection': {
-      const v = numberValue(value || 0, 0);
-      return (
-        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
-              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
-            </div>
-            <Stepper value={v} min={0} max={100} onChange={(nv) => setProperty(propKey, nv)} label="Spawn protection radius" />
-          </div>
-        </div>
-      );
-    }
-
-    case 'view-distance': {
-      const v = numberValue(value || 10, 10);
-      return (
-        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
-              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
-            </div>
-            <Stepper value={v} min={3} max={32} onChange={(nv) => setProperty(propKey, nv)} label="View distance (chunks)" />
-          </div>
-        </div>
-      );
-    }
-
-    case 'simulation-distance': {
-      const v = numberValue(value || 10, 10);
-      return (
-        <div className="bg-gray-100 rounded-lg p-5 shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{pretty}</div>
-              <div className="text-xs text-gray-500 mt-1">{propKey}</div>
-            </div>
-            <Stepper value={v} min={3} max={32} onChange={(nv) => setProperty(propKey, nv)} label="Simulation distance (chunks)" />
-          </div>
-        </div>
-      );
-    }
-
-    default:
-      return null;
-  }
-});
-
-/**
- * ServerPropertiesEditor
- * - Parses server.properties text -> key/value map
- * - Renders two-column card UI for common keys (toggles, selects, steppers)
- * - Keeps textarea and cards in sync
- * - White background with high-contrast colors
- * - Animations only on initial mount of container or specific state changes
- * - Memoized cards to prevent unnecessary re-renders and animation triggers
- *
- * Requires Tailwind CSS and Framer Motion.
- */
 export default function ServerPropertiesEditor({ server }) {
   const [propertiesText, setPropertiesText] = useState('');
+  const [originalText, setOriginalText] = useState('');
+  const [viewMode, setViewMode] = useState('visual'); // 'visual' | 'raw'
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const [isServerOffline, setIsServerOffline] = useState(false);
-  const [showRaw, setShowRaw] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
 
-  // ------------ Parsing Utilities ------------
-  const parseProperties = useCallback((text) => {
-    const lines = text.split(/\r?\n/);
-    const map = {};
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const idx = trimmed.indexOf('=');
-      if (idx === -1) continue;
-      const key = trimmed.slice(0, idx).trim();
-      const value = trimmed.slice(idx + 1).trim();
-      map[key] = value;
-    }
-    return map;
-  }, []);
+  // Derived state
+  const properties = useMemo(() => parseProperties(propertiesText), [propertiesText]);
+  const hasChanges = propertiesText !== originalText;
 
-  const serializeProperties = useCallback((map) => {
-    const keys = [...KEY_ORDER.filter((k) => k in map), ...Object.keys(map).filter((k) => !KEY_ORDER.includes(k))];
-    return keys.map((k) => `${k}=${map[k]}`).join('\n');
-  }, []);
-
-  // parsedProperties derived from propertiesText
-  const parsed = useMemo(() => parseProperties(propertiesText || ''), [propertiesText, parseProperties]);
-
-  // Helper to update a single key and sync textarea - memoized with useCallback
-  const setProperty = useCallback((key, value) => {
-    const next = { ...parsed };
-    if (value === '' || value === null || value === undefined) {
-      delete next[key];
-    } else {
-      next[key] = String(value);
-    }
-    const serialized = serializeProperties(next);
-    setPropertiesText(serialized);
-  }, [parsed, serializeProperties]);
-
-  // Build a list of cards to render in order - memoized
-  const cards = useMemo(() => 
-    KEY_ORDER.map((key) => ({ key, value: parsed[key] ?? '' })),
-    [parsed]
-  );
-
-  // Fetch properties
+  // --- Fetch Data ---
   useEffect(() => {
-    if (!server) return;
-
-    const fetchProperties = async () => {
+    if (!server?.id) return;
+    const load = async () => {
       try {
         setIsLoading(true);
-        setError('');
-        setIsServerOffline(server.status !== 'Running' || !server.ipv4);
-
-        const response = await fetch(`/api/servers/${server.id}/properties`);
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error('Server not found');
-          } else {
-            throw new Error(`Failed to fetch properties: ${response.statusText}`);
-          }
-        }
-        const text = await response.text();
+        const res = await fetch(`/api/servers/${server.id}/properties`);
+        if (!res.ok) throw new Error('Failed to load properties');
+        const text = await res.text();
         setPropertiesText(text);
+        setOriginalText(text);
       } catch (err) {
-        setError(err.message || String(err));
-        console.error('Error fetching server properties:', err);
+        setError(err.message);
       } finally {
         setIsLoading(false);
       }
     };
+    load();
+  }, [server.id]);
 
-    fetchProperties();
-  }, [server]);
+  // --- Handlers ---
 
-  // Save handler (POST plain text)
+  const updateProperty = (key, value) => {
+    const newProps = { ...properties };
+    if (value === undefined || value === null) delete newProps[key];
+    else newProps[key] = String(value);
+    setPropertiesText(serializeProperties(newProps));
+  };
+
   const handleSave = async () => {
     try {
       setIsSaving(true);
-      setError('');
-      setMessage('');
-      const response = await fetch(`/api/servers/${server.id}/properties`, {
+      setError(null);
+      setMessage(null);
+      
+      const res = await fetch(`/api/servers/${server.id}/properties`, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: propertiesText,
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to save properties');
-      }
-      setMessage(
-        isServerOffline
-          ? 'Properties saved to storage successfully! Changes will apply when the server is restarted.'
-          : 'Properties saved successfully! Server restart may be required for some changes to take effect.'
-      );
-      setTimeout(() => setMessage(''), 5000);
+      
+      if (!res.ok) throw new Error('Failed to save properties');
+      
+      setOriginalText(propertiesText);
+      setMessage('Properties saved successfully! Restart server to apply.');
+      setTimeout(() => setMessage(null), 5000);
     } catch (err) {
-      setError(err.message || String(err));
-      console.error('Error saving server properties:', err);
+      setError(err.message);
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Reset handler
   const handleReset = () => {
-    if (!confirm('Are you sure you want to reset all changes?')) return;
-    (async () => {
-      setIsLoading(true);
-      setError('');
-      try {
-        const response = await fetch(`/api/servers/${server.id}/properties`);
-        if (!response.ok) throw new Error('Failed to reload properties');
-        const text = await response.text();
-        setPropertiesText(text);
-      } catch (err) {
-        setError(err.message || String(err));
-      } finally {
-        setIsLoading(false);
-      }
-    })();
+    if (confirm('Discard all unsaved changes?')) {
+      setPropertiesText(originalText);
+    }
   };
 
-  if (isLoading) {
-    return (
-      <div className="bg-white rounded-xl shadow-lg p-6 text-gray-900">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">Server Properties</h2>
-        </div>
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading server properties...</p>
-        </div>
-      </div>
-    );
-  }
+  // --- Render Helpers ---
+
+  const renderField = (key) => {
+    const val = properties[key];
+    const label = PRETTY_LABELS[key] || key;
+
+    // Toggle Types
+    if ([
+      'online-mode', 'white-list', 'pvp', 'allow-flight', 
+      'enable-command-block', 'spawn-animals', 'spawn-monsters', 
+      'spawn-npcs', 'force-gamemode', 'require-resource-pack', 
+      'generate-structures', 'hardcore', 'enforce-whitelist', 'enable-rcon'
+    ].includes(key)) {
+      return <ToggleInput key={key} label={label} value={toBool(val)} onChange={(v) => updateProperty(key, v)} />;
+    }
+
+    // Select Types
+    if (key === 'gamemode') return <SelectInput key={key} label={label} value={val} options={GAMEMODE_OPTIONS} onChange={(v) => updateProperty(key, v)} />;
+    if (key === 'difficulty') return <SelectInput key={key} label={label} value={val} options={DIFFICULTY_OPTIONS} onChange={(v) => updateProperty(key, v)} />;
+
+    // Number Types
+    if ([
+      'max-players', 'view-distance', 'simulation-distance', 
+      'player-idle-timeout', 'spawn-protection', 'server-port', 'rate-limit'
+    ].includes(key)) {
+      return <NumberInput key={key} label={label} value={toNum(val)} onChange={(v) => updateProperty(key, v)} />;
+    }
+
+    // Text Types
+    return <TextInput key={key} label={label} value={val} placeholder={`Enter ${label}...`} onChange={(v) => updateProperty(key, v)} />;
+  };
+
+  if (isLoading) return (
+    <div className="flex justify-center items-center py-20">
+      <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
+    </div>
+  );
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="bg-white text-gray-900 rounded-xl shadow-lg p-6"
-    >
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-3xl font-bold">Server Properties</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            {isServerOffline
-              ? 'Server is offline. Changes will apply on restart.'
-              : 'Edit server settings. Some changes require a restart.'}
-          </p>
+    <div className="space-y-6">
+      
+      {/* Header & Controls */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+        <div className="relative flex-1 w-full md:w-auto md:max-w-md">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input 
+            type="text" 
+            placeholder="Search settings..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+          />
         </div>
-        <div className="flex items-center space-x-4">
-          {isServerOffline && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="px-3 py-1 bg-yellow-400 text-gray-900 rounded-full text-sm font-semibold"
-            >
-              Offline
-            </motion.div>
-          )}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowRaw(!showRaw)}
-            className="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition-colors"
+        
+        <div className="flex items-center gap-2 w-full md:w-auto bg-gray-100 p-1 rounded-xl">
+          <button
+            onClick={() => setViewMode('visual')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              viewMode === 'visual' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+            }`}
           >
-            {showRaw ? 'Hide Raw' : 'Edit Raw'}
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleReset}
-            disabled={isSaving}
-            className="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 disabled:opacity-50 transition-colors"
-            title="Reset to original properties"
+            <AdjustmentsHorizontalIcon className="w-4 h-4" /> Visual
+          </button>
+          <button
+            onClick={() => setViewMode('raw')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              viewMode === 'raw' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+            }`}
           >
-            Reset
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50 flex items-center transition-colors"
-          >
-            {isSaving && (
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-              </svg>
-            )}
-            Save Changes
-          </motion.button>
+            <CommandLineIcon className="w-4 h-4" /> Raw File
+          </button>
         </div>
       </div>
 
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-red-100 text-red-800 rounded-lg mb-6 flex justify-between items-center"
-          >
-            <span>
-              <strong>Error:</strong> {error}
-            </span>
-            <button onClick={() => setError('')} className="text-red-600 font-bold hover:text-red-700">
-              ×
-            </button>
-          </motion.div>
-        )}
-        {message && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-green-100 text-green-800 rounded-lg mb-6 flex justify-between items-center"
-          >
-            <span>{message}</span>
-            <button onClick={() => setMessage('')} className="text-green-600 font-bold hover:text-green-700">
-              ×
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showRaw && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="mb-6"
-          >
+      {/* Main Content Area */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px]">
+        {viewMode === 'raw' ? (
+          <div className="h-full flex flex-col">
+            <div className="bg-gray-50 px-6 py-3 border-b border-gray-200 text-xs text-gray-500 font-mono">
+              server.properties
+            </div>
             <textarea
               value={propertiesText}
               onChange={(e) => setPropertiesText(e.target.value)}
-              className="w-full h-48 bg-white border border-gray-300 rounded-lg p-4 font-mono text-sm resize-y focus:outline-none focus:ring-2 focus:ring-indigo-600"
-              placeholder="Raw server.properties content"
+              className="w-full h-[600px] p-6 font-mono text-sm bg-white text-slate-800 border-none outline-none resize-y"
+              spellCheck="false"
             />
+          </div>
+        ) : (
+          <div className="p-6 space-y-8">
+            {Object.values(GROUPS).map((group) => {
+              // Filter keys based on search
+              const activeKeys = group.keys.filter(k => {
+                const label = PRETTY_LABELS[k] || k;
+                return !searchQuery || 
+                       k.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                       label.toLowerCase().includes(searchQuery.toLowerCase());
+              });
+
+              if (activeKeys.length === 0) return null;
+
+              return (
+                <div key={group.id} className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
+                    <group.icon className="w-5 h-5 text-indigo-500" />
+                    {group.label}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {activeKeys.map(key => renderField(key))}
+                  </div>
+                </div>
+              );
+            })}
+            
+            {/* Show "Other" properties not in our strict groups if searched */}
+            {searchQuery && (
+              <div className="pt-4">
+                <h4 className="text-sm font-semibold text-gray-500 mb-2 uppercase">Other Matches</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Object.keys(properties)
+                    .filter(k => !KEY_TO_GROUP[k] && k.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map(key => <TextInput key={key} label={key} value={properties[key]} onChange={(v) => updateProperty(key, v)} />)
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Floating Action Bar (Only shows when changes exist) */}
+      <AnimatePresence>
+        {hasChanges && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/90 backdrop-blur-md border border-indigo-200 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 max-w-lg w-[90%]"
+          >
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900">Unsaved Changes</p>
+              <p className="text-xs text-gray-500">Changes will apply after a server restart.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={handleReset}
+                disabled={isSaving}
+                className="text-sm font-medium text-gray-600 hover:text-red-600 transition-colors"
+              >
+                Discard
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <CheckCircleIcon className="w-4 h-4" />}
+                Save Changes
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {cards.map(({ key, value }) => (
-          <MemoCard
-            key={key}
-            propKey={key}
-            value={value}
-            setProperty={setProperty}
-          />
-        ))}
-      </div>
-    </motion.div>
+      {/* Feedback Toasts */}
+      <AnimatePresence>
+        {message && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-6 right-6 z-50 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
+            <CheckCircleIcon className="w-5 h-5" /> {message}
+          </motion.div>
+        )}
+        {error && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-6 right-6 z-50 bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
+            <ExclamationCircleIcon className="w-5 h-5" /> {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+    </div>
   );
 }

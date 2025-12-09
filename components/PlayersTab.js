@@ -1,166 +1,123 @@
-// components/PlayersTab.js
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import md5 from 'md5';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  UserGroupIcon,
+  ShieldCheckIcon,
+  NoSymbolIcon,
+  GlobeAltIcon,
+  ArrowPathIcon,
+  MagnifyingGlassIcon,
+  UserPlusIcon,
+  TrashIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  SignalIcon,
+  SignalSlashIcon,
+  ClockIcon,
+  IdentificationIcon
+} from '@heroicons/react/24/outline';
 
 export default function PlayersTab({ server, token }) {
+  // --- State ---
   const [activeSubTab, setActiveSubTab] = useState('whitelist');
   const [whitelist, setWhitelist] = useState([]);
   const [ops, setOps] = useState([]);
   const [bannedPlayers, setBannedPlayers] = useState([]);
   const [bannedIps, setBannedIps] = useState([]);
   const [userCache, setUserCache] = useState([]);
-  // REMOVED: const [onlinePlayers, setOnlinePlayers] = useState([]);
+  
+  // Form State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  
+  // Inputs
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerIp, setNewPlayerIp] = useState('');
   const [newPlayerReason, setNewPlayerReason] = useState('Banned by an operator.');
   const [newPlayerExpires, setNewPlayerExpires] = useState('forever');
   const [newOpLevel, setNewOpLevel] = useState(4);
   const [newOpBypasses, setNewOpBypasses] = useState(false);
+
+  // Status
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
   const isRunning = server.status === 'Running';
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+  // --- Constants ---
+  const TABS = [
+    { id: 'whitelist', label: 'Whitelist', icon: UserGroupIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { id: 'ops', label: 'Operators', icon: ShieldCheckIcon, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { id: 'banned-players', label: 'Banned Players', icon: NoSymbolIcon, color: 'text-red-600', bg: 'bg-red-50' },
+    { id: 'banned-ips', label: 'Banned IPs', icon: GlobeAltIcon, color: 'text-slate-600', bg: 'bg-slate-50' },
+  ];
+
+  // --- Effects ---
   useEffect(() => {
-    console.log('PlayersTab mounted with server:', server.id, 'token:', token);
     fetchAllData();
-    // REMOVED RCON-based polling for online players
-  }, [server.id, token, isRunning]);
+  }, [server.id, token]);
 
-  const showError = (message) => {
-    setError(message);
-    setTimeout(() => setError(null), 5000);
-  };
+  // --- Data Fetching Helpers ---
+  const showError = (msg) => { setError(msg); setTimeout(() => setError(null), 5000); };
+  const showSuccess = (msg) => { setSuccess(msg); setTimeout(() => setSuccess(null), 5000); };
 
-  const showSuccess = (message) => {
-    setSuccess(message);
-    setTimeout(() => setSuccess(null), 5000);
-  };
-
-  const fetchJsonFile = async (filePath, retries = 5, delay = 2000) => {
-    for (let attempt = 1; attempt <= retries; attempt++) {
+  const fetchJsonFile = async (filePath, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
       try {
-        console.log(`Fetching file: ${filePath} (attempt ${attempt}/${retries})`);
         const res = await fetch(`/api/servers/${server.id}/file?path=${filePath}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        
-        if (!res.ok) {
-          const errorText = await res.text().catch(() => '');
-          console.error(`Fetch ${filePath} failed: ${res.status} ${errorText}`);
-          if (res.status === 404) return [];
-          throw new Error(`Failed to fetch ${filePath}: ${res.status} ${errorText}`);
-        }
-        
+        if (res.status === 404) return [];
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
-        console.log('Raw file content:', text);
-        let data;
-        try {
-          const trimmedText = text.trim();
-          if (!trimmedText) {
-            console.warn(`Empty file: ${filePath}, returning empty array`);
-            return [];
-          }
-          data = JSON.parse(trimmedText);
-        } catch (parseErr) {
-          console.error(`JSON parse failed for ${filePath}:`, parseErr, 'Raw text:', text);
-          try {
-            const fixedJson = text
-              .replace(/,\s*}/g, '}')
-              .replace(/,\s*]/g, ']')
-              .replace(/\/\/.*$/gm, '')
-              .replace(/\/\*[\s\S]*?\*\//g, '');
-            data = JSON.parse(fixedJson);
-            console.log(`Fixed JSON for ${filePath}`);
-          } catch (secondParseErr) {
-            console.error(`Second JSON parse attempt also failed for ${filePath}:`, secondParseErr);
-            throw new Error(`Invalid JSON in ${filePath}: ${parseErr.message}`);
-          }
-        }
-        
-        console.log(`Fetched ${filePath}:`, data);
-        return Array.isArray(data) ? data : [data];
-      } catch (err) {
-        console.error(`Error fetching ${filePath} (attempt ${attempt}/${retries}):`, err);
-        if (attempt === retries) {
-          showError(`Failed to load ${filePath}: ${err.message}`);
-          return [];
-        }
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        if (!text.trim()) return [];
+        return JSON.parse(text);
+      } catch (e) {
+        if (i === retries - 1) console.error(`Failed to load ${filePath}:`, e);
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
+    return [];
   };
 
   const saveJsonFile = async (filePath, data) => {
     try {
       setLoading(true);
-      try {
-        JSON.parse(JSON.stringify(data));
-      } catch (jsonErr) {
-        console.error('Invalid JSON data:', jsonErr);
-        showError('Cannot save: Invalid JSON data');
-        return false;
-      }
-      console.log(`Saving file: ${filePath}`, { data: JSON.stringify(data, null, 2) });
-      
       const res = await fetch(`/api/servers/${server.id}/files?path=${filePath}`, {
         method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(data, null, 2),
       });
-      
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => '');
-        console.error(`Save ${filePath} failed: ${res.status} ${errorText}`);
-        throw new Error(`Failed to save ${filePath}: ${res.status} ${errorText}`);
-      }
-      
-      console.log(`Successfully saved ${filePath}`);
-      setError(null);
+      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
       return true;
-    } catch (err) {
-      console.error(`Error saving ${filePath}:`, err);
-      showError(`Failed to save ${filePath}: ${err.message}`);
-      throw err;
+    } catch (e) {
+      showError(`Save failed: ${e.message}`);
+      return false;
     } finally {
       setLoading(false);
     }
   };
 
-  const sendRconCommand = async (command) => {
+  const sendRcon = async (command) => {
     try {
       const res = await fetch(`/api/servers/rcon`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ serverId: server.id, command }),
       });
-      
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => '');
-        throw new Error(`Failed to execute command: ${errorText}`);
-      }
-      
-      const { response } = await res.json();
-      console.log('RCON response:', response);
-      return response;
-    } catch (err) {
-      console.error('RCON command failed:', err);
-      throw err;
+      if (!res.ok) throw new Error('RCON command failed');
+      const json = await res.json();
+      return json.response;
+    } catch (e) {
+      throw e;
     }
   };
 
   const fetchAllData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const [wl, op, bp, bi, uc] = await Promise.all([
         fetchJsonFile('whitelist.json'),
         fetchJsonFile('ops.json'),
@@ -168,725 +125,471 @@ export default function PlayersTab({ server, token }) {
         fetchJsonFile('banned-ips.json'),
         fetchJsonFile('usercache.json'),
       ]);
-      
-      setWhitelist(wl);
-      setOps(op);
-      setBannedPlayers(bp);
-      setBannedIps(bi);
-      setUserCache(uc);
-      console.log('Fetched all data:', { whitelist: wl, ops: op, bannedPlayers: bp, bannedIps: bi, userCache: uc });
-      
-      // REMOVED: await fetchOnlinePlayers();
-      
-      showSuccess('Data refreshed successfully');
-    } catch (err) {
-      console.error('Error fetching all data:', err);
-      showError('Failed to load server data');
+      setWhitelist(Array.isArray(wl) ? wl : []);
+      setOps(Array.isArray(op) ? op : []);
+      setBannedPlayers(Array.isArray(bp) ? bp : []);
+      setBannedIps(Array.isArray(bi) ? bi : []);
+      setUserCache(Array.isArray(uc) ? uc : []);
+    } catch (e) {
+      showError('Failed to refresh data.');
     } finally {
       setLoading(false);
     }
   };
 
-  // REMOVED fetchOnlinePlayers RCON function
-
+  // --- Logic Helpers ---
   const getOfflineUuid = (name) => {
-    if (!name || typeof name !== 'string') {
-      showError('Invalid player name');
-      return null;
-    }
-    
-    const input = `OfflinePlayer:${name.trim()}`;
-    const hash = md5(input);
-    const uuid = [
-      hash.slice(0, 8),
-      hash.slice(8, 12),
+    if (!name) return null;
+    const hash = md5(`OfflinePlayer:${name}`);
+    const parts = [
+      hash.slice(0, 8), hash.slice(8, 12),
       (parseInt(hash.slice(12, 16), 16) & 0x0fff) | 0x3000,
       (parseInt(hash.slice(16, 20), 16) & 0x3fff) | 0x8000,
       hash.slice(20, 32),
-    ]
-      .map((part, i) => (i < 2 ? part : part.toString(16).padStart(4, '0')))
-      .join('-');
-    
-    console.log(`Generated UUID for ${name}: ${uuid}`);
-    return uuid;
+    ];
+    return parts.map((p, i) => (i < 2 ? p : p.toString(16).padStart(4, '0'))).join('-');
   };
 
   const addToList = async () => {
-    if (!newPlayerName && activeSubTab !== 'banned-ips') {
-      showError('Player name is required');
-      return;
-    }
+    const isIP = activeSubTab === 'banned-ips';
+    const target = isIP ? newPlayerIp : newPlayerName;
     
-    if (!newPlayerIp && activeSubTab === 'banned-ips') {
-      showError('IP address is required');
-      return;
-    }
-    
+    if (!target) return showError(`${isIP ? 'IP Address' : 'Player Name'} is required`);
+
     setLoading(true);
     setError(null);
-    
-    let file, setList;
+
+    // Prepare data
+    const uuid = !isIP ? getOfflineUuid(target) : null;
+    let file, currentList, entry, command;
+
     switch (activeSubTab) {
       case 'whitelist':
-        setList = setWhitelist;
-        file = 'whitelist.json';
+        file = 'whitelist.json'; currentList = whitelist;
+        entry = { uuid, name: target };
+        command = `whitelist add ${target}`;
         break;
       case 'ops':
-        setList = setOps;
-        file = 'ops.json';
+        file = 'ops.json'; currentList = ops;
+        entry = { uuid, name: target, level: newOpLevel, bypassesPlayerLimit: newOpBypasses };
+        command = `op ${target}`;
         break;
       case 'banned-players':
-        setList = setBannedPlayers;
-        file = 'banned-players.json';
+        file = 'banned-players.json'; currentList = bannedPlayers;
+        entry = { 
+          uuid, name: target, created: new Date().toISOString(), source: 'Console', 
+          expires: newPlayerExpires === 'forever' ? 'forever' : new Date(newPlayerExpires).toISOString(), 
+          reason: newPlayerReason 
+        };
+        command = newPlayerExpires === 'forever' ? `ban ${target} ${newPlayerReason}` : null;
         break;
       case 'banned-ips':
-        setList = setBannedIps;
-        file = 'banned-ips.json';
-        break;
-      default:
-        showError('Invalid tab selected');
-        setLoading(false);
-        return;
-    }
-    
-    let entry;
-    if (activeSubTab === 'banned-ips') {
-      entry = {
-        ip: newPlayerIp,
-        created: new Date().toISOString(),
-        source: 'Server',
-        expires: newPlayerExpires === 'forever' ? 'forever' : new Date(newPlayerExpires).toISOString(),
-        reason: newPlayerReason,
-      };
-    } else {
-      const uuid = getOfflineUuid(newPlayerName);
-      if (!uuid) {
-        setLoading(false);
-        return;
-      }
-      
-      if (activeSubTab === 'whitelist') {
-        entry = { uuid, name: newPlayerName };
-      } else if (activeSubTab === 'ops') {
-        entry = { uuid, name: newPlayerName, level: newOpLevel, bypassesPlayerLimit: newOpBypasses };
-      } else if (activeSubTab === 'banned-players') {
-        entry = {
-          uuid,
-          name: newPlayerName,
-          created: new Date().toISOString(),
-          source: 'Server',
-          expires: newPlayerExpires === 'forever' ? 'forever' : new Date(newPlayerExpires).toISOString(),
-          reason: newPlayerReason,
+        file = 'banned-ips.json'; currentList = bannedIps;
+        entry = { 
+          ip: target, created: new Date().toISOString(), source: 'Console', 
+          expires: newPlayerExpires === 'forever' ? 'forever' : new Date(newPlayerExpires).toISOString(), 
+          reason: newPlayerReason 
         };
-      }
+        command = newPlayerExpires === 'forever' ? `ban-ip ${target} ${newPlayerReason}` : null;
+        break;
     }
-    
-    if (isRunning) {
-      let command = null;
-      if (activeSubTab === 'whitelist') {
-        command = `whitelist add ${newPlayerName}`;
-      } else if (activeSubTab === 'ops') {
-        command = `op ${newPlayerName}`;
-      } else if (activeSubTab === 'banned-players') {
-        command = newPlayerExpires === 'forever' 
-          ? `ban ${newPlayerName} ${newPlayerReason}`
-          : null; // Temporary bans not supported via RCON
-      } else if (activeSubTab === 'banned-ips') {
-        command = newPlayerExpires === 'forever' 
-          ? `ban-ip ${newPlayerIp} ${newPlayerReason}`
-          : null; // Temporary bans not supported via RCON
-      }
-      
-      if (command) {
-        try {
-          const response = await sendRconCommand(command);
-          showSuccess(`Successfully added to ${activeSubTab}. Response: ${response}`);
-          await fetchAllData();
-          setNewPlayerName('');
-          setNewPlayerIp('');
-          setNewPlayerReason('Banned by an operator.');
-          setNewPlayerExpires('forever');
-          setNewOpLevel(4);
-          setNewOpBypasses(false);
-          setLoading(false);
-          return;
-        } catch (err) {
-          showError(`Failed to add to ${activeSubTab}: ${err.message}`);
-          setLoading(false);
-          return;
-        }
-      }
-    }
-    
-    // Fallback to JSON edit when server is offline or RCON command not applicable
-    const latestList = await fetchJsonFile(file);
-    const exists = activeSubTab === 'banned-ips'
-      ? latestList.some(item => item.ip === newPlayerIp)
-      : latestList.some(item => item.name?.toLowerCase() === newPlayerName.toLowerCase());
-    if (exists) {
-      showError('This player or IP is already in the list');
+
+    // Check duplicates
+    if (currentList.some(item => isIP ? item.ip === target : item.name?.toLowerCase() === target.toLowerCase())) {
       setLoading(false);
-      return;
+      return showError('Already in the list.');
     }
-    
-    const newList = [...latestList, entry];
-    console.log(`Updating ${file} with new list:`, JSON.stringify(newList, null, 2));
+
+    // Execute
     try {
-      const success = await saveJsonFile(file, newList);
-      if (success) {
-        setList(newList);
-        showSuccess(`Successfully added to ${activeSubTab}${isRunning ? '. Restart server to apply.' : ''}`);
-        if (!isRunning) {
+      if (isRunning && command) {
+        const resp = await sendRcon(command);
+        showSuccess(`RCON: ${resp}`);
+        // Wait briefly for server to write file before fetching
+        setTimeout(fetchAllData, 1000);
+      } else {
+        const newList = [...currentList, entry];
+        if (await saveJsonFile(file, newList)) {
+          showSuccess(`Added to ${activeSubTab} (File update)`);
           await fetchAllData();
         }
-        setNewPlayerName('');
-        setNewPlayerIp('');
-        setNewPlayerReason('Banned by an operator.');
-        setNewPlayerExpires('forever');
-        setNewOpLevel(4);
-        setNewOpBypasses(false);
       }
-    } catch (err) {
-      console.error('Failed to save:', err);
+      setIsAdding(false);
+      setNewPlayerName('');
+      setNewPlayerIp('');
+    } catch (e) {
+      showError(e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const removeFromList = async (index, identifier) => {
-    let setList, file;
+  const removeFromList = async (identifier) => {
+    if (!confirm(`Remove ${identifier}?`)) return;
+    setLoading(true);
+
+    let file, currentList, command;
     switch (activeSubTab) {
-      case 'whitelist':
-        setList = setWhitelist;
-        file = 'whitelist.json';
-        break;
-      case 'ops':
-        setList = setOps;
-        file = 'ops.json';
-        break;
-      case 'banned-players':
-        setList = setBannedPlayers;
-        file = 'banned-players.json';
-        break;
-      case 'banned-ips':
-        setList = setBannedIps;
-        file = 'banned-ips.json';
-        break;
-      default:
-        showError('Invalid tab selected');
-        return;
+      case 'whitelist': file = 'whitelist.json'; currentList = whitelist; command = `whitelist remove ${identifier}`; break;
+      case 'ops': file = 'ops.json'; currentList = ops; command = `deop ${identifier}`; break;
+      case 'banned-players': file = 'banned-players.json'; currentList = bannedPlayers; command = `pardon ${identifier}`; break;
+      case 'banned-ips': file = 'banned-ips.json'; currentList = bannedIps; command = `pardon-ip ${identifier}`; break;
     }
-    
-    if (isRunning) {
-      let command = null;
-      if (activeSubTab === 'whitelist') {
-        command = `whitelist remove ${identifier}`;
-      } else if (activeSubTab === 'ops') {
-        command = `deop ${identifier}`;
-      } else if (activeSubTab === 'banned-players') {
-        command = `pardon ${identifier}`;
-      } else if (activeSubTab === 'banned-ips') {
-        command = `pardon-ip ${identifier}`;
-      }
-      
-      if (command) {
-        try {
-          const response = await sendRconCommand(command);
-          showSuccess(`Successfully removed from ${activeSubTab}. Response: ${response}`);
-          await fetchAllData();
-          return;
-        } catch (err) {
-          showError(`Failed to remove from ${activeSubTab}: ${err.message}`);
-          return;
-        }
-      }
-    }
-    
-    // Fallback to JSON edit
-    const latestList = await fetchJsonFile(file);
-    const removeIndex = latestList.findIndex(item => 
-      activeSubTab === 'banned-ips' ? item.ip === identifier : item.name === identifier
-    );
-    if (removeIndex === -1) {
-      showError('Entry not found in latest list');
-      return;
-    }
-    const newList = latestList.filter((_, i) => i !== removeIndex);
-    console.log(`Removing entry from ${file}:`, identifier);
+
     try {
-      const success = await saveJsonFile(file, newList);
-      if (success) {
-        setList(newList);
-        showSuccess(`Successfully removed from ${activeSubTab}${isRunning ? '. Restart server to apply.' : ''}`);
-        if (!isRunning) {
+      if (isRunning && command) {
+        const resp = await sendRcon(command);
+        showSuccess(`RCON: ${resp}`);
+        setTimeout(fetchAllData, 1000);
+      } else {
+        const newList = currentList.filter(item => 
+          activeSubTab === 'banned-ips' ? item.ip !== identifier : item.name !== identifier
+        );
+        if (await saveJsonFile(file, newList)) {
+          showSuccess('Removed successfully (File update)');
           await fetchAllData();
         }
       }
-    } catch (err) {
-      console.error('Failed to remove:', err);
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // NEW: Derive onlinePlayers from server prop
-  const onlinePlayers = server.status === 'Running' && server.players_online 
-    ? server.players_online.split(', ').filter(Boolean) 
-    : [];
+  // --- Derived State ---
+  const onlineList = useMemo(() => 
+    server.status === 'Running' && server.players_online ? server.players_online.split(', ').filter(Boolean) : []
+  , [server.status, server.players_online]);
 
-  const offlinePlayers = userCache.filter((user) => 
-    !onlinePlayers.some(online => online.toLowerCase() === user.name.toLowerCase())
+  const displayedList = useMemo(() => {
+    let list = [];
+    switch(activeSubTab) {
+      case 'whitelist': list = whitelist; break;
+      case 'ops': list = ops; break;
+      case 'banned-players': list = bannedPlayers; break;
+      case 'banned-ips': list = bannedIps; break;
+    }
+    if (searchQuery) {
+      const lower = searchQuery.toLowerCase();
+      list = list.filter(item => 
+        (item.name && item.name.toLowerCase().includes(lower)) || 
+        (item.ip && item.ip.includes(lower)) ||
+        (item.uuid && item.uuid.includes(lower))
+      );
+    }
+    return list;
+  }, [activeSubTab, whitelist, ops, bannedPlayers, bannedIps, searchQuery]);
+
+  // --- Render Helpers ---
+  const renderEmptyState = () => (
+    <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+      <UserGroupIcon className="w-12 h-12 mb-3 opacity-50" />
+      <p>No entries found for this list.</p>
+    </div>
   );
 
-  const formatDate = (dateString) => {
-    if (dateString === 'forever') return 'Never';
-    try {
-      return new Date(dateString).toLocaleDateString();
-    } catch (e) {
-      return dateString;
-    }
-  };
-
   return (
-    <div className="bg-white p-4 rounded shadow">
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md flex justify-between items-center">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-700 font-bold">×</button>
-        </div>
-      )}
+    <div className="flex flex-col gap-6">
       
-      {success && (
-        <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-md flex justify-between items-center">
-          <span>{success}</span>
-          <button onClick={() => setSuccess(null)} className="text-green-700 font-bold">×</button>
+      {/* 1. Header & Online Status */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {/* Online Players Card */}
+        <div className="md:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <SignalIcon className="w-5 h-5 text-green-500" />
+              Online Players
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{onlineList.length}</span>
+            </h3>
+            <button 
+              onClick={fetchAllData} 
+              disabled={loading}
+              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Refresh Data"
+            >
+              <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          
+          <div className="flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100 min-h-[120px]">
+            {onlineList.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {onlineList.map((player, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-sm font-medium text-gray-700">{player}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                <SignalSlashIcon className="w-8 h-8 mb-2 opacity-50" />
+                <span className="text-sm">No players online</span>
+              </div>
+            )}
+          </div>
         </div>
-      )}
-      
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Player Management</h2>
-        <button
-          onClick={fetchAllData}
-          disabled={loading}
-          className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded text-sm transition-colors flex items-center"
-        >
-          {loading ? (
-            <>
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-800" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Refreshing...
-            </>
-          ) : 'Refresh Data'}
-        </button>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div>
-          <h3 className="text-lg font-semibold mb-2">Online Players ({onlinePlayers.length})</h3>
-          <ul className="bg-gray-50 p-4 rounded-md max-h-40 overflow-y-auto">
-            {onlinePlayers.map((player, i) => (
-              <li key={i} className="py-1 flex items-center">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                {player}
-              </li>
-            ))}
-            {onlinePlayers.length === 0 && <li className="text-gray-500">No players online</li>}
-          </ul>
-        </div>
-        <div>
-          <h3 className="text-lg font-semibold mb-2">Offline Players ({offlinePlayers.length})</h3>
-          <ul className="bg-gray-50 p-4 rounded-md max-h-40 overflow-y-auto">
-            {offlinePlayers.map((player, i) => (
-              <li key={i} className="py-1 flex items-center">
-                <span className="w-2 h-2 bg-gray-400 rounded-full mr-2"></span>
-                {player.name}
-              </li>
-            ))}
-            {offlinePlayers.length === 0 && <li className="text-gray-500">No offline players</li>}
-          </ul>
+
+        {/* Quick Actions / Summary */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col justify-center gap-4">
+          <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+            <div className="flex items-center gap-3">
+              <UserGroupIcon className="w-5 h-5 text-indigo-600" />
+              <span className="text-sm font-medium text-indigo-900">Whitelisted</span>
+            </div>
+            <span className="font-bold text-indigo-700">{whitelist.length}</span>
+          </div>
+          <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100">
+            <div className="flex items-center gap-3">
+              <ShieldCheckIcon className="w-5 h-5 text-amber-600" />
+              <span className="text-sm font-medium text-amber-900">Operators</span>
+            </div>
+            <span className="font-bold text-amber-700">{ops.length}</span>
+          </div>
+          <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-100">
+            <div className="flex items-center gap-3">
+              <NoSymbolIcon className="w-5 h-5 text-red-600" />
+              <span className="text-sm font-medium text-red-900">Banned</span>
+            </div>
+            <span className="font-bold text-red-700">{bannedPlayers.length + bannedIps.length}</span>
+          </div>
         </div>
       </div>
 
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-4">
-          {['whitelist', 'ops', 'banned-players', 'banned-ips'].map((tab) => (
+      {/* 2. Management Tabs */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px] flex flex-col">
+        
+        {/* Navigation */}
+        <div className="flex border-b border-gray-200 overflow-x-auto">
+          {TABS.map((tab) => (
             <button
-              key={tab}
-              onClick={() => setActiveSubTab(tab)}
-              className={`py-2 px-3 text-sm font-medium ${
-                activeSubTab === tab 
-                  ? 'border-b-2 border-indigo-500 text-indigo-600' 
-                  : 'text-gray-600 hover:text-indigo-600'
-              }`}
+              key={tab.id}
+              onClick={() => { setActiveSubTab(tab.id); setIsAdding(false); setSearchQuery(''); }}
+              className={`flex-1 flex items-center justify-center gap-2 py-4 px-6 text-sm font-medium transition-colors border-b-2 whitespace-nowrap
+                ${activeSubTab === tab.id 
+                  ? `border-indigo-500 text-indigo-600 bg-gray-50` 
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
             >
-              {tab.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+              <tab.icon className={`w-5 h-5 ${activeSubTab === tab.id ? tab.color : 'text-gray-400'}`} />
+              {tab.label}
             </button>
           ))}
-        </nav>
-      </div>
+        </div>
 
-      <div>
-        {activeSubTab === 'whitelist' && (
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Whitelist</h3>
-            {whitelist.length === 0 ? (
-              <p className="text-gray-500 mb-4">No players in whitelist</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full bg-white border border-gray-200">
-                  <thead>
-                    <tr>
-                      <th className="py-2 px-4 border-b">Name</th>
-                      <th className="py-2 px-4 border-b">UUID</th>
-                      <th className="py-2 px-4 border-b">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {whitelist.map((player, index) => (
-                      <tr key={index}>
-                        <td className="py-2 px-4 border-b">{player.name}</td>
-                        <td className="py-2 px-4 border-b text-xs font-mono">{player.uuid}</td>
-                        <td className="py-2 px-4 border-b">
-                          <button 
-                            onClick={() => removeFromList(index, player.name)}
-                            className="text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50"
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-2">
-              <input
-                type="text"
-                value={newPlayerName}
-                onChange={(e) => setNewPlayerName(e.target.value)}
-                placeholder="Player name"
-                className="border border-gray-300 rounded px-3 py-2 flex-grow"
-                disabled={loading}
-              />
-              <button 
-                onClick={addToList} 
-                disabled={loading || !newPlayerName}
-                className="bg-indigo-600 text-white px-4 py-2 rounded disabled:bg-indigo-400 flex items-center"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Adding...
-                  </>
-                ) : 'Add to Whitelist'}
-              </button>
-            </div>
+        {/* Toolbar */}
+        <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between gap-4 items-center bg-gray-50">
+          <div className="relative w-full sm:w-64">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
           </div>
-        )}
+          <button
+            onClick={() => setIsAdding(!isAdding)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm
+              ${isAdding 
+                ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' 
+                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+              }`}
+          >
+            {isAdding ? 'Cancel' : <><UserPlusIcon className="w-4 h-4" /> Add New</>}
+          </button>
+        </div>
 
-        {activeSubTab === 'ops' && (
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Operators</h3>
-            {ops.length === 0 ? (
-              <p className="text-gray-500 mb-4">No operators</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full bg-white border border-gray-200">
-                  <thead>
-                    <tr>
-                      <th className="py-2 px-4 border-b">Name</th>
-                      <th className="py-2 px-4 border-b">UUID</th>
-                      <th className="py-2 px-4 border-b">Level</th>
-                      <th className="py-2 px-4 border-b">Bypasses Limit</th>
-                      <th className="py-2 px-4 border-b">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ops.map((player, index) => (
-                      <tr key={index}>
-                        <td className="py-2 px-4 border-b">{player.name}</td>
-                        <td className="py-2 px-4 border-b text-xs font-mono">{player.uuid}</td>
-                        <td className="py-2 px-4 border-b">{player.level}</td>
-                        <td className="py-2 px-4 border-b">{player.bypassesPlayerLimit ? 'Yes' : 'No'}</td>
-                        <td className="py-2 px-4 border-b">
-                          <button 
-                            onClick={() => removeFromList(index, player.name)}
-                            className="text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50"
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="mt-4 space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                <input
-                  type="text"
-                  value={newPlayerName}
-                  onChange={(e) => setNewPlayerName(e.target.value)}
-                  placeholder="Player name"
-                  className="border border-gray-300 rounded px-3 py-2 flex-grow"
-                  disabled={loading}
-                />
-                <select
-                  value={newOpLevel}
-                  onChange={(e) => setNewOpLevel(parseInt(e.target.value))}
-                  className="border border-gray-300 rounded px-3 py-2"
-                  disabled={loading}
-                >
-                  <option value={1}>Level 1</option>
-                  <option value={2}>Level 2</option>
-                  <option value={3}>Level 3</option>
-                  <option value={4}>Level 4</option>
-                </select>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="bypassesLimit"
-                  checked={newOpBypasses}
-                  onChange={(e) => setNewOpBypasses(e.target.checked)}
-                  className="mr-2"
-                  disabled={loading}
-                />
-                <label htmlFor="bypassesLimit">Bypasses Player Limit</label>
-              </div>
-              <button 
-                onClick={addToList} 
-                disabled={loading || !newPlayerName}
-                className="bg-indigo-600 text-white px-4 py-2 rounded disabled:bg-indigo-400 flex items-center"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Adding...
-                  </>
-                ) : 'Add Operator'}
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Add Form Area */}
+        <AnimatePresence>
+          {isAdding && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }} 
+              animate={{ height: 'auto', opacity: 1 }} 
+              exit={{ height: 0, opacity: 0 }}
+              className="border-b border-gray-200 bg-gray-50 overflow-hidden"
+            >
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+                {/* Dynamic Inputs based on active tab */}
+                {activeSubTab !== 'banned-ips' && (
+                  <div className="col-span-1">
+                    <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Player Name</label>
+                    <input 
+                      type="text" 
+                      value={newPlayerName} 
+                      onChange={(e) => setNewPlayerName(e.target.value)}
+                      className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      placeholder="e.g. Steve"
+                    />
+                  </div>
+                )}
+                
+                {activeSubTab === 'banned-ips' && (
+                  <div className="col-span-1">
+                    <label className="block text-xs font-medium text-gray-500 uppercase mb-1">IP Address</label>
+                    <input 
+                      type="text" 
+                      value={newPlayerIp} 
+                      onChange={(e) => setNewPlayerIp(e.target.value)}
+                      className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      placeholder="e.g. 192.168.1.1"
+                    />
+                  </div>
+                )}
 
-        {activeSubTab === 'banned-players' && (
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Banned Players</h3>
-            {bannedPlayers.length === 0 ? (
-              <p className="text-gray-500 mb-4">No banned players</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full bg-white border border-gray-200">
-                  <thead>
-                    <tr>
-                      <th className="py-2 px-4 border-b">Name</th>
-                      <th className="py-2 px-4 border-b">UUID</th>
-                      <th className="py-2 px-4 border-b">Reason</th>
-                      <th className="py-2 px-4 border-b">Expires</th>
-                      <th className="py-2 px-4 border-b">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bannedPlayers.map((player, index) => (
-                      <tr key={index}>
-                        <td className="py-2 px-4 border-b">{player.name}</td>
-                        <td className="py-2 px-4 border-b text-xs font-mono">{player.uuid}</td>
-                        <td className="py-2 px-4 border-b">{player.reason}</td>
-                        <td className="py-2 px-4 border-b">{formatDate(player.expires)}</td>
-                        <td className="py-2 px-4 border-b">
-                          <button 
-                            onClick={() => removeFromList(index, player.name)}
-                            className="text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50"
-                          >
-                            Pardon
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="mt-4 space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                <input
-                  type="text"
-                  value={newPlayerName}
-                  onChange={(e) => setNewPlayerName(e.target.value)}
-                  placeholder="Player name"
-                  className="border border-gray-300 rounded px-3 py-2 flex-grow"
-                  disabled={loading}
-                />
-                <input
-                  type="text"
-                  value={newPlayerReason}
-                  onChange={(e) => setNewPlayerReason(e.target.value)}
-                  placeholder="Reason"
-                  className="border border-gray-300 rounded px-3 py-2 flex-grow"
-                  disabled={loading}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span>Expires:</span>
-                <label className="flex items-center mr-4">
-                  <input
-                    type="radio"
-                    checked={newPlayerExpires === 'forever'}
-                    onChange={() => setNewPlayerExpires('forever')}
-                    className="mr-1"
-                    disabled={loading}
-                  />
-                  Forever
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    checked={newPlayerExpires !== 'forever'}
-                    onChange={() => setNewPlayerExpires(new Date().toISOString().split('T')[0])}
-                    className="mr-1"
-                    disabled={loading}
-                  />
-                  Date:
-                </label>
-                <input
-                  type="date"
-                  value={newPlayerExpires !== 'forever' ? newPlayerExpires : ''}
-                  onChange={(e) => setNewPlayerExpires(e.target.value)}
-                  disabled={loading || newPlayerExpires === 'forever'}
-                  className="border border-gray-300 rounded px-3 py-2"
-                />
-              </div>
-              <button 
-                onClick={addToList} 
-                disabled={loading || !newPlayerName}
-                className="bg-indigo-600 text-white px-4 py-2 rounded disabled:bg-indigo-400 flex items-center"
-              >
-                {loading ? (
+                {activeSubTab === 'ops' && (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Adding...
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Op Level</label>
+                      <select 
+                        value={newOpLevel} 
+                        onChange={(e) => setNewOpLevel(Number(e.target.value))}
+                        className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      >
+                        <option value="1">Level 1 (Bypass protection)</option>
+                        <option value="2">Level 2 (Command blocks)</option>
+                        <option value="3">Level 3 (Kick/Ban)</option>
+                        <option value="4">Level 4 (Stop/Operator)</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center h-10 mt-6">
+                      <input 
+                        id="bypass" 
+                        type="checkbox" 
+                        checked={newOpBypasses} 
+                        onChange={(e) => setNewOpBypasses(e.target.checked)}
+                        className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                      />
+                      <label htmlFor="bypass" className="ml-2 text-sm text-gray-700">Bypass Player Limit</label>
+                    </div>
                   </>
-                ) : 'Ban Player'}
-              </button>
-            </div>
-          </div>
-        )}
+                )}
 
-        {activeSubTab === 'banned-ips' && (
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Banned IPs</h3>
-            {bannedIps.length === 0 ? (
-              <p className="text-gray-500 mb-4">No banned IPs</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full bg-white border border-gray-200">
-                  <thead>
-                    <tr>
-                      <th className="py-2 px-4 border-b">IP</th>
-                      <th className="py-2 px-4 border-b">Reason</th>
-                      <th className="py-2 px-4 border-b">Expires</th>
-                      <th className="py-2 px-4 border-b">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bannedIps.map((ipEntry, index) => (
-                      <tr key={index}>
-                        <td className="py-2 px-4 border-b font-mono">{ipEntry.ip}</td>
-                        <td className="py-2 px-4 border-b">{ipEntry.reason}</td>
-                        <td className="py-2 px-4 border-b">{formatDate(ipEntry.expires)}</td>
-                        <td className="py-2 px-4 border-b">
-                          <button 
-                            onClick={() => removeFromList(index, ipEntry.ip)}
-                            className="text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50"
-                          >
-                            Pardon
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="mt-4 space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                <input
-                  type="text"
-                  value={newPlayerIp}
-                  onChange={(e) => setNewPlayerIp(e.target.value)}
-                  placeholder="IP address"
-                  className="border border-gray-300 rounded px-3 py-2 flex-grow"
-                  disabled={loading}
-                />
-                <input
-                  type="text"
-                  value={newPlayerReason}
-                  onChange={(e) => setNewPlayerReason(e.target.value)}
-                  placeholder="Reason"
-                  className="border border-gray-300 rounded px-3 py-2 flex-grow"
-                  disabled={loading}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span>Expires:</span>
-                <label className="flex items-center mr-4">
-                  <input
-                    type="radio"
-                    checked={newPlayerExpires === 'forever'}
-                    onChange={() => setNewPlayerExpires('forever')}
-                    className="mr-1"
-                    disabled={loading}
-                  />
-                  Forever
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    checked={newPlayerExpires !== 'forever'}
-                    onChange={() => setNewPlayerExpires(new Date().toISOString().split('T')[0])}
-                    className="mr-1"
-                    disabled={loading}
-                  />
-                  Date:
-                </label>
-                <input
-                  type="date"
-                  value={newPlayerExpires !== 'forever' ? newPlayerExpires : ''}
-                  onChange={(e) => setNewPlayerExpires(e.target.value)}
-                  disabled={loading || newPlayerExpires === 'forever'}
-                  className="border border-gray-300 rounded px-3 py-2"
-                />
-              </div>
-              <button 
-                onClick={addToList} 
-                disabled={loading || !newPlayerIp}
-                className="bg-indigo-600 text-white px-4 py-2 rounded disabled:bg-indigo-400 flex items-center"
-              >
-                {loading ? (
+                {(activeSubTab === 'banned-players' || activeSubTab === 'banned-ips') && (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Adding...
+                    <div className="col-span-1 md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Reason</label>
+                      <input 
+                        type="text" 
+                        value={newPlayerReason} 
+                        onChange={(e) => setNewPlayerReason(e.target.value)}
+                        className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="Reason for ban"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 uppercase mb-1">Expires</label>
+                      <select 
+                        value={newPlayerExpires === 'forever' ? 'forever' : 'date'} 
+                        onChange={(e) => setNewPlayerExpires(e.target.value === 'forever' ? 'forever' : new Date().toISOString().split('T')[0])}
+                        className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      >
+                        <option value="forever">Forever</option>
+                        <option value="date">Specific Date</option>
+                      </select>
+                      {newPlayerExpires !== 'forever' && (
+                        <input 
+                          type="date" 
+                          value={newPlayerExpires} 
+                          onChange={(e) => setNewPlayerExpires(e.target.value)}
+                          className="mt-2 w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm"
+                        />
+                      )}
+                    </div>
                   </>
-                ) : 'Ban IP'}
-              </button>
+                )}
+
+                <div className="col-span-1 flex justify-end">
+                  <button 
+                    onClick={addToList}
+                    disabled={loading}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-all disabled:opacity-50"
+                  >
+                    {loading ? 'Saving...' : 'Confirm Add'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Feedback Messages */}
+        <AnimatePresence>
+          {error && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-4 bg-red-50 text-red-700 border-b border-red-100 flex gap-2 items-center">
+              <ExclamationCircleIcon className="w-5 h-5" /> {error}
+            </motion.div>
+          )}
+          {success && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-4 bg-green-50 text-green-700 border-b border-green-100 flex gap-2 items-center">
+              <CheckCircleIcon className="w-5 h-5" /> {success}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Main List */}
+        <div className="flex-1 overflow-y-auto p-0">
+          {displayedList.length === 0 ? renderEmptyState() : (
+            <div className="divide-y divide-gray-100">
+              {displayedList.map((item, idx) => (
+                <div key={idx} className="p-4 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  
+                  {/* Item Details */}
+                  <div className="flex items-start gap-4">
+                    <div className={`p-2 rounded-full ${TABS.find(t => t.id === activeSubTab)?.bg}`}>
+                      <IdentificationIcon className={`w-6 h-6 ${TABS.find(t => t.id === activeSubTab)?.color}`} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900">{item.name || item.ip}</h4>
+                      
+                      {activeSubTab !== 'banned-ips' && item.uuid && (
+                        <p className="text-xs text-gray-400 font-mono mt-0.5">{item.uuid}</p>
+                      )}
+                      
+                      {/* Contextual Badges */}
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {item.level && <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">Level {item.level}</span>}
+                        {item.bypassesPlayerLimit && <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Bypass Limit</span>}
+                        {item.source && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">Source: {item.source}</span>}
+                        {item.created && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">Banned: {item.created.split(' ')[0]}</span>}
+                      </div>
+                      
+                      {/* Ban Reason */}
+                      {item.reason && (
+                        <p className="text-xs text-red-600 mt-1 italic">Reason: "{item.reason}"</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-4">
+                    {item.expires && (
+                      <div className="text-right text-xs text-gray-500">
+                        <div className="flex items-center gap-1 justify-end">
+                          <ClockIcon className="w-3 h-3" />
+                          <span>Expires</span>
+                        </div>
+                        <span className="font-medium text-gray-700">{item.expires === 'forever' ? 'Never' : item.expires.split(' ')[0]}</span>
+                      </div>
+                    )}
+                    
+                    <button
+                      onClick={() => removeFromList(item.name || item.ip)}
+                      disabled={loading}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                      title="Remove / Pardon"
+                    >
+                      <TrashIcon className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

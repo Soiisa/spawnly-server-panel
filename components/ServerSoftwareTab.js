@@ -1,419 +1,192 @@
-// components/ServerSoftwareTab.js
-
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  CubeTransparentIcon, 
+  DocumentTextIcon, 
+  WrenchScrewdriverIcon, 
+  BeakerIcon,
+  MagnifyingGlassIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ArchiveBoxIcon
+} from '@heroicons/react/24/outline';
 
 export default function ServerSoftwareTab({ server, onSoftwareChange }) {
+  // --- State ---
   const [serverType, setServerType] = useState(server?.type || 'vanilla');
   const [version, setVersion] = useState(server?.version || '');
   const [availableVersions, setAvailableVersions] = useState([]);
-  const [filteredVersions, setFilteredVersions] = useState([]);
+  const [searchQuery, setSearchQuery] = useState(''); // New: Search state
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showVersionWarning, setShowVersionWarning] = useState(false);
   const [versionChangeInfo, setVersionChangeInfo] = useState(null);
-  const [showAllVersions, setShowAllVersions] = useState(false); // New state for toggle
+  const [showAllVersions, setShowAllVersions] = useState(false);
+  
   const isInitialMount = useRef(true);
 
-  // Helper function to fetch with CORS proxy
+  // --- Definitions ---
+  const softwareOptions = [
+    { 
+      id: 'vanilla', 
+      label: 'Vanilla', 
+      description: 'The official Minecraft server software.', 
+      icon: CubeTransparentIcon, 
+      color: 'bg-green-50 text-green-700 border-green-200' 
+    },
+    { 
+      id: 'paper', 
+      label: 'Paper', 
+      description: 'High-performance fork of Spigot.', 
+      icon: DocumentTextIcon, 
+      color: 'bg-blue-50 text-blue-700 border-blue-200' 
+    },
+    { 
+      id: 'spigot', 
+      label: 'Spigot', 
+      description: 'Modified server with plugin support.', 
+      icon: ArchiveBoxIcon, 
+      color: 'bg-orange-50 text-orange-700 border-orange-200' 
+    },
+    { 
+      id: 'forge', 
+      label: 'Forge', 
+      description: 'The classic modding API.', 
+      icon: WrenchScrewdriverIcon, 
+      color: 'bg-amber-50 text-amber-700 border-amber-200' 
+    },
+    { 
+      id: 'fabric', 
+      label: 'Fabric', 
+      description: 'Lightweight, experimental modding.', 
+      icon: BeakerIcon, 
+      color: 'bg-indigo-50 text-indigo-700 border-indigo-200' 
+    },
+  ];
+
+  // --- Helpers ---
+
   const fetchWithCorsProxy = async (url) => {
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-    try {
-      const response = await fetch(proxyUrl);
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('CORS proxy request failed:', error);
-      throw error;
-    }
+    const response = await fetch(proxyUrl);
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    return await response.json();
   };
 
-  // Helper function to sort versions in descending order
   const sortVersions = (versions) => {
     return versions.sort((a, b) => {
-      const partsA = a.split('.').map(Number);
-      const partsB = b.split('.').map(Number);
-      
+      // Normalize version strings (remove non-numeric prefixes/suffixes for sorting if needed)
+      // This simple split usually works for semantic versioning
+      const partsA = a.replace(/[^0-9.]/g, '').split('.').map(Number);
+      const partsB = b.replace(/[^0-9.]/g, '').split('.').map(Number);
       for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
         const numA = partsA[i] || 0;
         const numB = partsB[i] || 0;
-        if (numA !== numB) {
-          return numB - numA; // Sort in descending order
-        }
+        if (numA !== numB) return numB - numA;
       }
-      return 0;
+      return b.localeCompare(a); // Fallback string compare
     });
   };
 
-  // Helper function to filter out snapshots and non-stable versions
   const filterStableVersions = (versions, type) => {
-    if (type === 'vanilla') {
-      // For vanilla, filter out snapshots, pre-releases, and only keep proper releases
-      return versions.filter(v => {
-        // Keep versions that match standard release pattern (1.X, 1.X.X)
-        // and exclude snapshots, pre-releases, experimental versions
-        return /^\d+\.\d+(\.\d+)?$/.test(v) && 
-               !v.includes('snapshot') && 
-               !v.includes('pre') && 
-               !v.includes('rc') &&
-               !v.includes('experimental') &&
-               !v.includes('w') && // Exclude snapshot versions like 23w45a
-               !v.includes('a') && // Exclude alpha versions
-               !v.includes('b');   // Exclude beta versions
-      });
-    } else if (type === 'paper' || type === 'spigot') {
-      // For Paper/Spigot, filter out experimental and snapshot builds
-      return versions.filter(v => {
-        return /^\d+\.\d+(\.\d+)?$/.test(v) && 
-               !v.includes('snapshot') && 
-               !v.includes('pre') && 
-               !v.includes('rc') &&
-               !v.includes('experimental');
-      });
-    } else if (type === 'forge' || type === 'fabric') {
-      // For Forge/Fabric, use the same filtering logic
-      return versions.filter(v => {
-        return /^\d+\.\d+(\.\d+)?$/.test(v) && 
-               !v.includes('snapshot') && 
-               !v.includes('pre') && 
-               !v.includes('rc') &&
-               !v.includes('experimental');
-      });
-    }
+    // Regex allows "1.20", "1.20.1" but excludes "1.20-pre1", "23w45a"
+    const stableRegex = /^\d+\.\d+(\.\d+)?$/;
     
-    return versions; // Return all if no specific filtering
+    // Additional filters for specific software if needed
+    return versions.filter(v => {
+      const isStableFormat = stableRegex.test(v);
+      const hasUnstableKeywords = v.includes('snapshot') || v.includes('pre') || v.includes('rc') || v.includes('experimental') || v.includes('w');
+      
+      if (type === 'vanilla') return isStableFormat && !hasUnstableKeywords;
+      return isStableFormat && !hasUnstableKeywords;
+    });
   };
 
-  // Update filtered versions when availableVersions or showAllVersions changes
-  useEffect(() => {
-    if (showAllVersions) {
-      setFilteredVersions(availableVersions);
-    } else {
-      const stableVersions = filterStableVersions(availableVersions, serverType);
-      setFilteredVersions(stableVersions);
-    }
-  }, [availableVersions, showAllVersions, serverType]);
-
-  // Check if version change or software switch requires server recreation or file deletion
+  // --- Logic: Impact Analysis ---
   const checkVersionChangeImpact = (newType, newVersion) => {
-    console.log('Checking version change impact:', { newType, newVersion, currentType: server?.type, currentVersion: server?.version });
-    
-    if (!server?.id) {
-      console.log('No server ID, treating as new configuration');
-      return {
-        requiresRecreation: false,
-        requiresFileDeletion: false,
-        severity: 'none',
-        message: 'This server has not been started yet. The selected software type and version will be applied when you start the server.',
-        backupMessage: 'No data exists yet, but ensure you have a backup strategy for future world data stored in the server\'s storage path.'
-      };
-    }
+    if (!server?.id) return { severity: 'none', message: 'New server configuration.', requiresRecreation: false };
 
     const currentType = server?.type || 'vanilla';
     const currentVersion = server?.version || '';
     
-    if (newType !== currentType || newVersion !== currentVersion) {
-      let requiresRecreation = !!server?.hetzner_id;
-      let requiresFileDeletion = false;
-      let severity = 'medium';
-      let baseMessage = '';
-      let backupMessage = '';
-
-      const currentParts = currentVersion.split('.').map(part => parseInt(part) || 0);
-      const newParts = newVersion.split('.').map(part => parseInt(part) || 0);
-      
-      let isDowngrade = false;
-      for (let i = 0; i < Math.min(currentParts.length, newParts.length); i++) {
-        if (newParts[i] < currentParts[i]) {
-          isDowngrade = true;
-          break;
-        } else if (newParts[i] > currentParts[i]) {
-          break;
-        }
-      }
-
-      if (newType !== currentType) {
-        console.log('Software type change detected');
-        requiresFileDeletion = true;
-        severity = 'high';
-        baseMessage = `Switching from ${currentType} to ${newType} requires new software, which will delete all existing server files, including your world data, configuration files, and plugins. This action cannot be undone.`;
-        backupMessage = `Please back up your world data and configurations before proceeding. Your data is stored at ${server?.storage_path || 'the server\'s storage path'}. You can download it using your server management tools or contact support for assistance.`;
-      } else if (newType === 'vanilla') {
-        console.log('Vanilla version change detected');
-        requiresFileDeletion = false;
-        severity = isDowngrade ? 'high' : 'medium';
-        baseMessage = `Changing the Vanilla version from ${currentVersion} to ${newVersion} requires new server software. Your existing world data and configurations will be preserved and loaded on the new server. However, ${isDowngrade ? 'downgrading' : 'upgrading'} may cause compatibility issues with your existing world, such as missing blocks or features.`;
-        backupMessage = `We strongly recommend backing up your world data before proceeding to avoid potential issues. Your data is stored at ${server?.storage_path || 'the server\'s storage path'}. You can download it using your server management tools or contact support for assistance.`;
-      } else {
-        console.log('Non-Vanilla version change detected');
-        requiresFileDeletion = true;
-        severity = 'high';
-        baseMessage = `Changing the ${newType} version from ${currentVersion} to ${newVersion} requires new software, which will delete all existing server files, including your world data, configuration files, and plugins. This action cannot be undone.`;
-        backupMessage = `Please back up your world data and configurations before proceeding. Your data is stored at ${server?.storage_path || 'the server\'s storage path'}. You can download it using your server management tools or contact support for assistance.`;
-      }
-
-      let message = baseMessage;
-      if (requiresRecreation) {
-        message = baseMessage.replace('requires new software', 'requires recreating the server with new software') + ' The change will take effect when the server is next started.';
-      } else {
-        message = `The server has not been started yet. ` + baseMessage + (requiresFileDeletion ? ' Any existing data in storage will be deleted when the server is started.' : ' Existing data will be preserved when the server is started.');
-      }
-
+    if (newType !== currentType) {
       return {
-        requiresRecreation,
-        requiresFileDeletion,
-        severity,
-        message,
-        backupMessage
+        severity: 'high',
+        requiresRecreation: !!server?.hetzner_id,
+        requiresFileDeletion: true,
+        message: `Switching from ${currentType} to ${newType} requires a clean install. ALL existing files (world, plugins, configs) will be deleted.`,
+        backupMessage: 'Download your world files before proceeding!'
+      };
+    } else if (newVersion !== currentVersion) {
+      // Version change logic
+      return {
+        severity: 'medium',
+        requiresRecreation: !!server?.hetzner_id,
+        requiresFileDeletion: false,
+        message: `Changing version from ${currentVersion} to ${newVersion}. Existing files are preserved, but downgrading may corrupt your world.`,
+        backupMessage: 'We recommend backing up your world before changing versions.'
       };
     }
-    
-    console.log('No significant changes detected');
-    return {
-      requiresRecreation: false,
-      requiresFileDeletion: false,
-      severity: 'none',
-      message: 'No significant changes detected. The current software type and version will remain unchanged.',
-      backupMessage: `As a precaution, ensure your world data is backed up regularly. Your data is stored at ${server?.storage_path || 'the server\'s storage path'}.`
-    };
+    return { severity: 'none' };
   };
 
-  // Handle server type change
-  const handleServerTypeChange = (newType) => {
-    console.log('Server type changed to:', newType);
-    setServerType(newType);
-    setVersion(''); // Reset version when type changes to ensure valid selection
-    setShowAllVersions(false); // Reset the toggle when server type changes
-  };
-
-  // Handle version change
-  const handleVersionChange = (newVersion) => {
-    console.log('Version changed to:', newVersion);
-    setVersion(newVersion);
-  };
-
-  // Handle save button click
-  const handleSaveChanges = async () => {
-    console.log('Save Changes clicked', { serverType, version, server });
-    if (!server?.id) {
-      console.error('No server data available');
-      setError('No server data available. Please try again.');
-      return;
-    }
-
-    const impact = checkVersionChangeImpact(serverType, version);
-    console.log('Change impact:', impact);
-
-    if (impact.severity === 'none' && serverType === server?.type && version === server?.version) {
-      console.log('No changes to save');
-      setError('No changes to save.');
-      return;
-    }
-
-    setVersionChangeInfo(impact);
-    setShowVersionWarning(true);
-  };
-
-  // Confirm version change - update Supabase and verify
-  const confirmVersionChange = async () => {
-    console.log('Confirming version change with:', { serverType, version });
-    setShowVersionWarning(false);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const currentType = server?.type || 'vanilla';
-      const updateData = server?.hetzner_id && versionChangeInfo?.requiresRecreation
-        ? {
-            needs_recreation: true,
-            pending_type: serverType,
-            pending_version: version,
-            needs_file_deletion: versionChangeInfo?.requiresFileDeletion || false,
-            force_software_install: !versionChangeInfo?.requiresFileDeletion && (serverType === currentType)
-          }
-        : {
-            type: serverType,
-            version: version,
-            needs_file_deletion: versionChangeInfo?.requiresFileDeletion || false,
-            force_software_install: false
-          };
-
-      console.log('Updating Supabase with:', updateData);
-
-      // Perform the update
-      const { error: updateError } = await supabase
-        .from('servers')
-        .update(updateData)
-        .eq('id', server.id);
-
-      if (updateError) {
-        console.error('Supabase update error:', updateError);
-        throw new Error(`Failed to update server: ${updateError.message}`);
-      }
-
-      // Verify the update
-      const { data: updatedServer, error: fetchError } = await supabase
-        .from('servers')
-        .select('*')
-        .eq('id', server.id)
-        .single();
-
-      if (fetchError || !updatedServer) {
-        console.error('Supabase fetch error:', fetchError);
-        throw new Error('Failed to verify server update.');
-      }
-
-      // Verify the changes were applied
-      if (server?.hetzner_id && versionChangeInfo?.requiresRecreation) {
-        if (updatedServer.pending_type !== serverType || updatedServer.pending_version !== version || 
-            updatedServer.needs_file_deletion !== updateData.needs_file_deletion ||
-            updatedServer.force_software_install !== updateData.force_software_install) {
-          throw new Error('Pending changes were not applied correctly.');
-        }
-      } else {
-        if (updatedServer.type !== serverType || updatedServer.version !== version ||
-            updatedServer.force_software_install !== false) {
-          throw new Error('Server type or version was not updated correctly.');
-        }
-      }
-
-      // Update local state
-      setServerType(updatedServer.type || updatedServer.pending_type || serverType);
-      setVersion(updatedServer.version || updatedServer.pending_version || version);
-      console.log('Version set after save:', updatedServer.version || updatedServer.pending_version);
-
-      // Notify parent component
-      if (onSoftwareChange) {
-        onSoftwareChange({
-          type: updatedServer.type || updatedServer.pending_type || serverType,
-          version: updatedServer.version || updatedServer.pending_version || version,
-          needs_file_deletion: updatedServer.needs_file_deletion || false,
-          force_software_install: updatedServer.force_software_install || false
-        });
-      }
-
-      // Set success message
-      setSuccess(
-        server?.hetzner_id && versionChangeInfo?.requiresRecreation
-          ? versionChangeInfo.requiresFileDeletion
-            ? 'Server configuration updated. The server will be recreated, and all existing files will be deleted on the next start. Ensure you have backed up your data.'
-            : 'Server configuration updated. The server will be recreated with the new software/version on the next start, preserving your existing data.'
-          : 'Server configuration updated successfully. The change will take effect when the server is started.'
-      );
-
-    } catch (error) {
-      console.error('Error updating server configuration:', error);
-      setError(`Failed to update server configuration: ${error.message}`);
-    }
-  };
-
-  // Cancel version change
-  const cancelVersionChange = () => {
-    console.log('Cancelling version change');
-    setShowVersionWarning(false);
-    setVersionChangeInfo(null);
-    setServerType(server?.type || 'vanilla');
-    setVersion(server?.version || '');
-  };
-
-  // Fetch available versions based on server type and initialize version
+  // --- Data Fetching ---
   useEffect(() => {
-    console.log('useEffect triggered', { serverType, serverVersion: server?.version });
     const fetchVersions = async () => {
-      if (!serverType) {
-        console.log('No serverType, skipping fetch');
-        return;
-      }
-
+      if (!serverType) return;
       setLoadingVersions(true);
       setError(null);
+      
       try {
         let versions = [];
-
         switch (serverType) {
           case 'vanilla':
-            {
-              const vanillaRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
-              const vanillaData = await vanillaRes.json();
-              versions = vanillaData.versions.map(v => v.id);
-            }
+            const vRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
+            versions = (await vRes.json()).versions.map(v => v.id);
             break;
-
           case 'paper':
-            {
-              const paperRes = await fetch('https://api.papermc.io/v2/projects/paper');
-              const paperData = await paperRes.json();
-              versions = paperData.versions;
-            }
+            const pRes = await fetch('https://api.papermc.io/v2/projects/paper');
+            versions = (await pRes.json()).versions;
             break;
-
           case 'spigot':
-            {
-              const spigotRes = await fetchWithCorsProxy('https://cdn.getbukkit.org/spigot/spigot.json');
-              versions = spigotRes.versions.map(v => v.version);
-            }
+            const sRes = await fetchWithCorsProxy('https://cdn.getbukkit.org/spigot/spigot.json');
+            versions = (await sRes.json()).versions.map(v => v.version);
             break;
-
           case 'forge':
-            {
-              const forgeData = await fetchWithCorsProxy(
-                'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json'
-              );
-
-              const versionSet = new Set();
-              for (const key in forgeData.promos) {
-                const [mcVersion] = key.split('-');
-                versionSet.add(mcVersion);
-              }
-              versions = Array.from(versionSet);
-            }
+            const fData = await fetchWithCorsProxy('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
+            const fSet = new Set();
+            for (const key in fData.promos) fSet.add(key.split('-')[0]);
+            versions = Array.from(fSet);
             break;
-
           case 'fabric':
-            {
-              const fabricRes = await fetch('https://meta.fabricmc.net/v2/versions/game');
-              const fabricData = await fabricRes.json();
-              versions = fabricData.map(v => v.version);
-            }
-            break;
-
-          default:
+            const fabRes = await fetch('https://meta.fabricmc.net/v2/versions/game');
+            versions = (await fabRes.json()).map(v => v.version);
             break;
         }
 
-        // Sort versions in descending order
-        versions = sortVersions(versions);
-        console.log('Fetched versions:', versions);
+        const sorted = sortVersions(versions);
+        setAvailableVersions(sorted);
 
-        setAvailableVersions(versions);
-
-        // Set version: prioritize server.version, then current version if valid, else latest from filtered versions
-        const stableVersions = filterStableVersions(versions, serverType);
-        const versionsToUse = showAllVersions ? versions : stableVersions;
-
-        if (isInitialMount.current && server?.version && versionsToUse.includes(server.version)) {
-          console.log('Initial mount, setting version from server prop:', server.version);
-          setVersion(server.version);
-        } else if (version && versionsToUse.includes(version)) {
-          console.log('Retaining current version:', version);
-          // Version already set and valid, no change needed
-        } else if (versionsToUse.length > 0) {
-          console.log('Setting default version:', versionsToUse[0]);
-          setVersion(versionsToUse[0]);
-        } else if (versions.length > 0) {
-          console.log('No stable versions available, setting first available version:', versions[0]);
-          setVersion(versions[0]);
-        } else {
-          console.log('No versions available, setting fallback version');
-          setVersion('1.19.2');
+        // Auto-select logic on initial load or empty
+        if (isInitialMount.current) {
+          if (server?.version && versions.includes(server.version)) {
+            setVersion(server.version);
+          } else {
+            const stable = filterStableVersions(sorted, serverType);
+            if (stable.length > 0) setVersion(stable[0]);
+          }
+          isInitialMount.current = false;
+        } else if (!version) {
+           const stable = filterStableVersions(sorted, serverType);
+           if (stable.length > 0) setVersion(stable[0]);
         }
-        isInitialMount.current = false;
-      } catch (error) {
-        console.error('Error fetching versions:', error);
-        setError(`Failed to load versions: ${error.message}`);
+
+      } catch (err) {
+        console.error(err);
+        setError(`Could not load versions: ${err.message}`);
       } finally {
         setLoadingVersions(false);
       }
@@ -422,197 +195,284 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     fetchVersions();
   }, [serverType]);
 
-  const softwareOptions = [
-    { value: 'vanilla', label: 'Vanilla' },
-    { value: 'paper', label: 'Paper' },
-    { value: 'spigot', label: 'Spigot' },
-    { value: 'forge', label: 'Forge' },
-    { value: 'fabric', label: 'Fabric' },
-  ];
+  // --- Computed Versions ---
+  const displayedVersions = useMemo(() => {
+    let list = showAllVersions 
+      ? availableVersions 
+      : filterStableVersions(availableVersions, serverType);
+    
+    if (searchQuery) {
+      list = list.filter(v => v.toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+    return list;
+  }, [availableVersions, showAllVersions, serverType, searchQuery]);
+
+  // --- Handlers ---
+  const handleSaveClick = () => {
+    const impact = checkVersionChangeImpact(serverType, version);
+    if (impact.severity === 'none' && serverType === server?.type && version === server?.version) {
+      return; // No changes
+    }
+    setVersionChangeInfo(impact);
+    setShowVersionWarning(true);
+  };
+
+  const confirmChange = async () => {
+    setShowVersionWarning(false);
+    setSuccess(null);
+    setError(null);
+
+    try {
+      // Determine update payload based on whether server exists and needs recreation
+      const needsRecreation = server?.hetzner_id && versionChangeInfo.requiresRecreation;
+      
+      const payload = needsRecreation 
+        ? {
+            needs_recreation: true,
+            pending_type: serverType,
+            pending_version: version,
+            needs_file_deletion: versionChangeInfo.requiresFileDeletion || false,
+            // Only force software install if NOT deleting files (if deleting files, provision handles it anyway)
+            // AND the type is the same (reinstalling same software version)
+            force_software_install: !versionChangeInfo.requiresFileDeletion && (serverType === server.type)
+          }
+        : {
+            type: serverType,
+            version: version,
+            needs_file_deletion: versionChangeInfo.requiresFileDeletion || false,
+            force_software_install: false
+          };
+
+      const { error: err } = await supabase.from('servers').update(payload).eq('id', server.id);
+      if (err) throw err;
+
+      if (onSoftwareChange) onSoftwareChange(payload);
+      
+      setSuccess(needsRecreation 
+        ? 'Configuration saved. Server will be updated on next restart.' 
+        : 'Configuration saved successfully.'
+      );
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   return (
-    <div className="bg-white rounded-xl shadow p-6">
-      {/* Version Change Warning Modal */}
-      {showVersionWarning && versionChangeInfo && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className={`text-lg font-bold ${
-                versionChangeInfo.severity === 'high' ? 'text-red-600' : 'text-yellow-600'
-              }`}>
-                {versionChangeInfo.severity === 'high' ? 'Warning: Data Loss Risk' : 'Recommendation: Backup Suggested'}
-              </h3>
-            </div>
-            
-            <div className={`border-l-4 p-4 mb-4 ${
-              versionChangeInfo.severity === 'high' 
-                ? 'bg-red-50 border-red-400' 
-                : 'bg-yellow-50 border-yellow-400'
-            }`}>
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  {versionChangeInfo.severity === 'high' ? (
-                    <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                  ) : (
-                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </div>
-                <div className="ml-3">
-                  <p className={`text-sm ${
-                    versionChangeInfo.severity === 'high' ? 'text-red-700' : 'text-yellow-700'
-                  }`}>
-                    {versionChangeInfo.message}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-blue-700">
-                    {versionChangeInfo.backupMessage}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={cancelVersionChange}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmVersionChange}
-                className={`${
-                  versionChangeInfo.severity === 'high' 
-                    ? 'bg-red-600 hover:bg-red-700' 
-                    : 'bg-blue-600 hover:bg-blue-700'
-                } text-white py-2 px-4 rounded-lg`}
-              >
-                I Understand
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Success and Error Messages */}
-      {success && (
-        <div className="bg-green-50 text-green-700 p-4 rounded-lg mb-6 flex justify-between items-center">
-          <p>{success}</p>
-          <button onClick={() => setSuccess(null)} className="text-green-800">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-6 flex justify-between items-center">
-          <p>{error}</p>
-          <button onClick={() => setError(null)} className="text-red-800">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      <div className="mb-8">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Server Software</h2>
-
-        {/* Top Row: Software Type Selection */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Select Software Type</label>
-          <div className="grid grid-cols-5 gap-4">
-            {softwareOptions.map((option) => (
+    <div className="space-y-6">
+      
+      {/* 1. Software Selection Card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <CpuChipIcon className="w-5 h-5 text-gray-500" /> Software Platform
+        </h2>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {softwareOptions.map((opt) => {
+            const isSelected = serverType === opt.id;
+            return (
               <div
-                key={option.value}
-                onClick={() => handleServerTypeChange(option.value)}
-                className={`cursor-pointer rounded-lg border p-4 text-center transition-colors ${
-                  serverType === option.value
-                    ? 'bg-indigo-100 border-indigo-500 text-indigo-700'
-                    : 'bg-white border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <div className="font-medium">{option.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Bottom Row: Version Selection */}
-        <div className="mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <label className="block text-sm font-medium text-gray-700">Select Version</label>
-            <button
-              type="button"
-              onClick={() => setShowAllVersions(!showAllVersions)}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                showAllVersions
-                  ? 'bg-gray-200 border-gray-400 text-gray-700 hover:bg-gray-300'
-                  : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {showAllVersions ? 'Showing All Versions' : 'Show All Versions'}
-            </button>
-          </div>
-          
-          {loadingVersions ? (
-            <div className="animate-pulse bg-gray-200 rounded h-24 w-full" />
-          ) : filteredVersions.length > 0 ? (
-            <div className="grid grid-cols-5 gap-4 auto-rows-fr">
-              {filteredVersions.map((v) => (
-                <div
-                  key={v}
-                  onClick={() => handleVersionChange(v)}
-                  className={`cursor-pointer rounded-lg border p-4 text-center transition-colors ${
-                    version === v
-                      ? 'bg-indigo-100 border-indigo-500 text-indigo-700'
-                      : 'bg-white border-gray-300 hover:bg-gray-50'
-                  } ${
-                    // Add visual indicator for non-stable versions
-                    !filterStableVersions([v], serverType).includes(v) 
-                      ? 'border-yellow-300 bg-yellow-50' 
-                      : ''
+                key={opt.id}
+                onClick={() => {
+                  setServerType(opt.id);
+                  setSearchQuery(''); // Reset search on type change
+                }}
+                className={`relative cursor-pointer rounded-xl p-4 border-2 transition-all duration-200 flex flex-col items-center text-center gap-3 group
+                  ${isSelected 
+                    ? `border-indigo-600 bg-indigo-50 shadow-md ring-1 ring-indigo-600` 
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                   }`}
-                >
-                  <div className="font-medium">{v}</div>
-                  {!filterStableVersions([v], serverType).includes(v) && (
-                    <div className="text-xs text-yellow-600 mt-1">Experimental</div>
-                  )}
+              >
+                <div className={`p-3 rounded-full ${isSelected ? 'bg-white text-indigo-600' : 'bg-gray-100 text-gray-500 group-hover:bg-white'}`}>
+                  <opt.icon className="w-6 h-6" />
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-gray-500">No versions available. Please select a different software type.</div>
-          )}
-        </div>
-
-        {/* Save Button */}
-        <div className="flex justify-end">
-          <button
-            onClick={handleSaveChanges}
-            disabled={!serverType || !version || (serverType === server?.type && version === server?.version)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-6 rounded-lg disabled:opacity-50"
-          >
-            Save Changes
-          </button>
+                <div>
+                  <h3 className={`font-bold ${isSelected ? 'text-indigo-900' : 'text-gray-900'}`}>{opt.label}</h3>
+                  <p className="text-xs text-gray-500 mt-1 leading-snug">{opt.description}</p>
+                </div>
+                {isSelected && (
+                  <div className="absolute top-2 right-2 text-indigo-600">
+                    <CheckCircleIcon className="w-5 h-5" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* 2. Version Selection Card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <ArchiveBoxIcon className="w-5 h-5 text-gray-500" /> Game Version
+          </h2>
+          
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            {/* Search Bar */}
+            <div className="relative flex-1 sm:flex-none">
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input 
+                type="text" 
+                placeholder="Search..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-48"
+              />
+            </div>
+
+            {/* Toggle */}
+            <button
+              onClick={() => setShowAllVersions(!showAllVersions)}
+              className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
+                showAllVersions
+                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              {showAllVersions ? 'Show Stable Only' : 'Show All (Snapshots)'}
+            </button>
+          </div>
+        </div>
+
+        {/* Versions Grid */}
+        {loadingVersions ? (
+          <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-8 gap-3 animate-pulse">
+            {[...Array(16)].map((_, i) => (
+              <div key={i} className="h-10 bg-gray-100 rounded-lg"></div>
+            ))}
+          </div>
+        ) : displayedVersions.length > 0 ? (
+          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2 max-h-[320px] overflow-y-auto p-1 custom-scrollbar">
+            {displayedVersions.map((v) => {
+              const isSelected = version === v;
+              const isStable = filterStableVersions([v], serverType).length > 0;
+              return (
+                <button
+                  key={v}
+                  onClick={() => setVersion(v)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all duration-150 relative overflow-hidden
+                    ${isSelected 
+                      ? 'border-indigo-600 bg-indigo-600 text-white shadow-md' 
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                    }
+                    ${!isStable && !isSelected ? 'opacity-70 bg-gray-50 text-gray-500' : ''}
+                  `}
+                >
+                  {v}
+                  {!isStable && (
+                    <span className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-yellow-300' : 'bg-yellow-500'}`} title="Unstable/Snapshot" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+            <p className="text-gray-500">No versions found matching "{searchQuery}"</p>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Action Bar */}
+      <div className="flex items-center justify-end gap-4 pt-2">
+        <AnimatePresence>
+          {success && (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
+              className="text-green-600 text-sm font-medium flex items-center gap-2"
+            >
+              <CheckCircleIcon className="w-5 h-5" /> {success}
+            </motion.div>
+          )}
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
+              className="text-red-600 text-sm font-medium flex items-center gap-2"
+            >
+              <XCircleIcon className="w-5 h-5" /> {error}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          onClick={handleSaveClick}
+          disabled={!version || (serverType === server?.type && version === server?.version)}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          Save Changes
+        </button>
+      </div>
+
+      {/* Impact Warning Modal */}
+      <AnimatePresence>
+        {showVersionWarning && versionChangeInfo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
+            >
+              <div className={`p-6 border-b ${
+                versionChangeInfo.severity === 'high' ? 'bg-red-50 border-red-100' : 'bg-yellow-50 border-yellow-100'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-full ${
+                    versionChangeInfo.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'
+                  }`}>
+                    <ExclamationTriangleIcon className="w-6 h-6" />
+                  </div>
+                  <h3 className={`text-lg font-bold ${
+                    versionChangeInfo.severity === 'high' ? 'text-red-900' : 'text-yellow-900'
+                  }`}>
+                    {versionChangeInfo.severity === 'high' ? 'High Impact Change' : 'Confirm Change'}
+                  </h3>
+                </div>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <p className="text-gray-700 leading-relaxed">
+                  {versionChangeInfo.message}
+                </p>
+                
+                {versionChangeInfo.backupMessage && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800 flex items-start gap-3">
+                    <ArchiveBoxIcon className="w-5 h-5 shrink-0 mt-0.5" />
+                    <span>{versionChangeInfo.backupMessage}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t border-gray-200">
+                <button
+                  onClick={() => { setShowVersionWarning(false); setVersionChangeInfo(null); }}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmChange}
+                  className={`px-4 py-2 text-white rounded-lg font-medium shadow-sm ${
+                    versionChangeInfo.severity === 'high' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
+                >
+                  Confirm & Apply
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
+  );
+}
+
+// Simple icon for consistency if not importing Heroicons directly in this snippet context
+function CpuChipIcon(props) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25z" />
+    </svg>
   );
 }
