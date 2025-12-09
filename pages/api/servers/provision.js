@@ -214,7 +214,7 @@ const generateRconPassword = () => {
 const checkSubdomainAvailable = async (subdomain) => {
   const checks = [
     { type: 'A', name: `${subdomain}.spawnly.net` },
-    { type: 'A', name: `${subdomain}-api.spawnly.net` }, // Updated to check <subdomain>-api
+    // Removed check for -api subdomain since we are removing it
     { type: 'SRV', name: `_minecraft._tcp.${subdomain}.spawnly.net` },
   ];
 
@@ -245,17 +245,11 @@ const createARecord = async (subdomain, serverIp) => {
     {
       type: 'A',
       name: subdomain, // e.g., paredes
-      content: serverIp, // e.g., 91.99.200.184
-      ttl: 1,
-      proxied: false // DNS-only for Minecraft
-    },
-    {
-      type: 'A',
-      name: `${subdomain}-api`, // e.g., paredes-api
       content: serverIp,
       ttl: 1,
-      proxied: true // Proxied for WSS/HTTPS, covered by Universal SSL
+      proxied: false // DNS-only for Minecraft
     }
+    // Removed the -api record creation
   ];
   const recordIds = [];
   for (const data of records) {
@@ -280,17 +274,18 @@ const createSRVRecord = async (subdomain, serverIp) => {
   const url = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
   const data = {
     type: 'SRV',
+    name: `_minecraft._tcp.${subdomain}`, // Name must be at top level
     data: {
-      name: `_minecraft._tcp.${subdomain}`, // e.g., _minecraft._tcp.paredes
       service: '_minecraft',
       proto: '_tcp',
-      ttl: 1,
       priority: 0,
       weight: 0,
       port: 25565,
-      target: subdomain // e.g., paredes
-    }
+      target: `${subdomain}.spawnly.net` // Must be FQDN
+    },
+    ttl: 1
   };
+  
   try {
     const response = await axios.post(url, data, {
       headers: {
@@ -1039,7 +1034,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         }
 
         const aRecordIds = await createARecord(serverRow.subdomain, ipv4);
-        console.log(`Created A records for ${serverRow.subdomain}.spawnly.net and ${serverRow.subdomain}-api.spawnly.net -> ${ipv4}`);
+        console.log(`Created A records for ${serverRow.subdomain}.spawnly.net -> ${ipv4}`);
 
         let srvRecordId;
         try {

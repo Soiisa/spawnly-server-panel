@@ -3,7 +3,6 @@
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
-import { format } from 'date-fns';
 import { debounce, throttle } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -15,7 +14,8 @@ import {
   CurrencyDollarIcon,
   ClockIcon,
   ServerIcon,
-  SignalIcon
+  SignalIcon,
+  UserGroupIcon // Added UserGroupIcon
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -64,7 +64,6 @@ export default function ServerDetailPage({ initialServer }) {
   const [copiedIp, setCopiedIp] = useState(false);
 
   // Refs
-  const hasReceivedRunningRef = useRef(false);
   const profileChannelRef = useRef(null);
   const serverChannelRef = useRef(null);
   const mountedRef = useRef(false);
@@ -313,7 +312,6 @@ export default function ServerDetailPage({ initialServer }) {
     try {
       if (action === 'start') {
         setServer(p => ({ ...p, status: 'Starting' }));
-        // Logic for provisioning
         const { data: sData } = await supabase.from('servers').select('type, version, pending_type, pending_version').eq('id', server.id).single();
         const { data: installed } = await supabase.from('installed_software').select('*').eq('server_id', server.id);
         
@@ -394,7 +392,7 @@ export default function ServerDetailPage({ initialServer }) {
     { id: 'software', label: 'Software', icon: CpuChipIcon },
     ...(showMods ? [{ id: 'mods', label: modLabel, icon: ServerIcon }] : []),
     { id: 'files', label: 'Files', icon: ClipboardDocumentIcon },
-    { id: 'console', label: 'Console', icon: ClockIcon }, // Using clock as placeholder for log
+    { id: 'console', label: 'Console', icon: ClockIcon },
     { id: 'properties', label: 'Properties', icon: ServerIcon },
     { id: 'players', label: 'Players', icon: ServerIcon },
     { id: 'world', label: 'World', icon: ServerIcon },
@@ -499,7 +497,6 @@ export default function ServerDetailPage({ initialServer }) {
                   activeTab === tab.id ? 'text-indigo-600 bg-indigo-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                {/* <tab.icon className="w-4 h-4" /> Icon optional to save space */}
                 {tab.label}
                 {activeTab === tab.id && (
                   <motion.div
@@ -548,16 +545,30 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 </div>
 
-                {/* 2. Resources & Metrics */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 md:col-span-2">
+                {/* 2. Resources & Metrics (Updated with Player Count) */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 md:col-span-2 flex flex-col">
                   <h3 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
                     <CpuChipIcon className="w-4 h-4" /> Live Resources
                   </h3>
-                  <div className="h-full">
+                  <div className="flex flex-col flex-1 gap-4">
                     {isRunning ? (
-                      <ServerMetrics server={server} />
+                      <>
+                        <ServerMetrics server={server} />
+                        
+                        {/* New Player Count Section */}
+                        <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <UserGroupIcon className="w-5 h-5 text-gray-400" />
+                            <span className="text-sm font-medium text-gray-600">Active Players</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-2xl font-bold text-gray-900">{server.player_count || 0}</span>
+                            <span className="text-gray-400 text-sm font-medium ml-1">/ {server.max_players || 20}</span>
+                          </div>
+                        </div>
+                      </>
                     ) : (
-                      <div className="h-40 flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200 h-40">
                         <ServerIcon className="w-8 h-8 mb-2 opacity-50" />
                         <p>Server is offline. Start it to view metrics.</p>
                       </div>
