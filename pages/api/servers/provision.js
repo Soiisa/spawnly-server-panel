@@ -2,7 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 import axios from 'axios';
-import { v4 as uuidv4 } from 'uuid'; // Added import
+import { v4 as uuidv4 } from 'uuid';
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -21,12 +21,13 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+// Updated to use cost-optimized CX line as requested
+// CX23 (4GB), CX33 (8GB), CX43 (16GB), CX53 (32GB)
 const ramToServerType = (ramGb) => {
-  if (ramGb <= 2) return 'cpx11';
-  if (ramGb <= 4) return 'cpx21';
-  if (ramGb <= 8) return 'cpx31';
-  if (ramGb <= 16) return 'cpx41';
-  return 'cpx51';
+  if (ramGb <= 4) return 'cx23';  // Covers 2GB - 4GB selections
+  if (ramGb <= 8) return 'cx33';  // Covers 5GB - 8GB selections
+  if (ramGb <= 16) return 'cx43'; // Covers 9GB - 16GB selections
+  return 'cx53';                  // Covers 17GB - 32GB selections
 };
 
 const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
