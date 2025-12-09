@@ -1,122 +1,192 @@
 // pages/pricing.js
+import { useState } from "react";
 import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import { CheckIcon } from "@heroicons/react/24/solid";
-
-const tiers = [
-  { 
-    ram: 2, 
-    creditsPerHour: 1, 
-    desc: "Good for small vanilla worlds & lightweight mods.",
-    recommended: false 
-  },
-  { 
-    ram: 4, 
-    creditsPerHour: 2, 
-    desc: "Standard choice for small friend groups.",
-    recommended: true 
-  },
-  { 
-    ram: 8, 
-    creditsPerHour: 4, 
-    desc: "Great for modded servers & heavier plugins.",
-    recommended: false 
-  },
-  { 
-    ram: 16, 
-    creditsPerHour: 8, 
-    desc: "XL power for big communities and modpacks.",
-    recommended: false 
-  },
-];
+import { 
+  CheckIcon, 
+  CpuChipIcon, 
+  CurrencyDollarIcon, 
+  AdjustmentsHorizontalIcon 
+} from "@heroicons/react/24/outline";
 
 export default function Pricing() {
+  const [ram, setRam] = useState(4);
+
+  // Pricing Logic: 1 Credit = 1 GB RAM per hour
+  const creditsPerHour = ram;
+  const pricePerMonthApprox = (creditsPerHour * 24 * 30 * 0.01).toFixed(2); // Assuming 1 Credit = €0.01
+  const pricePerHourEuro = (creditsPerHour * 0.01).toFixed(2);
+
+  const features = [
+    "DDoS Protection Included",
+    "Unlimited Player Slots",
+    "Full FTP & File Access",
+    "Mod & Plugin Support",
+    "Instant Setup",
+    "24/7 Uptime",
+  ];
+
+  // Dynamic recommendation text based on RAM
+  const getRecommendation = (gb) => {
+    if (gb <= 2) return "Good for small Vanilla servers with up to 5 friends. Not recommended for mods.";
+    if (gb <= 4) return "Perfect for Vanilla with up to 10 friends, or lightweight modpacks (approx. 50 mods).";
+    if (gb <= 8) return "Great for standard modpacks (100+ mods) or Vanilla servers with 20+ players.";
+    if (gb <= 12) return "Ideal for heavy modpacks (200+ mods) or larger communities (40+ players).";
+    if (gb <= 16) return "Powerful performance for very heavy modpacks (300+ mods) or 60+ players.";
+    return "Enterprise-grade power for massive networks, 100+ players, or the most demanding modpacks.";
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 font-sans text-slate-900">
       <Navbar />
 
-      <main className="flex-grow py-16 px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h1 className="text-4xl font-extrabold text-gray-900 sm:text-5xl">
-            Flexible, transparent pricing
-          </h1>
-          <p className="mt-4 text-xl text-gray-500">
-            Choose the RAM you need. Servers are billed hourly from your credit balance.
-            <br />
-            <span className="text-indigo-600 font-medium">Credits are deducted every minute the server runs.</span>
-          </p>
-        </div>
+      <main className="flex-grow">
+        
+        {/* Header Section */}
+        <section className="bg-indigo-900 text-white py-20 px-4 sm:px-6 lg:px-8 text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path d="M0 100 C 20 0 50 0 100 100 Z" fill="white" />
+            </svg>
+          </div>
+          <div className="relative z-10 max-w-3xl mx-auto">
+            <h1 className="text-4xl font-extrabold sm:text-5xl mb-6">
+              Simple, Transparent Pricing
+            </h1>
+            <p className="text-xl text-indigo-100 max-w-2xl mx-auto">
+              We believe in paying only for the resources you use. 
+              <br />
+              <span className="font-semibold text-white">1 Credit = 1 GB RAM per hour.</span>
+            </p>
+          </div>
+        </section>
 
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {tiers.map((tier) => (
-            <div 
-              key={tier.ram} 
-              className={`relative flex flex-col bg-white rounded-2xl shadow-sm border ${
-                tier.recommended 
-                  ? 'border-indigo-600 ring-2 ring-indigo-600 ring-opacity-50 shadow-xl scale-105 z-10' 
-                  : 'border-gray-200'
-              }`}
-            >
-              {tier.recommended && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wide">
-                  Most Popular
+        {/* Calculator Section */}
+        <section className="relative -mt-16 px-4 sm:px-6 lg:px-8 pb-16">
+          <div className="max-w-5xl mx-auto bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-2">
+              
+              {/* Left: Interactive Sliders */}
+              <div className="p-8 md:p-12">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
+                    <AdjustmentsHorizontalIcon className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Customize Your Server</h2>
+                    <p className="text-gray-500">Slide to adjust RAM allocation</p>
+                  </div>
                 </div>
-              )}
 
-              <div className="p-6 border-b border-gray-100 flex-grow">
-                <h3 className="text-lg font-semibold text-gray-900">{tier.ram} GB RAM</h3>
-                <p className="mt-4 flex items-baseline">
-                  <span className="text-4xl font-extrabold tracking-tight text-gray-900">{tier.creditsPerHour}</span>
-                  <span className="ml-1 text-xl font-medium text-gray-500">credits/hr</span>
-                </p>
-                <p className="mt-1 text-sm text-gray-400">
-                  (~€{(tier.creditsPerHour * 0.01).toFixed(2)} / hr)
-                </p>
-                <p className="mt-6 text-gray-500 text-sm leading-relaxed">
-                  {tier.desc}
-                </p>
+                <div className="mb-10">
+                  <div className="flex justify-between items-end mb-4">
+                    <label htmlFor="ram-slider" className="text-sm font-bold text-gray-700 uppercase tracking-wide">
+                      Memory (RAM)
+                    </label>
+                    <div className="text-3xl font-bold text-indigo-600">
+                      {ram} <span className="text-lg text-gray-500 font-medium">GB</span>
+                    </div>
+                  </div>
+                  
+                  <input
+                    id="ram-slider"
+                    type="range"
+                    min="2"
+                    max="32"
+                    step="1"
+                    value={ram}
+                    onChange={(e) => setRam(Number(e.target.value))}
+                    className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-2 font-medium">
+                    <span>2 GB</span>
+                    <span>16 GB</span>
+                    <span>32 GB</span>
+                  </div>
+                </div>
 
-                <ul className="mt-6 space-y-4">
-                  <li className="flex items-start">
-                    <CheckIcon className="h-5 w-5 text-green-500 shrink-0" />
-                    <span className="ml-3 text-sm text-gray-600">Full FTP/File Access</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckIcon className="h-5 w-5 text-green-500 shrink-0" />
-                    <span className="ml-3 text-sm text-gray-600">DDoS Protection</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckIcon className="h-5 w-5 text-green-500 shrink-0" />
-                    <span className="ml-3 text-sm text-gray-600">Unlimited Slots</span>
-                  </li>
-                </ul>
+                <div className="bg-gray-50 rounded-xl p-6 border border-gray-100 transition-all duration-300">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">Capabilities:</h3>
+                  <p className="text-gray-700 text-sm leading-relaxed font-medium">
+                    {getRecommendation(ram)}
+                  </p>
+                </div>
               </div>
 
-              <div className="p-6 bg-gray-50 rounded-b-2xl">
-                <Link 
-                  href="/register"
-                  className={`block w-full text-center px-4 py-3 rounded-xl font-semibold transition-all ${
-                    tier.recommended
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg'
-                      : 'bg-white text-indigo-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300'
-                  }`}
-                >
-                  Deploy {tier.ram}GB Server
-                </Link>
+              {/* Right: Cost Breakdown */}
+              <div className="bg-slate-900 p-8 md:p-12 text-white flex flex-col justify-between">
+                <div>
+                  <h3 className="text-lg font-medium text-slate-300 mb-6">Estimated Cost</h3>
+                  
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between pb-6 border-b border-slate-700">
+                      <div className="flex items-center gap-3">
+                        <CurrencyDollarIcon className="w-6 h-6 text-teal-400" />
+                        <span className="text-lg">Hourly Rate</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-3xl font-bold text-white">{creditsPerHour} <span className="text-base font-normal text-slate-400">credits</span></p>
+                        <p className="text-sm text-slate-400">~ €{pricePerHourEuro}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <CpuChipIcon className="w-6 h-6 text-purple-400" />
+                        <span className="text-lg">Monthly Cap</span>
+                        <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">Approx</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-semibold text-slate-200">~ €{pricePerMonthApprox}</p>
+                        <p className="text-sm text-slate-500">Based on 24/7 usage</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-10">
+                  <Link 
+                    href="/register"
+                    className="block w-full text-center bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-4 px-6 rounded-xl transition-all transform hover:-translate-y-1 shadow-lg shadow-teal-900/20"
+                  >
+                    Deploy {ram}GB Server Now
+                  </Link>
+                  <p className="text-center text-xs text-slate-500 mt-4">
+                    No credit card required to sign up.
+                  </p>
+                </div>
               </div>
+
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
 
-        {/* FAQ or Additional Info */}
-        <div className="max-w-3xl mx-auto mt-20 text-center">
-          <h3 className="text-lg font-semibold text-gray-900">How do credits work?</h3>
-          <p className="mt-2 text-gray-500">
-            1 Credit ≈ €0.01. You can purchase credits in the dashboard. 
-            When you stop your server, billing stops immediately. Your files are kept safe for free.
-          </p>
-        </div>
+        {/* Features List */}
+        <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, idx) => (
+              <div key={idx} className="flex items-center gap-3 p-4 bg-white rounded-lg border border-gray-100 shadow-sm">
+                <div className="p-1 bg-green-100 rounded-full">
+                  <CheckIcon className="w-4 h-4 text-green-600" />
+                </div>
+                <span className="text-gray-700 font-medium">{feature}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* FAQ Section */}
+        <section className="bg-gray-100 py-16 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">How does billing work?</h2>
+            <p className="text-gray-600 leading-relaxed">
+              Spawnly uses a credit-based system. You purchase credits (1 Credit ≈ €0.01), and we deduct them from your balance every minute your server is <strong>Running</strong>. 
+              If you <strong>Stop</strong> your server, billing pauses immediately, but your files are kept safe for free.
+            </p>
+          </div>
+        </section>
+
       </main>
 
       <Footer />
