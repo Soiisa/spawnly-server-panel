@@ -3,7 +3,7 @@
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
-import { debounce, throttle } from 'lodash';
+import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ClipboardDocumentIcon, 
@@ -15,7 +15,7 @@ import {
   ClockIcon,
   ServerIcon,
   SignalIcon,
-  UserGroupIcon // Added UserGroupIcon
+  UserGroupIcon 
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -53,7 +53,6 @@ export default function ServerDetailPage({ initialServer }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fileToken, setFileToken] = useState(null);
-  const [liveMetrics, setLiveMetrics] = useState({ cpu: 0, memory: 0, disk: 0 });
   const [editingRam, setEditingRam] = useState(false);
   const [newRam, setNewRam] = useState(null);
   const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer));
@@ -67,25 +66,8 @@ export default function ServerDetailPage({ initialServer }) {
   const profileChannelRef = useRef(null);
   const serverChannelRef = useRef(null);
   const mountedRef = useRef(false);
-  const metricsWsRef = useRef(null);
   const pollRef = useRef(null);
   const countdownIntervalRef = useRef(null);
-
-  // --- Metrics Throttler ---
-  const throttledSetLiveMetrics = useRef(
-    throttle((newMetrics) => {
-      setLiveMetrics((prev) => {
-        if (
-          prev.cpu === newMetrics.cpu &&
-          prev.memory === newMetrics.memory &&
-          prev.disk === newMetrics.disk
-        ) {
-          return prev;
-        }
-        return newMetrics;
-      });
-    }, 2000)
-  ).current;
 
   // --- Effects ---
 
@@ -211,21 +193,12 @@ export default function ServerDetailPage({ initialServer }) {
     return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
   }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout]);
 
-  // Metrics WebSocket
-  useEffect(() => {
-    if (server?.status === 'Running' && server?.ipv4 && !metricsWsRef.current) {
-      connectToMetricsWebSocket();
-    }
-    return () => { if (metricsWsRef.current) metricsWsRef.current.close(); };
-  }, [server?.status, server?.ipv4]);
-
   // --- Logic Helpers ---
 
   const cleanupResources = () => {
     try {
       if (profileChannelRef.current) supabase.removeChannel(profileChannelRef.current);
       if (serverChannelRef.current) supabase.removeChannel(serverChannelRef.current);
-      if (metricsWsRef.current) metricsWsRef.current.close();
       if (pollRef.current) clearInterval(pollRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     } catch (e) { console.error('Cleanup error:', e); }
@@ -238,24 +211,6 @@ export default function ServerDetailPage({ initialServer }) {
       setCredits(data.credits || 0);
       setCreditsLoading(false);
     }
-  };
-
-  const connectToMetricsWebSocket = () => {
-    if (!server?.ipv4 || metricsWsRef.current) return;
-    try {
-      const ws = new WebSocket(`wss://${server.subdomain}.spawnly.net/status`);
-      metricsWsRef.current = ws;
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (mountedRef.current) throttledSetLiveMetrics({ cpu: data.cpu || 0, memory: data.ram || 0, disk: data.disk || 0 });
-        } catch (e) {}
-      };
-      ws.onclose = () => {
-        metricsWsRef.current = null;
-        if (mountedRef.current && server?.status === 'Running') setTimeout(connectToMetricsWebSocket, 15000);
-      };
-    } catch (e) {}
   };
 
   const safeFetchJson = async (url, opts = {}) => {
