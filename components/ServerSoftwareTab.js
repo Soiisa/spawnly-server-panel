@@ -16,7 +16,7 @@ import {
   GlobeAltIcon
 } from '@heroicons/react/24/outline';
 
-// XML Parser for Maven metadata (Forge/NeoForge)
+// XML Parser for Maven metadata (NeoForge)
 const parseMavenXml = (text) => {
   try {
     const parser = new DOMParser();
@@ -71,7 +71,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   // --- Helpers ---
 
   const fetchWithLocalProxy = async (url, isXml = false) => {
-    // Use our local API route instead of public corsproxy
     const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
     const response = await fetch(proxyUrl);
     
@@ -101,7 +100,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const filterStableVersions = (versions, type) => {
     const stableRegex = /^\d+\.\d+(\.\d+)?$/;
     
-    // For loaders with specific builds (e.g. 1.20.1-47.1.0), assume stable unless explicitly beta/rc
+    // For loaders with specific builds, check keywords
     if (['forge', 'neoforge', 'arclight', 'mohist', 'magma'].includes(type)) {
       return versions.filter(v => 
         !v.toLowerCase().includes('beta') && 
@@ -117,7 +116,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     });
   };
 
-  // --- Logic: Impact Analysis ---
   const checkVersionChangeImpact = (newType, newVersion) => {
     if (!server?.id) return { severity: 'none', message: 'New server configuration.', requiresRecreation: false };
 
@@ -157,7 +155,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         switch (serverType) {
           case 'vanilla':
           case 'spigot': 
-            // Spigot versions mirror Vanilla, so we use the Vanilla manifest to avoid 404s
             const vRes = await fetchWithLocalProxy('https://launchermeta.mojang.com/mc/game/version_manifest.json');
             versions = vRes.versions.map(v => v.id);
             break;
@@ -182,9 +179,21 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             versions = (await purRes.json()).versions;
             break;
           case 'forge':
-            // CORRECTED URL: maven.minecraftforge.net
-            const forgeData = await fetchWithLocalProxy('https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml', true);
-            versions = forgeData; 
+            // Fetch PROMOS (Recommended/Latest only)
+            const promoData = await fetchWithLocalProxy('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
+            const promoVersions = new Set();
+            if (promoData && promoData.promos) {
+              Object.entries(promoData.promos).forEach(([key, build]) => {
+                // Key format: "1.20.1-latest" or "1.20.1-recommended"
+                const match = key.match(/^(.*)-(latest|recommended)$/);
+                if (match) {
+                  const mcVer = match[1];
+                  // Construct full version: 1.20.1-47.2.0
+                  promoVersions.add(`${mcVer}-${build}`);
+                }
+              });
+            }
+            versions = Array.from(promoVersions);
             break;
           case 'neoforge':
             const neoData = await fetchWithLocalProxy('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', true);
@@ -199,7 +208,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             versions = (await quiltRes.json()).map(v => v.version);
             break;
           case 'arclight':
-            // Fallback for Arclight list (using Vanilla versions 1.16+ as supported range)
             const arcRes = await fetchWithLocalProxy('https://launchermeta.mojang.com/mc/game/version_manifest.json');
             versions = arcRes.versions.filter(v => parseFloat(v.id) >= 1.16).map(v => v.id);
             break;
@@ -220,6 +228,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         if (isInitialMount.current && !version) {
           const stable = filterStableVersions(sorted, serverType);
           if (stable.length > 0) setVersion(stable[0]);
+          else if (sorted.length > 0) setVersion(sorted[0]);
           isInitialMount.current = false;
         } else if (!version && sorted.length > 0) {
            const stable = filterStableVersions(sorted, serverType);
@@ -239,7 +248,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     fetchVersions();
   }, [serverType]);
 
-  // --- Computed Versions ---
   const displayedVersions = useMemo(() => {
     let list = showAllVersions 
       ? availableVersions 
@@ -251,7 +259,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     return list;
   }, [availableVersions, showAllVersions, serverType, searchQuery]);
 
-  // --- Handlers ---
   const handleSaveClick = () => {
     const impact = checkVersionChangeImpact(serverType, version);
     if (impact.severity === 'none' && serverType === server?.type && version === server?.version) {
@@ -299,8 +306,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   return (
     <div className="space-y-6">
-      
-      {/* 1. Software Selection Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <ChipIcon className="w-5 h-5 text-gray-500" /> Software Platform
@@ -315,7 +320,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 onClick={() => {
                   setServerType(opt.id);
                   setSearchQuery(''); 
-                  setVersion(''); // Reset version when changing type
+                  setVersion('');
                 }}
                 className={`relative cursor-pointer rounded-xl p-4 border-2 transition-all duration-200 flex flex-col items-center text-center gap-3 group
                   ${isSelected 
@@ -341,7 +346,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         </div>
       </div>
 
-      {/* 2. Version Selection Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -410,7 +414,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         )}
       </div>
 
-      {/* 3. Action Bar */}
       <div className="flex items-center justify-end gap-4 pt-2">
         <AnimatePresence>
           {success && (
@@ -440,7 +443,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         </button>
       </div>
 
-      {/* Impact Warning Modal */}
       <AnimatePresence>
         {showVersionWarning && versionChangeInfo && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
