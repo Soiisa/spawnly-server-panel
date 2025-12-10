@@ -18,14 +18,21 @@ import {
 
 // XML Parser for Maven metadata (Forge/NeoForge)
 const parseMavenXml = (text) => {
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(text, "text/xml");
-  const versionNodes = xmlDoc.getElementsByTagName("version");
-  const versions = [];
-  for (let i = 0; i < versionNodes.length; i++) {
-    versions.push(versionNodes[i].childNodes[0].nodeValue);
+  try {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(text, "text/xml");
+    const versionNodes = xmlDoc.getElementsByTagName("version");
+    const versions = [];
+    for (let i = 0; i < versionNodes.length; i++) {
+      if (versionNodes[i].childNodes[0]) {
+        versions.push(versionNodes[i].childNodes[0].nodeValue);
+      }
+    }
+    return versions;
+  } catch (e) {
+    console.error("XML Parse Error:", e);
+    return [];
   }
-  return versions;
 };
 
 export default function ServerSoftwareTab({ server, onSoftwareChange }) {
@@ -62,7 +69,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     { 
       id: 'purpur', 
       label: 'Purpur', 
-      description: 'Paper fork with more features & config.', 
+      description: 'Paper fork with more features.', 
       icon: BeakerIcon, 
       color: 'bg-purple-50 text-purple-700 border-purple-200' 
     },
@@ -147,17 +154,24 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   // --- Helpers ---
 
-  const fetchWithCorsProxy = async (url, isXml = false) => {
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+  const fetchWithLocalProxy = async (url, isXml = false) => {
+    // Use the local API route to avoid CORS and timeouts
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
     const response = await fetch(proxyUrl);
-    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    
+    if (!response.ok) {
+      // Try to parse error text
+      const errorText = await response.text().catch(() => response.statusText);
+      throw new Error(`Failed to fetch versions: ${response.status} ${errorText}`);
+    }
+    
     const text = await response.text();
     return isXml ? parseMavenXml(text) : JSON.parse(text);
   };
 
   const sortVersions = (versions) => {
     return versions.sort((a, b) => {
-      // Normalize version strings (remove non-numeric prefixes/suffixes for sorting if needed)
+      // Normalize version strings
       const partsA = a.replace(/[^0-9.]/g, '').split('.').map(Number);
       const partsB = b.replace(/[^0-9.]/g, '').split('.').map(Number);
       for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
@@ -165,17 +179,20 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         const numB = partsB[i] || 0;
         if (numA !== numB) return numB - numA;
       }
-      return b.localeCompare(a); // Fallback string compare
+      return b.localeCompare(a);
     });
   };
 
   const filterStableVersions = (versions, type) => {
-    // Regex allows "1.20", "1.20.1" but excludes "1.20-pre1", "23w45a"
     const stableRegex = /^\d+\.\d+(\.\d+)?$/;
     
-    // For specific loaders that include build numbers (e.g., 1.20.1-47.1.0), we assume stable unless 'beta'/'rc' is in string
+    // For loaders with specific builds, check keywords
     if (['forge', 'neoforge', 'arclight', 'mohist', 'magma'].includes(type)) {
-      return versions.filter(v => !v.toLowerCase().includes('beta') && !v.toLowerCase().includes('rc'));
+      return versions.filter(v => 
+        !v.toLowerCase().includes('beta') && 
+        !v.toLowerCase().includes('rc') &&
+        !v.toLowerCase().includes('preview')
+      );
     }
 
     return versions.filter(v => {
@@ -197,7 +214,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         severity: 'high',
         requiresRecreation: !!server?.hetzner_id,
         requiresFileDeletion: true,
-        message: `Switching from ${currentType} to ${newType} requires a clean install. ALL existing files (world, plugins, configs) will be deleted.`,
+        message: `Switching from ${currentType} to ${newType} requires a clean install. ALL existing files will be deleted.`,
         backupMessage: 'Download your world files before proceeding!'
       };
     } else if (newVersion !== currentVersion) {
@@ -218,15 +235,16 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       if (!serverType) return;
       setLoadingVersions(true);
       setError(null);
-      setAvailableVersions([]); // Clear previous
+      setAvailableVersions([]); 
       
       try {
         let versions = [];
         switch (serverType) {
           case 'vanilla':
-          case 'spigot': // Fallback to vanilla versions for Spigot to fix 404
-            const vRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
-            versions = (await vRes.json()).versions.map(v => v.id);
+          case 'spigot': 
+            // Vanilla/Spigot use Mojang manifest
+            const vRes = await fetchWithLocalProxy('https://launchermeta.mojang.com/mc/game/version_manifest.json');
+            versions = vRes.versions.map(v => v.id);
             break;
           case 'paper':
             const pRes = await fetch('https://api.papermc.io/v2/projects/paper');
@@ -249,14 +267,12 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             versions = (await purRes.json()).versions;
             break;
           case 'forge':
-            // Fetch PROMOS for simplified list, or FULL list for specific nomenclature
-            // Using full list logic to satisfy "specific nomenclature" request
-            const forgeData = await fetchWithCorsProxy('https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml', true);
-            versions = forgeData; // Contains e.g. "1.20.1-47.1.0"
+            const forgeData = await fetchWithLocalProxy('https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml', true);
+            versions = forgeData;
             break;
           case 'neoforge':
-            const neoData = await fetchWithCorsProxy('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', true);
-            versions =ZZneoData; 
+            const neoData = await fetchWithLocalProxy('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', true);
+            versions = neoData;
             break;
           case 'fabric':
             const fabRes = await fetch('https://meta.fabricmc.net/v2/versions/game');
@@ -267,22 +283,21 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             versions = (await quiltRes.json()).map(v => v.version);
             break;
           case 'arclight':
-            // Arclight versions are complex, let's simplify to MC versions or use their API if CORS allows
-            // Fallback: Use Vanilla versions but filtered to 1.16+ (Arclight scope)
-            const arcRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
-            versions = (await arcRes.json()).versions.filter(v => parseFloat(v.id) >= 1.16).map(v => v.id);
+            // Arclight requires MC version first, but for the list we can pull from a broader source
+            // Using Vanilla 1.16+ as supported range for now
+            const arcRes = await fetchWithLocalProxy('https://launchermeta.mojang.com/mc/game/version_manifest.json');
+            versions = arcRes.versions.filter(v => parseFloat(v.id) >= 1.16).map(v => v.id);
             break;
           case 'mohist':
-            const mohistRes = await fetchWithCorsProxy('https://mohistmc.com/api/v2/projects/mohist');
-            versions = (mohistRes.versions || []);
+            const mohistRes = await fetchWithLocalProxy('https://mohistmc.com/api/v2/projects/mohist');
+            versions = mohistRes.versions || [];
             break;
           case 'magma':
-            const magmaRes = await fetchWithCorsProxy('https://api.magmafoundation.org/api/v2/allVersions');
+            const magmaRes = await fetchWithLocalProxy('https://api.magmafoundation.org/api/v2/allVersions');
             versions = (magmaRes || []).map(v => v.name || v);
             break;
         }
 
-        // Sort descending
         const sorted = sortVersions(versions);
         setAvailableVersions(sorted);
 
@@ -573,14 +588,5 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       </AnimatePresence>
 
     </div>
-  );
-}
-
-// Simple icon for consistency if not importing Heroicons directly in this snippet context
-function CpuChipIcon(props) {
-  return (
-    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25z" />
-    </svg>
   );
 }
