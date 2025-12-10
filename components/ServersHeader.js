@@ -1,11 +1,10 @@
 // components/ServersHeader.js
 import Link from 'next/link';
+import Image from 'next/image'; // Import Image component
 import { useRouter } from 'next/router';
 import { 
   ServerIcon, 
   CreditCardIcon, 
-  LifebuoyIcon,
-  ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
 import CreditBalance from "./CreditBalance";
 
@@ -17,7 +16,6 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
   const navLinks = [
     { name: 'Dashboard', href: '/dashboard', icon: ServerIcon },
     { name: 'Billing', href: '/credits', icon: CreditCardIcon },
-    // { name: 'Support', href: '#', icon: LifebuoyIcon }, // Uncomment when ready
   ];
 
   return (
@@ -27,11 +25,19 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
           
           {/* Left Side: Logo & Nav */}
           <div className="flex items-center gap-8">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="bg-indigo-600 w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-                S
+            <Link href="/dashboard" className="flex items-center gap-2 group">
+              <div className="relative h-8 w-8">
+                {/* REPLACE '/logo.png' WITH YOUR ACTUAL FILE NAME */}
+                <Image 
+                  src="/logo.png" 
+                  alt="Spawnly Logo" 
+                  fill
+                  className="object-contain"
+                />
               </div>
-              <span className="text-xl font-bold text-slate-900 tracking-tight">Spawnly</span>
+              <span className="text-xl font-bold text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+                Spawnly
+              </span>
             </Link>
 
             <nav className="hidden md:flex items-center gap-1">
