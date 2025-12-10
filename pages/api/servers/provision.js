@@ -1,8 +1,8 @@
-// pages/api/servers/provision.js
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
+import AWS from 'aws-sdk';
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -13,7 +13,6 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-key';
 const APP_BASE_URL = process.env.NEXTAUTH_URL || process.env.VERCEL_URL || 'http://localhost:3000';
-const AWS = require('aws-sdk');
 
 const sanitizeYaml = (str) => str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, '');
 
@@ -21,13 +20,12 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-// Updated to use cost-optimized CX line as requested
-// CX23 (4GB), CX33 (8GB), CX43 (16GB), CX53 (32GB)
+// RAM to Server Type Mapping
 const ramToServerType = (ramGb) => {
-  if (ramGb <= 4) return 'cx23';  // Covers 2GB - 4GB selections
-  if (ramGb <= 8) return 'cx33';  // Covers 5GB - 8GB selections
-  if (ramGb <= 16) return 'cx43'; // Covers 9GB - 16GB selections
-  return 'cx53';                  // Covers 17GB - 32GB selections
+  if (ramGb <= 4) return 'cx23';
+  if (ramGb <= 8) return 'cx33';
+  if (ramGb <= 16) return 'cx43';
+  return 'cx53';
 };
 
 const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
@@ -46,155 +44,147 @@ const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
       }
       await new Promise((r) => setTimeout(r, intervalMs));
     } catch (err) {
-      console.error(`waitForAction error (attempt ${i + 1}):`, err.message, err.stack);
-      throw err;
+      console.error(`waitForAction error (attempt ${i + 1}):`, err.message);
+      await new Promise((r) => setTimeout(r, intervalMs));
     }
   }
   return null;
 };
 
-const getVanillaDownloadUrl = async (version) => {
-  try {
-    const manifestRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
-    if (!manifestRes.ok) throw new Error(`Failed to fetch Mojang version manifest: ${manifestRes.status}`);
-    const manifest = await manifestRes.json();
+// --- Download URL Generators ---
 
-    let targetVersion = version;
-    if (!targetVersion) {
-      if (!manifest.latest || !manifest.latest.release) {
-        throw new Error('Could not determine latest vanilla release from manifest');
-      }
-      targetVersion = manifest.latest.release;
-    }
-
-    let entry = manifest.versions.find((v) => v.id === targetVersion);
-    if (!entry) throw new Error(`Vanilla: version ${targetVersion} not found in manifest`);
-    const versionJsonRes = await fetch(entry.url);
-    if (!versionJsonRes.ok) throw new Error(`Failed to fetch vanilla version data: ${versionJsonRes.status}`);
-    const versionJson = await versionJsonRes.json();
-    const serverDl = versionJson.downloads?.server?.url;
-    if (!serverDl) throw new Error(`Vanilla: no server download for version ${targetVersion}`);
-    return serverDl;
-  } catch (err) {
-    console.error('getVanillaDownloadUrl error:', err.message, err.stack);
-    throw err;
-  }
+// Helper to use the local proxy for server-side fetches if needed
+const fetchWithLocalProxy = async (url) => {
+  // Since we are running server-side here, we can usually fetch directly.
+  // However, some sites block non-browser UAs.
+  const res = await fetch(url, { headers: { 'User-Agent': 'Spawnly/1.0' }});
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+  return res;
 };
 
-const getForgeDownloadUrl = async (version) => {
-  try {
-    const manifestRes = await fetch('https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml');
-    if (!manifestRes.ok) throw new Error(`Failed to fetch Forge version manifest: ${manifestRes.status}`);
-    const manifestText = await manifestRes.text();
-    
-    let versionMatch = manifestText.match(/<version>([\d.]+-[\d.]+(?:-[\w.-]+)?)<\/version>/g);
-    if (!versionMatch) throw new Error('No versions found in Forge manifest');
-    
-    const versions = versionMatch.map(v => v.match(/<version>([\d.]+-[\d.]+(?:-[\w.-]+)?)/)[1]);
-    
-    let targetVersion;
-    if (!version) {
-      targetVersion = versions[versions.length - 1];
-      console.log(`No version specified, using latest Forge: ${targetVersion}`);
-    } else if (versions.includes(version)) {
-      targetVersion = version;
-      console.log(`Exact Forge version match: ${targetVersion}`);
-    } else {
-      const mcVersion = version.split('-')[0];
-      const matchingVersions = versions.filter(v => v.startsWith(mcVersion + '-'));
-      if (matchingVersions.length === 0) {
-        throw new Error(`No Forge versions found for Minecraft ${mcVersion}`);
-      }
-      targetVersion = matchingVersions.sort((a, b) => {
-        const forgeA = a.split('-')[1];
-        const forgeB = b.split('-')[1];
-        return forgeB.localeCompare(forgeA);
-      })[0];
-      console.log(`Selected latest Forge for Minecraft ${mcVersion}: ${targetVersion}`);
-    }
-    
-    return `https://maven.minecraftforge.net/net/minecraftforge/forge/${targetVersion}/forge-${targetVersion}-installer.jar`;
-  } catch (err) {
-    console.error('getForgeDownloadUrl error:', err.message, err.stack);
-    throw err;
-  }
+const getVanillaDownloadUrl = async (version) => {
+  const manifestRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
+  if (!manifestRes.ok) throw new Error('Failed to fetch Mojang manifest');
+  const manifest = await manifestRes.json();
+  const entry = manifest.versions.find((v) => v.id === version);
+  if (!entry) throw new Error(`Version ${version} not found`);
+  const vRes = await fetch(entry.url);
+  const vJson = await vRes.json();
+  return vJson.downloads.server.url;
 };
 
 const getPaperDownloadUrl = async (version) => {
-  try {
-    if (!version) {
-      const versionsRes = await fetch('https://api.papermc.io/v2/projects/paper');
-      if (!versionsRes.ok) throw new Error(`Failed to fetch Paper versions: ${versionsRes.status}`);
-      const versionsData = await versionsRes.json();
-      version = versionsData.versions[versionsData.versions.length - 1];
-    }
-    
-    const buildsRes = await fetch(`https://api.papermc.io/v2/projects/paper/versions/${version}/builds`);
-    if (!buildsRes.ok) throw new Error(`Failed to fetch Paper builds for version ${version}: ${buildsRes.status}`);
-    const buildsData = await buildsRes.json();
-    const latestBuild = buildsData.builds[buildsData.builds.length - 1];
-    
-    return `https://api.papermc.io/v2/projects/paper/versions/${version}/builds/${latestBuild.build}/downloads/${latestBuild.downloads.application.name}`;
-  } catch (err) {
-    console.error('getPaperDownloadUrl error:', err.message, err.stack);
-    throw err;
-  }
+  const buildsRes = await fetch(`https://api.papermc.io/v2/projects/paper/versions/${version}/builds`);
+  const buildsData = await buildsRes.json();
+  const latest = buildsData.builds[buildsData.builds.length - 1];
+  return `https://api.papermc.io/v2/projects/paper/versions/${version}/builds/${latest.build}/downloads/${latest.downloads.application.name}`;
+};
+
+const getPurpurDownloadUrl = async (version) => {
+  return `https://api.purpurmc.org/v2/purpur/${version}/latest/download`;
+};
+
+const getFoliaDownloadUrl = async (version) => {
+  const buildsRes = await fetch(`https://api.papermc.io/v2/projects/folia/versions/${version}/builds`);
+  const buildsData = await buildsRes.json();
+  const latest = buildsData.builds[buildsData.builds.length - 1];
+  return `https://api.papermc.io/v2/projects/folia/versions/${version}/builds/${latest.build}/downloads/${latest.downloads.application.name}`;
+};
+
+const getVelocityDownloadUrl = async (version) => {
+  const buildsRes = await fetch(`https://api.papermc.io/v2/projects/velocity/versions/${version}/builds`);
+  const buildsData = await buildsRes.json();
+  const latest = buildsData.builds[buildsData.builds.length - 1];
+  return `https://api.papermc.io/v2/projects/velocity/versions/${version}/builds/${latest.build}/downloads/${latest.downloads.application.name}`;
+};
+
+const getWaterfallDownloadUrl = async (version) => {
+  const buildsRes = await fetch(`https://api.papermc.io/v2/projects/waterfall/versions/${version}/builds`);
+  const buildsData = await buildsRes.json();
+  const latest = buildsData.builds[buildsData.builds.length - 1];
+  return `https://api.papermc.io/v2/projects/waterfall/versions/${version}/builds/${latest.build}/downloads/${latest.downloads.application.name}`;
+};
+
+const getForgeDownloadUrl = async (version) => {
+  // Input: "1.20.1-47.2.20"
+  return `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}/forge-${version}-installer.jar`;
+};
+
+const getNeoForgeDownloadUrl = async (version) => {
+  // Input: "21.1.65" or "1.20.1-47.1.84"
+  return `https://maven.neoforged.net/releases/net/neoforged/neoforge/${version}/neoforge-${version}-installer.jar`;
 };
 
 const getFabricDownloadUrl = async (version) => {
-  try {
-    if (!version) {
-      const versionsRes = await fetch('https://meta.fabricmc.net/v2/versions/game');
-      if (!versionsRes.ok) throw new Error(`Failed to fetch Fabric versions: ${versionsRes.status}`);
-      const versionsData = await versionsRes.json();
-      version = versionsData[0].version;
-    }
-    
-    const loaderRes = await fetch('https://meta.fabricmc.net/v2/versions/loader');
-    if (!loaderRes.ok) throw new Error(`Failed to fetch Fabric loader versions: ${loaderRes.status}`);
-    const loaderData = await loaderRes.json();
-    const loaderVersion = loaderData[0].version;
-    
-    const installerRes = await fetch('https://meta.fabricmc.net/v2/versions/installer');
-    if (!installerRes.ok) throw new Error(`Failed to fetch Fabric installer versions: ${installerRes.status}`);
-    const installerData = await installerRes.json();
-    const installerVersion = installerData[0].version;
-    
-    return `https://meta.fabricmc.net/v2/versions/loader/${version}/${loaderVersion}/${installerVersion}/server/jar`;
-  } catch (err) {
-    console.error('getFabricDownloadUrl error:', err.message, err.stack);
-    throw err;
-  }
+  const loaderRes = await fetch('https://meta.fabricmc.net/v2/versions/loader');
+  const loaderData = await loaderRes.json();
+  const loaderVersion = loaderData[0].version;
+  const installerRes = await fetch('https://meta.fabricmc.net/v2/versions/installer');
+  const installerData = await installerRes.json();
+  const installerVersion = installerData[0].version;
+  return `https://meta.fabricmc.net/v2/versions/loader/${version}/${loaderVersion}/${installerVersion}/server/jar`;
+};
+
+const getQuiltDownloadUrl = async (version) => {
+  const loaderRes = await fetch(`https://meta.quiltmc.org/v3/versions/loader/${version}`);
+  const loaderData = await loaderRes.json();
+  if (!loaderData || loaderData.length === 0) throw new Error(`No Quilt loader found for ${version}`);
+  const loaderVersion = loaderData[0].loader.version;
+  return `https://meta.quiltmc.org/v3/versions/loader/${version}/${loaderVersion}/server/jar`;
+};
+
+const getMohistDownloadUrl = async (version) => {
+  // Direct link construction
+  return `https://mohistmc.com/api/v2/projects/mohist/${version}/builds/latest/download`;
+};
+
+const getMagmaDownloadUrl = async (version) => {
+  return `https://api.magmafoundation.org/api/v2/${version}/latest/download`;
+};
+
+const getArclightDownloadUrl = async (version) => {
+  // Use GitHub API to find the release
+  const headers = {};
+  if (process.env.GITHUB_TOKEN) headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
+  const releasesRes = await fetch('https://api.github.com/repos/IzzelAliz/Arclight/releases', { headers });
+  const releases = await releasesRes.json();
+  
+  // Find a release where tag_name starts with the version
+  const release = releases.find(r => r.tag_name.startsWith(version));
+  if (!release) throw new Error(`No Arclight release found for ${version}`);
+  
+  const asset = release.assets.find(a => a.name.endsWith('.jar'));
+  if (!asset) throw new Error('No JAR found in Arclight release');
+  
+  return asset.browser_download_url;
 };
 
 const getSpigotDownloadUrl = async (version) => {
-  throw new Error('Spigot installation requires BuildTools and is not yet automated');
-};
-
-const getBukkitDownloadUrl = async (version) => {
-  throw new Error('Bukkit installation requires BuildTools and is not yet automated');
+  // Uses getbukkit.org backend. This usually works server-side.
+  return `https://cdn.getbukkit.org/spigot/spigot-${version}.jar`;
 };
 
 const getSoftwareDownloadUrl = async (software, version) => {
   try {
     switch (software) {
-      case 'vanilla':
-        return await getVanillaDownloadUrl(version);
-      case 'forge':
-        return await getForgeDownloadUrl(version);
-      case 'paper':
-        return await getPaperDownloadUrl(version);
-      case 'fabric':
-        return await getFabricDownloadUrl(version);
-      case 'spigot':
-        return await getSpigotDownloadUrl(version);
-      case 'bukkit':
-        return await getBukkitDownloadUrl(version);
-      default:
-        throw new Error(`Unknown software type: ${software}`);
+      case 'vanilla': return await getVanillaDownloadUrl(version);
+      case 'paper': return await getPaperDownloadUrl(version);
+      case 'purpur': return await getPurpurDownloadUrl(version);
+      case 'folia': return await getFoliaDownloadUrl(version);
+      case 'velocity': return await getVelocityDownloadUrl(version);
+      case 'waterfall': return await getWaterfallDownloadUrl(version);
+      case 'forge': return await getForgeDownloadUrl(version);
+      case 'neoforge': return await getNeoForgeDownloadUrl(version);
+      case 'fabric': return await getFabricDownloadUrl(version);
+      case 'quilt': return await getQuiltDownloadUrl(version);
+      case 'mohist': return await getMohistDownloadUrl(version);
+      case 'magma': return await getMagmaDownloadUrl(version);
+      case 'arclight': return await getArclightDownloadUrl(version);
+      case 'spigot': return await getSpigotDownloadUrl(version);
+      default: throw new Error(`Unknown software type: ${software}`);
     }
   } catch (err) {
-    console.error('getSoftwareDownloadUrl error:', err.message, err.stack);
+    console.error('getSoftwareDownloadUrl error:', err.message);
     throw err;
   }
 };
@@ -216,7 +206,6 @@ const generateRconPassword = () => {
 const checkSubdomainAvailable = async (subdomain) => {
   const checks = [
     { type: 'A', name: `${subdomain}.spawnly.net` },
-    // Removed check for -api subdomain since we are removing it
     { type: 'SRV', name: `_minecraft._tcp.${subdomain}.spawnly.net` },
   ];
 
@@ -233,10 +222,7 @@ const checkSubdomainAvailable = async (subdomain) => {
       throw new Error(`Cloudflare check for ${check.type} failed: ${response.status} ${errorText}`);
     }
     const { result } = await response.json();
-    if (result.length > 0) {
-      console.warn(`Found existing ${check.type} record for ${check.name}`);
-      return false;
-    }
+    if (result.length > 0) return false;
   }
   return true;
 };
@@ -246,12 +232,11 @@ const createARecord = async (subdomain, serverIp) => {
   const records = [
     {
       type: 'A',
-      name: subdomain, // e.g., paredes
+      name: subdomain,
       content: serverIp,
       ttl: 1,
-      proxied: false // DNS-only for Minecraft
+      proxied: false
     }
-    // Removed the -api record creation
   ];
   const recordIds = [];
   for (const data of records) {
@@ -265,8 +250,7 @@ const createARecord = async (subdomain, serverIp) => {
       console.log(`Created A record for ${data.name}.spawnly.net:`, response.data);
       recordIds.push(response.data.result.id);
     } catch (error) {
-      console.error(`Failed to create A record for ${data.name}.spawnly.net:`, error.response?.data || error.message);
-      throw new Error(`Failed to create A record for ${data.name}.spawnly.net: ${error.message}`);
+      throw new Error(`Failed to create A record: ${error.message}`);
     }
   }
   return recordIds;
@@ -276,14 +260,14 @@ const createSRVRecord = async (subdomain, serverIp) => {
   const url = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
   const data = {
     type: 'SRV',
-    name: `_minecraft._tcp.${subdomain}`, // Name must be at top level
+    name: `_minecraft._tcp.${subdomain}`,
     data: {
       service: '_minecraft',
       proto: '_tcp',
       priority: 0,
       weight: 0,
       port: 25565,
-      target: `${subdomain}.spawnly.net` // Must be FQDN
+      target: `${subdomain}.spawnly.net`
     },
     ttl: 1
   };
@@ -295,11 +279,9 @@ const createSRVRecord = async (subdomain, serverIp) => {
         'Content-Type': 'application/json'
       }
     });
-    console.log(`Created SRV record for _minecraft._tcp.${subdomain}.spawnly.net:`, response.data);
     return response.data.result.id;
   } catch (error) {
     const errorDetails = error.response?.data?.errors || error.message;
-    console.error(`Failed to create SRV record for _minecraft._tcp.${subdomain}.spawnly.net:`, JSON.stringify(errorDetails, null, 2));
     throw new Error(`Failed to create SRV record: ${JSON.stringify(errorDetails)}`);
   }
 };
@@ -318,31 +300,20 @@ const deleteS3Files = async (serverId, s3Config) => {
 
     console.log(`Deleting S3 files for server ${serverId} in bucket ${bucket} with prefix ${prefix}`);
 
-    const listParams = {
-      Bucket: bucket,
-      Prefix: prefix,
-    };
-
+    const listParams = { Bucket: bucket, Prefix: prefix };
     const listedObjects = await s3.listObjectsV2(listParams).promise();
-    if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
-      console.log(`No files found in S3 bucket ${bucket} with prefix ${prefix}`);
-      return;
-    }
+    if (!listedObjects.Contents || listedObjects.Contents.length === 0) return;
 
     const objectsToDelete = listedObjects.Contents.map((object) => ({ Key: object.Key }));
-
     const deleteParams = {
       Bucket: bucket,
-      Delete: {
-        Objects: objectsToDelete,
-        Quiet: false,
-      },
+      Delete: { Objects: objectsToDelete, Quiet: false },
     };
 
     await s3.deleteObjects(deleteParams).promise();
-    console.log(`Successfully deleted ${objectsToDelete.length} files from S3 bucket ${bucket} with prefix ${prefix}`);
+    console.log(`Successfully deleted ${objectsToDelete.length} files from S3`);
   } catch (err) {
-    console.error('Error deleting S3 files:', err.message, err.stack);
+    console.error('Error deleting S3 files:', err);
     throw err;
   }
 };
@@ -356,43 +327,31 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const appBaseUrl = process.env.APP_BASE_URL || 'https://spawnly.net';
   const escapedSupabaseUrl = escapeForSingleQuotes(process.env.SUPABASE_URL);
   const escapedSupabaseKey = escapeForSingleQuotes(process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-  console.log(`[DEBUG] Generating cloud-init with subdomain: ${escapedSubdomain || 'none'}`);
-  if (!escapedSubdomain) {
-    console.warn('[WARN] Subdomain is empty, services will use insecure mode unless proxied');
-  }
-  if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
-    console.warn(`Invalid or missing version: ${version}, defaulting to 1.21.1`);
-    version = '1.21.1';
-  }
   const escapedVersion = escapeForSingleQuotes(version);
-  const isForge = software === 'forge';
-  const isFabric = software === 'fabric';
-  const mcVersionStr = version.split('-')[0];
-  const mcMajor = parseFloat(mcVersionStr);
-  const mcMinor = parseInt(mcVersionStr.split('.')[1] || '0', 10);
-  const mcPatch = parseInt(mcVersionStr.split('.')[2] || '0', 10);
-  const isModernForge = isForge && mcMajor >= 1.17;
 
-  let javaPackage;
-  if (software === 'forge' || software === 'fabric') {
-    if (mcMajor < 1.17) javaPackage = 'openjdk-8-jre-headless';
-    else if (mcMajor < 1.18) javaPackage = 'openjdk-17-jre-headless';
-    else if (mcMajor < 1.20 || (mcMajor === 1.20 && mcPatch < 5)) javaPackage = 'openjdk-17-jre-headless';
-    else javaPackage = 'openjdk-21-jre-headless';
-  } else {
-    if (mcMajor < 1.17) javaPackage = 'openjdk-11-jre-headless';
-    else if (mcMajor < 1.18) javaPackage = 'openjdk-17-jre-headless';
-    else if (mcMajor < 1.20 || (mcMajor === 1.20 && mcPatch < 5)) javaPackage = 'openjdk-17-jre-headless';
-    else javaPackage = 'openjdk-21-jre-headless';
+  // Installer/Software Flags
+  const isForge = software === 'forge';
+  const isNeoForge = software === 'neoforge';
+  const isFabric = software === 'fabric';
+  const isQuilt = software === 'quilt';
+  
+  let isModernForge = false;
+  if (isForge) {
+    const mcVer = version.split('-')[0];
+    const parts = mcVer.split('.');
+    if (parts.length >= 2 && parseInt(parts[1]) >= 17) isModernForge = true;
   }
+
+  // Determine Java package based on version
+  let javaPackage = 'openjdk-21-jre-headless'; 
+  if (version.startsWith('1.8') || version.startsWith('1.12')) javaPackage = 'openjdk-8-jre-headless';
+  else if (version.startsWith('1.16')) javaPackage = 'openjdk-11-jre-headless';
+  else if (version.startsWith('1.17')) javaPackage = 'openjdk-17-jre-headless';
 
   const S3_BUCKET = (s3Config.S3_BUCKET || '').replace(/'/g, "'\"'\"'");
   const AWS_ACCESS_KEY_ID = (s3Config.AWS_ACCESS_KEY_ID || '').replace(/'/g, "'\"'\"'");
   const AWS_SECRET_ACCESS_KEY = (s3Config.AWS_SECRET_ACCESS_KEY || '').replace(/'/g, "'\"'\"'");
-  const AWS_REGION = (s3Config.AWS_REGION || 'eu-central-1').replace(/'/g, "'\"'\"'");
-  const S3_ENDPOINT = (s3Config.S3_ENDPOINT || '').replace(/'/g, "'\"'\"'");
-  const endpointCliOption = S3_ENDPOINT ? `--endpoint-url '${S3_ENDPOINT}'` : '';
+  const endpointCliOption = s3Config.S3_ENDPOINT ? `--endpoint-url '${s3Config.S3_ENDPOINT}'` : '';
 
   const userData = `#cloud-config
 # DEBUG: Cloud-init started at ${timestamp}
@@ -490,7 +449,6 @@ write_files:
         echo "[mc-sync-from-s3] Missing S3 configuration, skipping sync."
         exit 0
       fi
-      # Check if server.jar version matches requested version (basic check)
       check_server_version() {
         if [ ! -f "/opt/minecraft/server.jar" ]; then
           echo "none"
@@ -500,7 +458,7 @@ write_files:
       }
       CURRENT_VERSION=$(check_server_version)
       if [ "$CURRENT_VERSION" != "$REQUESTED_VERSION" ] && [ "$CURRENT_VERSION" != "none" ] && [ "$CURRENT_VERSION" != "unknown" ]; then
-        echo "[mc-sync-from-s3] Requested version ($REQUESTED_VERSION) does not match current server.jar version ($CURRENT_VERSION), skipping server.jar sync"
+        echo "[mc-sync-from-s3] Version mismatch ($REQUESTED_VERSION vs $CURRENT_VERSION), skipping server.jar sync to allow clean install"
         sudo -u minecraft bash -lc "aws s3 sync \"s3://$BUCKET/$SERVER_PATH/\" \"$DEST\" $ENDPOINT_OPT --exact-timestamps --exclude 'server.jar' --exclude 'node_modules/*'"
       else
         echo "[mc-sync-from-s3] Starting sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
@@ -554,7 +512,7 @@ write_files:
       HEAP_GB=${heapGb}
       RCON_PASSWORD='${escapedRconPassword}'
       software='${software}'
-      SERVER_ID='${serverId}'  # Fixed: Properly interpolate serverId
+      SERVER_ID='${serverId}'
       version='${escapedVersion}'
       IS_MODERN_FORGE=${isModernForge}
       echo "[DEBUG] startup.sh invoked at $(date)"
@@ -572,61 +530,59 @@ write_files:
         export PATH=$PATH:/root/.local/bin:/home/minecraft/.local/bin
       fi
 
-      # Function to check server.jar version (basic implementation for vanilla)
+      # Check if server.jar exists and matches (simple check)
       check_server_version() {
-        if [ ! -f "/opt/minecraft/server.jar" ]; then
-          echo "none"
-          return
-        fi
+        if [ ! -f "/opt/minecraft/server.jar" ]; then echo "none"; return; fi
         if [ "$software" = "vanilla" ]; then
           java -jar server.jar --version 2>/dev/null | grep -oP '\\d+\\.\\d+\\.\\d+' || echo "unknown"
         else
-          # For Forge, Fabric, etc., version detection may need server.properties or mod metadata
           echo "unknown"
         fi
       }
 
-      # Check if server.jar exists and matches the requested version
       CURRENT_VERSION=$(check_server_version)
       echo "Current server.jar version: $CURRENT_VERSION"
-      echo "Requested version: $version"
 
-      # Force re-download if version doesn't match or server.jar is missing
+      # Download logic
       if [ "$CURRENT_VERSION" != "$version" ] || [ ! -f "/opt/minecraft/server.jar" ]; then
         echo "[startup] Version mismatch or no server.jar, downloading fresh..."
         if [ -n "$DOWNLOAD_URL" ]; then
-          sudo -u minecraft wget -O server-installer.jar "$DOWNLOAD_URL" || echo "DOWNLOAD FAILED: $?"
-          if [ "$software" = "forge" ]; then
+          
+          # Clean up previous install files to avoid conflicts
+          rm -f server.jar server-installer.jar run.sh run.bat user_jvm_args.txt
+          
+          sudo -u minecraft wget -O downloaded-file.jar "$DOWNLOAD_URL" || echo "DOWNLOAD FAILED: $?"
+          
+          if [ "$software" = "forge" ] || [ "$software" = "neoforge" ]; then
+            # Forge/NeoForge Installer Logic
+            echo "[startup] Running Forge/NeoForge installer..."
+            mv downloaded-file.jar server-installer.jar
             java -jar server-installer.jar --installServer
-            if [ "$IS_MODERN_FORGE" = "true" ]; then
-              echo "[startup] Modern Forge (1.17+), keeping run.sh"
-              rm -f server-installer.jar
+            rm -f server-installer.jar
+            
+            if [ -f "run.sh" ]; then
+              echo "[startup] Detected run.sh, permissions..."
+              chmod +x run.sh
             else
-              echo "[startup] Legacy Forge (<1.17), renaming to server.jar"
-              FORGE_JAR=$(ls forge-*.jar | head -n 1)
-              if [ -n "$FORGE_JAR" ]; then
-                rm -f server-installer.jar
-                mv "$FORGE_JAR" server.jar
-              else
-                echo "[startup] No Forge JAR found after installation"
-                exit 1
-              fi
+              # Older forge: rename the universal jar to server.jar
+              FORGE_JAR=$(ls forge-*.jar | grep -v installer | head -n 1)
+              if [ -n "$FORGE_JAR" ]; then mv "$FORGE_JAR" server.jar; fi
             fi
-          elif [ "$software" = "fabric" ]; then
-            echo "[startup] Setting up Fabric server"
-            mv server-installer.jar server.jar
+            
+          elif [ "$software" = "fabric" ] || [ "$software" = "quilt" ]; then
+            echo "[startup] Setting up Fabric/Quilt..."
+            mv downloaded-file.jar server.jar
+            
           else
-            mv server-installer.jar server.jar
+            # Vanilla, Paper, Purpur, Spigot, Arclight, Mohist, Magma, Velocity, Waterfall
+            echo "[startup] Setting up standard/hybrid server jar..."
+            mv downloaded-file.jar server.jar
           fi
-          # Optionally delete old server.jar from S3 to prevent re-syncing
-          if [ -n "${S3_BUCKET}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
-            echo "[startup] Deleting old server.jar from S3..."
-            aws s3 rm "s3://${S3_BUCKET}/servers/${serverId}/server.jar" ${endpointCliOption} || echo "[startup] Failed to delete server.jar from S3"
-          fi
-          # Sync new server.jar to S3
-          if [ -n "${S3_BUCKET}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_SECRET_ACCESS_KEY}" ]; then
-            echo "[startup] Syncing new server.jar to S3..."
-            aws s3 cp /opt/minecraft/server.jar "s3://${S3_BUCKET}/servers/${serverId}/server.jar" ${endpointCliOption} || echo "[startup] Failed to sync server.jar to S3"
+          
+          # Sync new jar to S3 so it persists
+          if [ -n "${S3_BUCKET}" ] && [ -n "${AWS_ACCESS_KEY_ID}" ]; then
+             echo "[startup] Syncing new server files to S3..."
+             aws s3 cp /opt/minecraft "s3://${S3_BUCKET}/servers/${serverId}/" --recursive --exclude "*" --include "*.jar" --include "run.sh" --include "user_jvm_args.txt" ${endpointCliOption}
           fi
         else
           echo "[startup] NO DOWNLOAD_URL PROVIDED"
@@ -654,7 +610,7 @@ write_files:
       spawn-protection=16
       view-distance=10
       simulation-distance=10
-      motd=A Minecraft Server
+      motd=A Spawnly Server
       pvp=true
       generate-structures=true
       max-world-size=29999984
@@ -676,7 +632,10 @@ write_files:
       Environment=VERSION=${escapedVersion}
       Environment=IS_MODERN_FORGE=${isModernForge}
       ExecStartPre=/usr/local/bin/mc-sync-from-s3.sh
-      ExecStart=/bin/bash -c 'if [ "$SOFTWARE" = "forge" ] && [ "$IS_MODERN_FORGE" = "true" ] && [ -f "/opt/minecraft/run.sh" ]; then /bin/bash ./run.sh; else /usr/bin/java -Xmx${heapGb}G -Xms1G -jar server.jar nogui; fi'
+      
+      # Flexible ExecStart to handle both run.sh (modern loaders) and java -jar (vanilla/legacy/hybrids)
+      ExecStart=/bin/bash -c 'if [ -f "run.sh" ]; then ./run.sh; else /usr/bin/java -Xmx${heapGb}G -Xms1G -jar server.jar nogui; fi'
+      
       ExecStop=/bin/bash -c 'echo stop | /usr/bin/mcrcon -H 127.0.0.1 -P 25575 -p "${rconPassword}"'
       ExecStopPost=/usr/local/bin/mc-sync.sh
       Restart=always
@@ -701,7 +660,6 @@ write_files:
       Environment=SERVER_ID=${serverId}
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
-      # Explicit API endpoint used by in-server reporters (avoid path guessing)
       Environment=NEXTJS_API_URL=${appBaseUrl.replace(/\/+$/,'')}/api/servers/update-status
       Environment=SUBDOMAIN=${escapedSubdomain}-api
       ExecStart=/usr/bin/node /opt/minecraft/status-reporter.js
