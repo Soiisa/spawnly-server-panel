@@ -10,15 +10,30 @@ import {
   ExclamationTriangleIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ArchiveBoxIcon
+  ArchiveBoxIcon,
+  BoltIcon,
+  CpuChipIcon as ChipIcon,
+  GlobeAltIcon
 } from '@heroicons/react/24/outline';
+
+// XML Parser for Maven metadata (Forge/NeoForge)
+const parseMavenXml = (text) => {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(text, "text/xml");
+  const versionNodes = xmlDoc.getElementsByTagName("version");
+  const versions = [];
+  for (let i = 0; i < versionNodes.length; i++) {
+    versions.push(versionNodes[i].childNodes[0].nodeValue);
+  }
+  return versions;
+};
 
 export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   // --- State ---
   const [serverType, setServerType] = useState(server?.type || 'vanilla');
   const [version, setVersion] = useState(server?.version || '');
   const [availableVersions, setAvailableVersions] = useState([]);
-  const [searchQuery, setSearchQuery] = useState(''); // New: Search state
+  const [searchQuery, setSearchQuery] = useState('');
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -45,6 +60,20 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       color: 'bg-blue-50 text-blue-700 border-blue-200' 
     },
     { 
+      id: 'purpur', 
+      label: 'Purpur', 
+      description: 'Paper fork with more features & config.', 
+      icon: BeakerIcon, 
+      color: 'bg-purple-50 text-purple-700 border-purple-200' 
+    },
+    { 
+      id: 'folia', 
+      label: 'Folia', 
+      description: 'Multithreaded Paper fork (Experimental).', 
+      icon: BoltIcon, 
+      color: 'bg-rose-50 text-rose-700 border-rose-200' 
+    },
+    { 
       id: 'spigot', 
       label: 'Spigot', 
       description: 'Modified server with plugin support.', 
@@ -59,27 +88,76 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       color: 'bg-amber-50 text-amber-700 border-amber-200' 
     },
     { 
+      id: 'neoforge', 
+      label: 'NeoForge', 
+      description: 'Modern fork of Minecraft Forge.', 
+      icon: WrenchScrewdriverIcon, 
+      color: 'bg-orange-100 text-orange-800 border-orange-300' 
+    },
+    { 
       id: 'fabric', 
       label: 'Fabric', 
       description: 'Lightweight, experimental modding.', 
-      icon: BeakerIcon, 
+      icon: ChipIcon, 
       color: 'bg-indigo-50 text-indigo-700 border-indigo-200' 
+    },
+    { 
+      id: 'quilt', 
+      label: 'Quilt', 
+      description: 'The community-driven mod loader.', 
+      icon: ChipIcon, 
+      color: 'bg-teal-50 text-teal-700 border-teal-200' 
+    },
+    { 
+      id: 'arclight', 
+      label: 'Arclight', 
+      description: 'Hybrid server (Forge mods + Plugins).', 
+      icon: ArchiveBoxIcon, 
+      color: 'bg-cyan-50 text-cyan-700 border-cyan-200' 
+    },
+    { 
+      id: 'mohist', 
+      label: 'Mohist', 
+      description: 'Hybrid server (Forge mods + Plugins).', 
+      icon: ArchiveBoxIcon, 
+      color: 'bg-red-50 text-red-700 border-red-200' 
+    },
+    { 
+      id: 'magma', 
+      label: 'Magma', 
+      description: 'Hybrid server (Forge mods + Plugins).', 
+      icon: ArchiveBoxIcon, 
+      color: 'bg-pink-50 text-pink-700 border-pink-200' 
+    },
+    { 
+      id: 'velocity', 
+      label: 'Velocity', 
+      description: 'Modern, high-performance proxy.', 
+      icon: GlobeAltIcon, 
+      color: 'bg-sky-50 text-sky-700 border-sky-200' 
+    },
+    { 
+      id: 'waterfall', 
+      label: 'Waterfall', 
+      description: 'Classic BungeeCord fork.', 
+      icon: GlobeAltIcon, 
+      color: 'bg-blue-100 text-blue-800 border-blue-300' 
     },
   ];
 
   // --- Helpers ---
 
-  const fetchWithCorsProxy = async (url) => {
+  const fetchWithCorsProxy = async (url, isXml = false) => {
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
     const response = await fetch(proxyUrl);
     if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-    return await response.json();
+    const text = await response.text();
+    return isXml ? parseMavenXml(text) : JSON.parse(text);
   };
 
   const sortVersions = (versions) => {
     return versions.sort((a, b) => {
       // Normalize version strings (remove non-numeric prefixes/suffixes for sorting if needed)
-      // This simple split usually works for semantic versioning
       const partsA = a.replace(/[^0-9.]/g, '').split('.').map(Number);
       const partsB = b.replace(/[^0-9.]/g, '').split('.').map(Number);
       for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
@@ -95,12 +173,14 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     // Regex allows "1.20", "1.20.1" but excludes "1.20-pre1", "23w45a"
     const stableRegex = /^\d+\.\d+(\.\d+)?$/;
     
-    // Additional filters for specific software if needed
+    // For specific loaders that include build numbers (e.g., 1.20.1-47.1.0), we assume stable unless 'beta'/'rc' is in string
+    if (['forge', 'neoforge', 'arclight', 'mohist', 'magma'].includes(type)) {
+      return versions.filter(v => !v.toLowerCase().includes('beta') && !v.toLowerCase().includes('rc'));
+    }
+
     return versions.filter(v => {
       const isStableFormat = stableRegex.test(v);
       const hasUnstableKeywords = v.includes('snapshot') || v.includes('pre') || v.includes('rc') || v.includes('experimental') || v.includes('w');
-      
-      if (type === 'vanilla') return isStableFormat && !hasUnstableKeywords;
       return isStableFormat && !hasUnstableKeywords;
     });
   };
@@ -121,7 +201,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         backupMessage: 'Download your world files before proceeding!'
       };
     } else if (newVersion !== currentVersion) {
-      // Version change logic
       return {
         severity: 'medium',
         requiresRecreation: !!server?.hetzner_id,
@@ -139,11 +218,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       if (!serverType) return;
       setLoadingVersions(true);
       setError(null);
+      setAvailableVersions([]); // Clear previous
       
       try {
         let versions = [];
         switch (serverType) {
           case 'vanilla':
+          case 'spigot': // Fallback to vanilla versions for Spigot to fix 404
             const vRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
             versions = (await vRes.json()).versions.map(v => v.id);
             break;
@@ -151,42 +232,75 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             const pRes = await fetch('https://api.papermc.io/v2/projects/paper');
             versions = (await pRes.json()).versions;
             break;
-          case 'spigot':
-            const sRes = await fetchWithCorsProxy('https://cdn.getbukkit.org/spigot/spigot.json');
-            versions = (await sRes.json()).versions.map(v => v.version);
+          case 'folia':
+            const fRes = await fetch('https://api.papermc.io/v2/projects/folia');
+            versions = (await fRes.json()).versions;
+            break;
+          case 'velocity':
+            const velRes = await fetch('https://api.papermc.io/v2/projects/velocity');
+            versions = (await velRes.json()).versions;
+            break;
+          case 'waterfall':
+            const wRes = await fetch('https://api.papermc.io/v2/projects/waterfall');
+            versions = (await wRes.json()).versions;
+            break;
+          case 'purpur':
+            const purRes = await fetch('https://api.purpurmc.org/v2/purpur');
+            versions = (await purRes.json()).versions;
             break;
           case 'forge':
-            const fData = await fetchWithCorsProxy('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
-            const fSet = new Set();
-            for (const key in fData.promos) fSet.add(key.split('-')[0]);
-            versions = Array.from(fSet);
+            // Fetch PROMOS for simplified list, or FULL list for specific nomenclature
+            // Using full list logic to satisfy "specific nomenclature" request
+            const forgeData = await fetchWithCorsProxy('https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml', true);
+            versions = forgeData; // Contains e.g. "1.20.1-47.1.0"
+            break;
+          case 'neoforge':
+            const neoData = await fetchWithCorsProxy('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', true);
+            versions =ZZneoData; 
             break;
           case 'fabric':
             const fabRes = await fetch('https://meta.fabricmc.net/v2/versions/game');
             versions = (await fabRes.json()).map(v => v.version);
             break;
+          case 'quilt':
+            const quiltRes = await fetch('https://meta.quiltmc.org/v3/versions/game');
+            versions = (await quiltRes.json()).map(v => v.version);
+            break;
+          case 'arclight':
+            // Arclight versions are complex, let's simplify to MC versions or use their API if CORS allows
+            // Fallback: Use Vanilla versions but filtered to 1.16+ (Arclight scope)
+            const arcRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
+            versions = (await arcRes.json()).versions.filter(v => parseFloat(v.id) >= 1.16).map(v => v.id);
+            break;
+          case 'mohist':
+            const mohistRes = await fetchWithCorsProxy('https://mohistmc.com/api/v2/projects/mohist');
+            versions = (mohistRes.versions || []);
+            break;
+          case 'magma':
+            const magmaRes = await fetchWithCorsProxy('https://api.magmafoundation.org/api/v2/allVersions');
+            versions = (magmaRes || []).map(v => v.name || v);
+            break;
         }
 
+        // Sort descending
         const sorted = sortVersions(versions);
         setAvailableVersions(sorted);
 
-        // Auto-select logic on initial load or empty
-        if (isInitialMount.current) {
-          if (server?.version && versions.includes(server.version)) {
-            setVersion(server.version);
-          } else {
-            const stable = filterStableVersions(sorted, serverType);
-            if (stable.length > 0) setVersion(stable[0]);
-          }
+        // Auto-select logic
+        if (isInitialMount.current && !version) {
+          const stable = filterStableVersions(sorted, serverType);
+          if (stable.length > 0) setVersion(stable[0]);
           isInitialMount.current = false;
-        } else if (!version) {
+        } else if (!version && sorted.length > 0) {
            const stable = filterStableVersions(sorted, serverType);
            if (stable.length > 0) setVersion(stable[0]);
+           else setVersion(sorted[0]);
         }
 
       } catch (err) {
         console.error(err);
         setError(`Could not load versions: ${err.message}`);
+        setAvailableVersions([]);
       } finally {
         setLoadingVersions(false);
       }
@@ -211,7 +325,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const handleSaveClick = () => {
     const impact = checkVersionChangeImpact(serverType, version);
     if (impact.severity === 'none' && serverType === server?.type && version === server?.version) {
-      return; // No changes
+      return; 
     }
     setVersionChangeInfo(impact);
     setShowVersionWarning(true);
@@ -223,17 +337,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     setError(null);
 
     try {
-      // Determine update payload based on whether server exists and needs recreation
       const needsRecreation = server?.hetzner_id && versionChangeInfo.requiresRecreation;
-      
       const payload = needsRecreation 
         ? {
             needs_recreation: true,
             pending_type: serverType,
             pending_version: version,
             needs_file_deletion: versionChangeInfo.requiresFileDeletion || false,
-            // Only force software install if NOT deleting files (if deleting files, provision handles it anyway)
-            // AND the type is the same (reinstalling same software version)
             force_software_install: !versionChangeInfo.requiresFileDeletion && (serverType === server.type)
           }
         : {
@@ -263,10 +373,10 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       {/* 1. Software Selection Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <CpuChipIcon className="w-5 h-5 text-gray-500" /> Software Platform
+          <ChipIcon className="w-5 h-5 text-gray-500" /> Software Platform
         </h2>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {softwareOptions.map((opt) => {
             const isSelected = serverType === opt.id;
             return (
@@ -274,7 +384,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 key={opt.id}
                 onClick={() => {
                   setServerType(opt.id);
-                  setSearchQuery(''); // Reset search on type change
+                  setSearchQuery(''); 
+                  setVersion(''); // Reset version when changing type
                 }}
                 className={`relative cursor-pointer rounded-xl p-4 border-2 transition-all duration-200 flex flex-col items-center text-center gap-3 group
                   ${isSelected 
@@ -287,7 +398,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 </div>
                 <div>
                   <h3 className={`font-bold ${isSelected ? 'text-indigo-900' : 'text-gray-900'}`}>{opt.label}</h3>
-                  <p className="text-xs text-gray-500 mt-1 leading-snug">{opt.description}</p>
+                  <p className="text-xs text-gray-500 mt-1 leading-snug hidden sm:block">{opt.description}</p>
                 </div>
                 {isSelected && (
                   <div className="absolute top-2 right-2 text-indigo-600">
@@ -308,19 +419,17 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
           </h2>
           
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* Search Bar */}
             <div className="relative flex-1 sm:flex-none">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input 
                 type="text" 
-                placeholder="Search..." 
+                placeholder="Search version..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-48"
               />
             </div>
 
-            {/* Toggle */}
             <button
               onClick={() => setShowAllVersions(!showAllVersions)}
               className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
@@ -329,39 +438,38 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                   : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
               }`}
             >
-              {showAllVersions ? 'Show Stable Only' : 'Show All (Snapshots)'}
+              {showAllVersions ? 'Show All' : 'Show Stable'}
             </button>
           </div>
         </div>
 
-        {/* Versions Grid */}
         {loadingVersions ? (
-          <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-8 gap-3 animate-pulse">
-            {[...Array(16)].map((_, i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 animate-pulse">
+            {[...Array(12)].map((_, i) => (
               <div key={i} className="h-10 bg-gray-100 rounded-lg"></div>
             ))}
           </div>
         ) : displayedVersions.length > 0 ? (
-          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2 max-h-[320px] overflow-y-auto p-1 custom-scrollbar">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 max-h-[320px] overflow-y-auto p-1 custom-scrollbar">
             {displayedVersions.map((v) => {
               const isSelected = version === v;
-              const isStable = filterStableVersions([v], serverType).length > 0;
+              // Simple check for stability for coloring
+              const isStable = !v.includes('pre') && !v.includes('rc') && !v.includes('snapshot') && !v.includes('beta');
+              
               return (
                 <button
                   key={v}
                   onClick={() => setVersion(v)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all duration-150 relative overflow-hidden
+                  className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border transition-all duration-150 relative overflow-hidden truncate text-left
                     ${isSelected 
                       ? 'border-indigo-600 bg-indigo-600 text-white shadow-md' 
                       : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                     }
-                    ${!isStable && !isSelected ? 'opacity-70 bg-gray-50 text-gray-500' : ''}
+                    ${!isStable && !isSelected ? 'opacity-80 bg-gray-50 text-gray-500' : ''}
                   `}
+                  title={v}
                 >
                   {v}
-                  {!isStable && (
-                    <span className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-yellow-300' : 'bg-yellow-500'}`} title="Unstable/Snapshot" />
-                  )}
                 </button>
               );
             })}

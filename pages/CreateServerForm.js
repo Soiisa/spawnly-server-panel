@@ -1,13 +1,13 @@
 // pages/CreateServerForm.js
 
 import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabaseClient"; // Adjust path if needed
+import { supabase } from "../lib/supabaseClient"; 
 
 export default function CreateServerForm({ onClose, onCreate, credits }) {
   const [name, setName] = useState("");
   const [game, setGame] = useState("minecraft");
   const [software, setSoftware] = useState("vanilla");
-  const [ram, setRam] = useState(8); // Default to 8GB
+  const [ram, setRam] = useState(8); 
   const [loading, setLoading] = useState(false);
   const [softwareOptions, setSoftwareOptions] = useState([]);
   const [existingNames, setExistingNames] = useState(new Set());
@@ -16,19 +16,27 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
 
   // Example pricing per GB per hour
   const pricePerGB = 1;
-  const costPerHour = Number((ram * pricePerGB).toFixed(2)); // Ensure number
-  const creditsNum = Number(credits); // Ensure number
+  const costPerHour = Number((ram * pricePerGB).toFixed(2)); 
+  const creditsNum = Number(credits); 
   const canCreate = creditsNum >= costPerHour && !nameError && name.trim();
 
-  // Software options for each game
+  // Updated software options for Minecraft
   const gameSoftwareOptions = {
     minecraft: [
       { id: "vanilla", name: "Vanilla", description: "Official Minecraft server" },
       { id: "paper", name: "Paper", description: "High-performance Spigot fork" },
-      { id: "spigot", name: "Spigot", description: "Plugin-optimized server" },
-      { id: "forge", name: "Forge", description: "Modding platform" },
-      { id: "fabric", name: "Fabric", description: "Lightweight modding" },
-      { id: "bukkit", name: "Bukkit", description: "Original plugin API" },
+      { id: "purpur", name: "Purpur", description: "Paper fork with more features" },
+      { id: "folia", name: "Folia", description: "Experimental multithreaded server" },
+      { id: "spigot", name: "Spigot", description: "Standard plugin server" },
+      { id: "forge", name: "Forge", description: "Classic mod loader" },
+      { id: "neoforge", name: "NeoForge", description: "Modern mod loader" },
+      { id: "fabric", name: "Fabric", description: "Lightweight mod loader" },
+      { id: "quilt", name: "Quilt", description: "Community-driven mod loader" },
+      { id: "arclight", name: "Arclight", description: "Forge/NeoForge + Plugins" },
+      { id: "mohist", name: "Mohist", description: "Forge + Plugins" },
+      { id: "magma", name: "Magma", description: "Forge + Plugins" },
+      { id: "velocity", name: "Velocity", description: "Proxy server" },
+      { id: "waterfall", name: "Waterfall", description: "Legacy proxy server" },
     ],
     valheim: [
       { id: "vanilla", name: "Vanilla", description: "Official Valheim server" },
