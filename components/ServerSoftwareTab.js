@@ -52,117 +52,32 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   // --- Definitions ---
   const softwareOptions = [
-    { 
-      id: 'vanilla', 
-      label: 'Vanilla', 
-      description: 'The official Minecraft server software.', 
-      icon: CubeTransparentIcon, 
-      color: 'bg-green-50 text-green-700 border-green-200' 
-    },
-    { 
-      id: 'paper', 
-      label: 'Paper', 
-      description: 'High-performance fork of Spigot.', 
-      icon: DocumentTextIcon, 
-      color: 'bg-blue-50 text-blue-700 border-blue-200' 
-    },
-    { 
-      id: 'purpur', 
-      label: 'Purpur', 
-      description: 'Paper fork with more features.', 
-      icon: BeakerIcon, 
-      color: 'bg-purple-50 text-purple-700 border-purple-200' 
-    },
-    { 
-      id: 'folia', 
-      label: 'Folia', 
-      description: 'Multithreaded Paper fork (Experimental).', 
-      icon: BoltIcon, 
-      color: 'bg-rose-50 text-rose-700 border-rose-200' 
-    },
-    { 
-      id: 'spigot', 
-      label: 'Spigot', 
-      description: 'Modified server with plugin support.', 
-      icon: ArchiveBoxIcon, 
-      color: 'bg-orange-50 text-orange-700 border-orange-200' 
-    },
-    { 
-      id: 'forge', 
-      label: 'Forge', 
-      description: 'The classic modding API.', 
-      icon: WrenchScrewdriverIcon, 
-      color: 'bg-amber-50 text-amber-700 border-amber-200' 
-    },
-    { 
-      id: 'neoforge', 
-      label: 'NeoForge', 
-      description: 'Modern fork of Minecraft Forge.', 
-      icon: WrenchScrewdriverIcon, 
-      color: 'bg-orange-100 text-orange-800 border-orange-300' 
-    },
-    { 
-      id: 'fabric', 
-      label: 'Fabric', 
-      description: 'Lightweight, experimental modding.', 
-      icon: ChipIcon, 
-      color: 'bg-indigo-50 text-indigo-700 border-indigo-200' 
-    },
-    { 
-      id: 'quilt', 
-      label: 'Quilt', 
-      description: 'The community-driven mod loader.', 
-      icon: ChipIcon, 
-      color: 'bg-teal-50 text-teal-700 border-teal-200' 
-    },
-    { 
-      id: 'arclight', 
-      label: 'Arclight', 
-      description: 'Hybrid server (Forge mods + Plugins).', 
-      icon: ArchiveBoxIcon, 
-      color: 'bg-cyan-50 text-cyan-700 border-cyan-200' 
-    },
-    { 
-      id: 'mohist', 
-      label: 'Mohist', 
-      description: 'Hybrid server (Forge mods + Plugins).', 
-      icon: ArchiveBoxIcon, 
-      color: 'bg-red-50 text-red-700 border-red-200' 
-    },
-    { 
-      id: 'magma', 
-      label: 'Magma', 
-      description: 'Hybrid server (Forge mods + Plugins).', 
-      icon: ArchiveBoxIcon, 
-      color: 'bg-pink-50 text-pink-700 border-pink-200' 
-    },
-    { 
-      id: 'velocity', 
-      label: 'Velocity', 
-      description: 'Modern, high-performance proxy.', 
-      icon: GlobeAltIcon, 
-      color: 'bg-sky-50 text-sky-700 border-sky-200' 
-    },
-    { 
-      id: 'waterfall', 
-      label: 'Waterfall', 
-      description: 'Classic BungeeCord fork.', 
-      icon: GlobeAltIcon, 
-      color: 'bg-blue-100 text-blue-800 border-blue-300' 
-    },
+    { id: 'vanilla', label: 'Vanilla', icon: CubeTransparentIcon, color: 'bg-green-50 text-green-700' },
+    { id: 'paper', label: 'Paper', icon: DocumentTextIcon, color: 'bg-blue-50 text-blue-700' },
+    { id: 'purpur', label: 'Purpur', icon: BeakerIcon, color: 'bg-purple-50 text-purple-700' },
+    { id: 'folia', label: 'Folia', icon: BoltIcon, color: 'bg-rose-50 text-rose-700' },
+    { id: 'spigot', label: 'Spigot', icon: ArchiveBoxIcon, color: 'bg-orange-50 text-orange-700' },
+    { id: 'forge', label: 'Forge', icon: WrenchScrewdriverIcon, color: 'bg-amber-50 text-amber-700' },
+    { id: 'neoforge', label: 'NeoForge', icon: WrenchScrewdriverIcon, color: 'bg-orange-100 text-orange-800' },
+    { id: 'fabric', label: 'Fabric', icon: ChipIcon, color: 'bg-indigo-50 text-indigo-700' },
+    { id: 'quilt', label: 'Quilt', icon: ChipIcon, color: 'bg-teal-50 text-teal-700' },
+    { id: 'arclight', label: 'Arclight', icon: ArchiveBoxIcon, color: 'bg-cyan-50 text-cyan-700' },
+    { id: 'mohist', label: 'Mohist', icon: ArchiveBoxIcon, color: 'bg-red-50 text-red-700' },
+    { id: 'magma', label: 'Magma', icon: ArchiveBoxIcon, color: 'bg-pink-50 text-pink-700' },
+    { id: 'velocity', label: 'Velocity', icon: GlobeAltIcon, color: 'bg-sky-50 text-sky-700' },
+    { id: 'waterfall', label: 'Waterfall', icon: GlobeAltIcon, color: 'bg-blue-100 text-blue-800' },
   ];
 
   // --- Helpers ---
 
   const fetchWithLocalProxy = async (url, isXml = false) => {
-    // Use the local API route to avoid CORS and timeouts
+    // Use our local API route instead of public corsproxy
     const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
     const response = await fetch(proxyUrl);
     
     if (!response.ok) {
-      // Try to parse error text
-      const errorText = await response.text().catch(() => response.statusText);
-      throw new Error(`Failed to fetch versions: ${response.status} ${errorText}`);
+      const errText = await response.text().catch(() => '');
+      throw new Error(`Failed to fetch versions: ${response.status} ${errText}`);
     }
     
     const text = await response.text();
@@ -186,7 +101,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const filterStableVersions = (versions, type) => {
     const stableRegex = /^\d+\.\d+(\.\d+)?$/;
     
-    // For loaders with specific builds, check keywords
+    // For loaders with specific builds (e.g. 1.20.1-47.1.0), assume stable unless explicitly beta/rc
     if (['forge', 'neoforge', 'arclight', 'mohist', 'magma'].includes(type)) {
       return versions.filter(v => 
         !v.toLowerCase().includes('beta') && 
@@ -242,7 +157,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         switch (serverType) {
           case 'vanilla':
           case 'spigot': 
-            // Vanilla/Spigot use Mojang manifest
+            // Spigot versions mirror Vanilla, so we use the Vanilla manifest to avoid 404s
             const vRes = await fetchWithLocalProxy('https://launchermeta.mojang.com/mc/game/version_manifest.json');
             versions = vRes.versions.map(v => v.id);
             break;
@@ -267,8 +182,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             versions = (await purRes.json()).versions;
             break;
           case 'forge':
-            const forgeData = await fetchWithLocalProxy('https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml', true);
-            versions = forgeData;
+            // CORRECTED URL: maven.minecraftforge.net
+            const forgeData = await fetchWithLocalProxy('https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml', true);
+            versions = forgeData; 
             break;
           case 'neoforge':
             const neoData = await fetchWithLocalProxy('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', true);
@@ -283,14 +199,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             versions = (await quiltRes.json()).map(v => v.version);
             break;
           case 'arclight':
-            // Arclight requires MC version first, but for the list we can pull from a broader source
-            // Using Vanilla 1.16+ as supported range for now
+            // Fallback for Arclight list (using Vanilla versions 1.16+ as supported range)
             const arcRes = await fetchWithLocalProxy('https://launchermeta.mojang.com/mc/game/version_manifest.json');
             versions = arcRes.versions.filter(v => parseFloat(v.id) >= 1.16).map(v => v.id);
             break;
           case 'mohist':
             const mohistRes = await fetchWithLocalProxy('https://mohistmc.com/api/v2/projects/mohist');
-            versions = mohistRes.versions || [];
+            versions = (mohistRes.versions || []);
             break;
           case 'magma':
             const magmaRes = await fetchWithLocalProxy('https://api.magmafoundation.org/api/v2/allVersions');
@@ -413,7 +328,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 </div>
                 <div>
                   <h3 className={`font-bold ${isSelected ? 'text-indigo-900' : 'text-gray-900'}`}>{opt.label}</h3>
-                  <p className="text-xs text-gray-500 mt-1 leading-snug hidden sm:block">{opt.description}</p>
+                  <p className="text-xs text-gray-500 mt-1 leading-snug hidden sm:block">{opt.description || opt.label}</p>
                 </div>
                 {isSelected && (
                   <div className="absolute top-2 right-2 text-indigo-600">
@@ -468,7 +383,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 max-h-[320px] overflow-y-auto p-1 custom-scrollbar">
             {displayedVersions.map((v) => {
               const isSelected = version === v;
-              // Simple check for stability for coloring
               const isStable = !v.includes('pre') && !v.includes('rc') && !v.includes('snapshot') && !v.includes('beta');
               
               return (

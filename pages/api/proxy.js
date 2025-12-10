@@ -7,7 +7,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(decodeURIComponent(url));
+    const targetUrl = decodeURIComponent(url);
+    const response = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Spawnly-Panel/1.0' // Some APIs require a UA
+      }
+    });
     
     if (!response.ok) {
       return res.status(response.status).json({ error: `Upstream error: ${response.statusText}` });
