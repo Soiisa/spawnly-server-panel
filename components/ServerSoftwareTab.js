@@ -16,7 +16,7 @@ import {
   GlobeAltIcon
 } from '@heroicons/react/24/outline';
 
-// XML Parser for Maven metadata (NeoForge)
+// XML Parser for Maven metadata (Forge/NeoForge)
 const parseMavenXml = (text) => {
   try {
     const parser = new DOMParser();
@@ -84,23 +84,35 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   };
 
   const sortVersions = (versions) => {
+    // Helper to split version into comparable parts (numbers and strings)
+    const parse = (v) => v.split(/[-.]/).map(x => (isNaN(Number(x)) ? x : Number(x)));
+    
     return versions.sort((a, b) => {
-      // Normalize version strings
-      const partsA = a.replace(/[^0-9.]/g, '').split('.').map(Number);
-      const partsB = b.replace(/[^0-9.]/g, '').split('.').map(Number);
-      for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-        const numA = partsA[i] || 0;
-        const numB = partsB[i] || 0;
-        if (numA !== numB) return numB - numA;
+      const pa = parse(a);
+      const pb = parse(b);
+      
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        // If one is shorter, the longer one is usually "newer" (e.g. 1.2 vs 1.2.1)
+        if (pa[i] === undefined) return 1; 
+        if (pb[i] === undefined) return -1;
+        
+        if (pa[i] !== pb[i]) {
+          // If both are numbers, compare numerically
+          if (typeof pa[i] === 'number' && typeof pb[i] === 'number') {
+            return pb[i] - pa[i]; // Descending order
+          }
+          // If strings or mixed, compare lexicographically
+          return String(pb[i]).localeCompare(String(pa[i])); 
+        }
       }
-      return b.localeCompare(a);
+      return 0;
     });
   };
 
   const filterStableVersions = (versions, type) => {
     const stableRegex = /^\d+\.\d+(\.\d+)?$/;
     
-    // For loaders with specific builds, check keywords
+    // For loaders with specific builds (e.g. 1.20.1-47.1.0), assume stable unless explicitly beta/rc
     if (['forge', 'neoforge', 'arclight', 'mohist', 'magma'].includes(type)) {
       return versions.filter(v => 
         !v.toLowerCase().includes('beta') && 
@@ -179,7 +191,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             versions = (await purRes.json()).versions;
             break;
           case 'forge':
-            // Fetch PROMOS (Recommended/Latest only)
+            // Fetch PROMOS (Recommended/Latest only) to get specific versions like 1.20.1-47.2.20
             const promoData = await fetchWithLocalProxy('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
             const promoVersions = new Set();
             if (promoData && promoData.promos) {
