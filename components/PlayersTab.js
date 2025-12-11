@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import md5 from 'md5';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../lib/supabaseClient'; // Imported for DB sync
 import {
   UserGroupIcon,
   ShieldCheckIcon,
@@ -214,6 +215,19 @@ export default function PlayersTab({ server, token }) {
           await fetchAllData();
         }
       }
+
+      // *** NEW: SYNC WHITELIST TO SUPABASE ***
+      if (activeSubTab === 'whitelist') {
+        const { error: dbError } = await supabase
+          .from('server_whitelist')
+          .insert({
+            server_id: server.id,
+            username: target,
+            uuid: uuid
+          });
+        if (dbError) console.error('Failed to sync whitelist to DB:', dbError);
+      }
+
       setIsAdding(false);
       setNewPlayerName('');
       setNewPlayerIp('');
@@ -250,6 +264,18 @@ export default function PlayersTab({ server, token }) {
           await fetchAllData();
         }
       }
+
+      // *** NEW: SYNC REMOVAL TO SUPABASE ***
+      if (activeSubTab === 'whitelist') {
+        const { error: dbError } = await supabase
+          .from('server_whitelist')
+          .delete()
+          .eq('server_id', server.id)
+          .eq('username', identifier);
+        
+        if (dbError) console.error('Failed to remove from DB whitelist:', dbError);
+      }
+
     } catch (e) {
       showError(e.message);
     } finally {

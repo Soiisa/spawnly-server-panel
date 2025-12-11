@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3002",
     "build": "next build",
-    "start": "next start -p 3001"
+    "start": "next start -p 3001",
+    "start:sleeper": "node scripts/sleeper.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.879.0",
@@ -35,6 +36,7 @@
     "socket.io-client": "^4.8.1",
     "ssh2": "^1.16.0",
     "uuid": "^13.0.0",
+    "varint": "^6.0.0",
     "ws": "^8.18.3",
     "xmldom": "^0.6.0",
     "xterm": "^5.3.0",

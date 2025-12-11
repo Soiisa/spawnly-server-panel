@@ -1,7 +1,7 @@
 // pages/api/servers/action.js
 import { createClient } from '@supabase/supabase-js';
 import { S3Client, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import { v4 as uuidv4 } from 'uuid'; // ← Reliable UUID generator
+import { v4 as uuidv4 } from 'uuid';
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -14,6 +14,9 @@ const S3_REGION = process.env.S3_REGION;
 const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
 const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 const DOMAIN_SUFFIX = '.spawnly.net';
+
+// The IP of the Sleeper Proxy Server created in Step 2
+const SLEEPER_PROXY_IP = process.env.SLEEPER_PROXY_IP || '123.123.123.123'; 
 
 const s3Client = new S3Client({
   endpoint: S3_ENDPOINT,
@@ -317,52 +320,31 @@ export default async function handler(req, res) {
 
       if (server.subdomain) {
         try {
-          console.log(`[API:action] Deleting Cloudflare DNS records for subdomain: ${server.subdomain}`);
-          const dnsDeleted = await deleteCloudflareRecords(server.subdomain);
-          if (!dnsDeleted) {
-            console.warn(`[API:action] DNS record deletion for ${server.subdomain} was not fully successful`);
-          } else {
-            console.log(`[API:action] Successfully deleted DNS records for ${server.subdomain}`);
+          console.log(`[API:action] Cleaning up DNS records for subdomain: ${server.subdomain}`);
+          
+          // 1. Always delete the specific IP records (Hetzner IP) first
+          await deleteCloudflareRecords(server.subdomain);
+
+          // 2. IF STOPPING: Point DNS to Sleeper Proxy
+          if (action === 'stop') {
+            console.log(`[API:action] Pointing ${server.subdomain} to Sleeper Proxy (${SLEEPER_PROXY_IP})`);
+            const dnsUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
+            
+            await fetch(dnsUrl, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'A',
+                name: `${server.subdomain}${DOMAIN_SUFFIX}`,
+                content: SLEEPER_PROXY_IP,
+                ttl: 60, // Short TTL for fast propagation when starting
+                proxied: false 
+              })
+            });
           }
         } catch (dnsErr) {
-          console.error('[API:action] Failed to delete Cloudflare DNS records:', dnsErr.message);
-          return res.status(502).json({ error: 'Failed to delete DNS records', detail: dnsErr.message });
-        }
-      } else {
-        console.warn('[API:action] No subdomain found in Supabase for server, checking Cloudflare for residual records');
-        if (server.ipv4) {
-          console.log(`[API:action] Searching Cloudflare for A records with IP: ${server.ipv4}`);
-          const url = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?type=A&content=${server.ipv4}`;
-          const response = await fetch(url, {
-            headers: {
-              Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (response.ok) {
-            const { result } = await response.json();
-            console.log(`[API:action] Found ${result.length} A records with IP ${server.ipv4}`);
-            for (const record of result) {
-              const deleteUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record.id}`;
-              const deleteResponse = await fetch(deleteUrl, {
-                method: 'DELETE',
-                headers: {
-                  Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
-                  'Content-Type': 'application/json',
-                },
-              });
-              if (deleteResponse.ok) {
-                console.log(`[API:action] Successfully deleted residual A record ${record.id} for ${record.name}`);
-              } else {
-                const errorText = await deleteResponse.text().catch(() => 'no-body');
-                console.warn(`[API:action] Failed to delete residual A record ${record.id}: ${deleteResponse.status} ${errorText}`);
-              }
-            }
-          } else {
-            const errorText = await response.text().catch(() => 'no-body');
-            console.warn(`[API:action] Failed to search for residual A records: ${response.status} ${errorText}`);
-          }
+          console.error('[API:action] Failed to update Cloudflare DNS records:', dnsErr.message);
+          // Don't fail the whole request, but log it
         }
       }
 

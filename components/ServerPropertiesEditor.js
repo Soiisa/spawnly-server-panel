@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../lib/supabaseClient'; // Imported for DB sync
 import { 
   MagnifyingGlassIcon, 
   CommandLineIcon, 
@@ -239,6 +240,15 @@ export default function ServerPropertiesEditor({ server }) {
       
       if (!res.ok) throw new Error('Failed to save properties');
       
+      // *** NEW: Update whitelist_enabled status in Supabase ***
+      const propsMap = parseProperties(propertiesText);
+      const isWhitelistOn = toBool(propsMap['white-list']);
+      
+      await supabase
+        .from('servers')
+        .update({ whitelist_enabled: isWhitelistOn })
+        .eq('id', server.id);
+
       setOriginalText(propertiesText);
       setMessage('Properties saved successfully! Restart server to apply.');
       setTimeout(() => setMessage(null), 5000);
