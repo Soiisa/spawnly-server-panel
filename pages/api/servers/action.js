@@ -16,7 +16,7 @@ const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 const DOMAIN_SUFFIX = '.spawnly.net';
 
 // The IP of the Sleeper Proxy Server created in Step 2
-const SLEEPER_PROXY_IP = process.env.SLEEPER_PROXY_IP || '123.123.123.123'; 
+const SLEEPER_PROXY_IP = process.env.SLEEPER_PROXY_IP || '91.99.130.49'; 
 
 const s3Client = new S3Client({
   endpoint: S3_ENDPOINT,
