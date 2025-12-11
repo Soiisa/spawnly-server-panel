@@ -51,21 +51,22 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const isInitialMount = useRef(true);
 
   // --- Definitions ---
+  // Added 'badge' field to distinguish software types
   const softwareOptions = [
-    { id: 'vanilla', label: 'Vanilla', icon: CubeTransparentIcon, color: 'bg-green-50 text-green-700' },
-    { id: 'paper', label: 'Paper', icon: DocumentTextIcon, color: 'bg-blue-50 text-blue-700' },
-    { id: 'purpur', label: 'Purpur', icon: BeakerIcon, color: 'bg-purple-50 text-purple-700' },
-    { id: 'folia', label: 'Folia', icon: BoltIcon, color: 'bg-rose-50 text-rose-700' },
-    { id: 'spigot', label: 'Spigot', icon: ArchiveBoxIcon, color: 'bg-orange-50 text-orange-700' },
-    { id: 'forge', label: 'Forge', icon: WrenchScrewdriverIcon, color: 'bg-amber-50 text-amber-700' },
-    { id: 'neoforge', label: 'NeoForge', icon: WrenchScrewdriverIcon, color: 'bg-orange-100 text-orange-800' },
-    { id: 'fabric', label: 'Fabric', icon: ChipIcon, color: 'bg-indigo-50 text-indigo-700' },
-    { id: 'quilt', label: 'Quilt', icon: ChipIcon, color: 'bg-teal-50 text-teal-700' },
-    { id: 'arclight', label: 'Arclight', icon: ArchiveBoxIcon, color: 'bg-cyan-50 text-cyan-700' },
-    { id: 'mohist', label: 'Mohist', icon: ArchiveBoxIcon, color: 'bg-red-50 text-red-700' },
-    { id: 'magma', label: 'Magma', icon: ArchiveBoxIcon, color: 'bg-pink-50 text-pink-700' },
-    { id: 'velocity', label: 'Velocity', icon: GlobeAltIcon, color: 'bg-sky-50 text-sky-700' },
-    { id: 'waterfall', label: 'Waterfall', icon: GlobeAltIcon, color: 'bg-blue-100 text-blue-800' },
+    { id: 'vanilla', label: 'Vanilla', icon: CubeTransparentIcon, color: 'bg-green-50 text-green-700', badge: 'Vanilla' },
+    { id: 'paper', label: 'Paper', icon: DocumentTextIcon, color: 'bg-blue-50 text-blue-700', badge: 'Plugins' },
+    { id: 'purpur', label: 'Purpur', icon: BeakerIcon, color: 'bg-purple-50 text-purple-700', badge: 'Plugins' },
+    { id: 'folia', label: 'Folia', icon: BoltIcon, color: 'bg-rose-50 text-rose-700', badge: 'Plugins' },
+    { id: 'spigot', label: 'Spigot', icon: ArchiveBoxIcon, color: 'bg-orange-50 text-orange-700', badge: 'Plugins' },
+    { id: 'forge', label: 'Forge', icon: WrenchScrewdriverIcon, color: 'bg-amber-50 text-amber-700', badge: 'Mods' },
+    { id: 'neoforge', label: 'NeoForge', icon: WrenchScrewdriverIcon, color: 'bg-orange-100 text-orange-800', badge: 'Mods' },
+    { id: 'fabric', label: 'Fabric', icon: ChipIcon, color: 'bg-indigo-50 text-indigo-700', badge: 'Mods' },
+    { id: 'quilt', label: 'Quilt', icon: ChipIcon, color: 'bg-teal-50 text-teal-700', badge: 'Mods' },
+    { id: 'arclight', label: 'Arclight', icon: ArchiveBoxIcon, color: 'bg-cyan-50 text-cyan-700', badge: 'Hybrid' },
+    { id: 'mohist', label: 'Mohist', icon: ArchiveBoxIcon, color: 'bg-red-50 text-red-700', badge: 'Hybrid' },
+    { id: 'magma', label: 'Magma', icon: ArchiveBoxIcon, color: 'bg-pink-50 text-pink-700', badge: 'Hybrid' },
+    { id: 'velocity', label: 'Velocity', icon: GlobeAltIcon, color: 'bg-sky-50 text-sky-700', badge: 'Proxy' },
+    { id: 'waterfall', label: 'Waterfall', icon: GlobeAltIcon, color: 'bg-blue-100 text-blue-800', badge: 'Proxy' },
   ];
 
   // --- Helpers ---
@@ -84,7 +85,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   };
 
   const sortVersions = (versions) => {
-    // Helper to split version into comparable parts (numbers and strings)
     const parse = (v) => v.split(/[-.]/).map(x => (isNaN(Number(x)) ? x : Number(x)));
     
     return versions.sort((a, b) => {
@@ -92,16 +92,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       const pb = parse(b);
       
       for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-        // If one is shorter, the longer one is usually "newer" (e.g. 1.2 vs 1.2.1)
         if (pa[i] === undefined) return 1; 
         if (pb[i] === undefined) return -1;
         
         if (pa[i] !== pb[i]) {
-          // If both are numbers, compare numerically
           if (typeof pa[i] === 'number' && typeof pb[i] === 'number') {
-            return pb[i] - pa[i]; // Descending order
+            return pb[i] - pa[i];
           }
-          // If strings or mixed, compare lexicographically
           return String(pb[i]).localeCompare(String(pa[i])); 
         }
       }
@@ -112,7 +109,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const filterStableVersions = (versions, type) => {
     const stableRegex = /^\d+\.\d+(\.\d+)?$/;
     
-    // For loaders with specific builds (e.g. 1.20.1-47.1.0), assume stable unless explicitly beta/rc
     if (['forge', 'neoforge', 'arclight', 'mohist', 'magma'].includes(type)) {
       return versions.filter(v => 
         !v.toLowerCase().includes('beta') && 
@@ -191,16 +187,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             versions = (await purRes.json()).versions;
             break;
           case 'forge':
-            // Fetch PROMOS (Recommended/Latest only) to get specific versions like 1.20.1-47.2.20
             const promoData = await fetchWithLocalProxy('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
             const promoVersions = new Set();
             if (promoData && promoData.promos) {
               Object.entries(promoData.promos).forEach(([key, build]) => {
-                // Key format: "1.20.1-latest" or "1.20.1-recommended"
                 const match = key.match(/^(.*)-(latest|recommended)$/);
                 if (match) {
                   const mcVer = match[1];
-                  // Construct full version: 1.20.1-47.2.0
                   promoVersions.add(`${mcVer}-${build}`);
                 }
               });
@@ -236,7 +229,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         const sorted = sortVersions(versions);
         setAvailableVersions(sorted);
 
-        // Auto-select logic
         if (isInitialMount.current && !version) {
           const stable = filterStableVersions(sorted, serverType);
           if (stable.length > 0) setVersion(stable[0]);
@@ -318,6 +310,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   return (
     <div className="space-y-6">
+      
+      {/* 1. Software Selection Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <ChipIcon className="w-5 h-5 text-gray-500" /> Software Platform
@@ -326,6 +320,16 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {softwareOptions.map((opt) => {
             const isSelected = serverType === opt.id;
+            
+            // Helper for badge styling
+            const badgeStyle = 
+              opt.badge === 'Vanilla' ? 'bg-emerald-100 text-emerald-800' :
+              opt.badge === 'Plugins' ? 'bg-blue-100 text-blue-800' :
+              opt.badge === 'Mods'    ? 'bg-amber-100 text-amber-800' :
+              opt.badge === 'Hybrid'  ? 'bg-purple-100 text-purple-800' :
+              opt.badge === 'Proxy'   ? 'bg-slate-100 text-slate-800' :
+              'bg-gray-100 text-gray-800';
+
             return (
               <div
                 key={opt.id}
@@ -334,22 +338,24 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                   setSearchQuery(''); 
                   setVersion('');
                 }}
-                className={`relative cursor-pointer rounded-xl p-4 border-2 transition-all duration-200 flex flex-col items-center text-center gap-3 group
+                className={`relative cursor-pointer rounded-xl p-3 border-2 transition-all duration-200 flex flex-col items-center text-center gap-2 group
                   ${isSelected 
                     ? `border-indigo-600 bg-indigo-50 shadow-md ring-1 ring-indigo-600` 
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                   }`}
               >
-                <div className={`p-3 rounded-full ${isSelected ? 'bg-white text-indigo-600' : 'bg-gray-100 text-gray-500 group-hover:bg-white'}`}>
-                  <opt.icon className="w-6 h-6" />
+                <div className={`p-2 rounded-full ${isSelected ? 'bg-white text-indigo-600' : 'bg-gray-100 text-gray-500 group-hover:bg-white'}`}>
+                  <opt.icon className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className={`font-bold ${isSelected ? 'text-indigo-900' : 'text-gray-900'}`}>{opt.label}</h3>
-                  <p className="text-xs text-gray-500 mt-1 leading-snug hidden sm:block">{opt.description || opt.label}</p>
+                  <h3 className={`font-bold text-sm ${isSelected ? 'text-indigo-900' : 'text-gray-900'}`}>{opt.label}</h3>
+                  <span className={`inline-block mt-1 text-[10px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-full ${badgeStyle}`}>
+                    {opt.badge}
+                  </span>
                 </div>
                 {isSelected && (
                   <div className="absolute top-2 right-2 text-indigo-600">
-                    <CheckCircleIcon className="w-5 h-5" />
+                    <CheckCircleIcon className="w-4 h-4" />
                   </div>
                 )}
               </div>
@@ -358,6 +364,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         </div>
       </div>
 
+      {/* 2. Version Selection Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -426,6 +433,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         )}
       </div>
 
+      {/* 3. Action Bar */}
       <div className="flex items-center justify-end gap-4 pt-2">
         <AnimatePresence>
           {success && (
@@ -455,6 +463,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         </button>
       </div>
 
+      {/* Impact Warning Modal */}
       <AnimatePresence>
         {showVersionWarning && versionChangeInfo && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">

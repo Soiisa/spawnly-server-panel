@@ -1,4 +1,3 @@
-// pages/server/[id].js
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
@@ -15,7 +14,8 @@ import {
   ClockIcon,
   ServerIcon,
   SignalIcon,
-  UserGroupIcon 
+  UserGroupIcon,
+  PuzzlePieceIcon
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -336,20 +336,31 @@ export default function ServerDetailPage({ initialServer }) {
   const isBusy = !isRunning && !isStopped;
 
   // Tabs Configuration
-  const moddedTypes = ['forge', 'fabric', 'quilt', 'neoforge'];
-  const pluginTypes = ['bukkit', 'spigot', 'paper', 'purpur'];
   const sType = (server.type || '').toLowerCase();
-  const showMods = moddedTypes.includes(sType) || pluginTypes.includes(sType);
-  const modLabel = moddedTypes.includes(sType) ? 'Mods' : 'Plugins';
+  
+  // Updated list of types to include ALL supported software
+  const moddedTypes = ['forge', 'neoforge', 'fabric', 'quilt'];
+  const pluginTypes = ['paper', 'spigot', 'purpur', 'folia', 'velocity', 'waterfall', 'bukkit'];
+  const hybridTypes = ['arclight', 'mohist', 'magma'];
+  
+  const isModded = moddedTypes.includes(sType);
+  const isPlugin = pluginTypes.includes(sType);
+  const isHybrid = hybridTypes.includes(sType);
+  
+  const showMods = isModded || isPlugin || isHybrid;
+  
+  let modLabel = 'Mods';
+  if (isPlugin) modLabel = 'Plugins';
+  if (isHybrid) modLabel = 'Mods/Plugins';
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: SignalIcon },
     { id: 'software', label: 'Software', icon: CpuChipIcon },
-    ...(showMods ? [{ id: 'mods', label: modLabel, icon: ServerIcon }] : []),
+    ...(showMods ? [{ id: 'mods', label: modLabel, icon: PuzzlePieceIcon }] : []),
     { id: 'files', label: 'Files', icon: ClipboardDocumentIcon },
     { id: 'console', label: 'Console', icon: ClockIcon },
     { id: 'properties', label: 'Properties', icon: ServerIcon },
-    { id: 'players', label: 'Players', icon: ServerIcon },
+    { id: 'players', label: 'Players', icon: UserGroupIcon },
     { id: 'world', label: 'World', icon: ServerIcon },
   ];
 
