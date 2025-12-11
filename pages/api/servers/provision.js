@@ -14,6 +14,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-key';
 const APP_BASE_URL = process.env.NEXTAUTH_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+const DOMAIN_SUFFIX = '.spawnly.net';
 
 const sanitizeYaml = (str) => str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, '');
 
@@ -53,19 +54,6 @@ const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
 };
 
 // --- Download URL Generators ---
-
-// Helper to use the local proxy for server-side fetches if needed
-const fetchWithLocalProxy = async (url) => {
-  // We use the local API route to avoid CORS issues or IP blocks from upstream
-  const res = await fetch(`${APP_BASE_URL}/api/proxy?url=${encodeURIComponent(url)}`);
-  if (!res.ok) {
-     // If local proxy fails, try direct fetch as fallback (server-to-server)
-     const directRes = await fetch(url, { headers: { 'User-Agent': 'Spawnly/1.0' } });
-     if (!directRes.ok) throw new Error(`Fetch failed: ${directRes.status}`);
-     return directRes;
-  }
-  return res;
-};
 
 const getVanillaDownloadUrl = async (version) => {
   const manifestRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
@@ -111,12 +99,10 @@ const getWaterfallDownloadUrl = async (version) => {
 };
 
 const getForgeDownloadUrl = async (version) => {
-  // Input: "1.20.1-47.2.20"
   return `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}/forge-${version}-installer.jar`;
 };
 
 const getNeoForgeDownloadUrl = async (version) => {
-  // Input: "21.1.65" or "1.20.1-47.1.84"
   return `https://maven.neoforged.net/releases/net/neoforged/neoforge/${version}/neoforge-${version}-installer.jar`;
 };
 
@@ -139,7 +125,6 @@ const getQuiltDownloadUrl = async (version) => {
 };
 
 const getMohistDownloadUrl = async (version) => {
-  // Direct link construction
   return `https://mohistmc.com/api/v2/projects/mohist/${version}/builds/latest/download`;
 };
 
@@ -148,24 +133,18 @@ const getMagmaDownloadUrl = async (version) => {
 };
 
 const getArclightDownloadUrl = async (version) => {
-  // Use GitHub API to find the release
   const headers = {};
   if (process.env.GITHUB_TOKEN) headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
   const releasesRes = await fetch('https://api.github.com/repos/IzzelAliz/Arclight/releases', { headers });
   const releases = await releasesRes.json();
-  
-  // Find a release where tag_name starts with the version
   const release = releases.find(r => r.tag_name.startsWith(version));
   if (!release) throw new Error(`No Arclight release found for ${version}`);
-  
   const asset = release.assets.find(a => a.name.endsWith('.jar'));
   if (!asset) throw new Error('No JAR found in Arclight release');
-  
   return asset.browser_download_url;
 };
 
 const getSpigotDownloadUrl = async (version) => {
-  // Uses getbukkit.org backend. This usually works server-side.
   return `https://cdn.getbukkit.org/spigot/spigot-${version}.jar`;
 };
 
@@ -209,28 +188,42 @@ const generateRconPassword = () => {
 
 // --- DNS & S3 Helpers ---
 
-const checkSubdomainAvailable = async (subdomain) => {
-  const checks = [
-    { type: 'A', name: `${subdomain}.spawnly.net` },
-    { type: 'SRV', name: `_minecraft._tcp.${subdomain}.spawnly.net` },
+// Replaces checkSubdomainAvailable with AGGRESSIVE cleanup
+const deleteCloudflareRecords = async (subdomain) => {
+  console.log(`[DNS] Cleaning records for subdomain: ${subdomain}`);
+  
+  let subdomainPrefix = subdomain;
+  if (subdomain.endsWith(DOMAIN_SUFFIX)) {
+    subdomainPrefix = subdomain.replace(DOMAIN_SUFFIX, '');
+  }
+
+  // Sanity check
+  if (!subdomainPrefix || !subdomainPrefix.match(/^[a-zA-Z0-9-]+$/)) return;
+
+  const recordTypes = [
+    { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}` },
+    { type: 'A', name: `${subdomainPrefix}-api${DOMAIN_SUFFIX}` },
+    { type: 'SRV', name: `_minecraft._tcp.${subdomainPrefix}${DOMAIN_SUFFIX}` },
   ];
 
-  for (const check of checks) {
-    const url = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?type=${check.type}&name=${check.name}`;
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'no-body');
-      throw new Error(`Cloudflare check for ${check.type} failed: ${response.status} ${errorText}`);
+  for (const recordType of recordTypes) {
+    try {
+        const url = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?type=${recordType.type}&name=${encodeURIComponent(recordType.name)}`;
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
+        });
+        const { result } = await response.json();
+        for (const record of result) {
+          await fetch(`${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record.id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
+          });
+          console.log(`[DNS] Deleted ${recordType.type} record for ${recordType.name}`);
+        }
+    } catch (err) {
+        console.warn(`[DNS] Failed to clean record ${recordType.name}: ${err.message}`);
     }
-    const { result } = await response.json();
-    if (result.length > 0) return false;
   }
-  return true;
 };
 
 const createARecord = async (subdomain, serverIp) => {
@@ -238,9 +231,9 @@ const createARecord = async (subdomain, serverIp) => {
   const records = [
     {
       type: 'A',
-      name: subdomain,
+      name: subdomain, 
       content: serverIp,
-      ttl: 1,
+      ttl: 60, 
       proxied: false
     }
   ];
@@ -253,10 +246,10 @@ const createARecord = async (subdomain, serverIp) => {
           'Content-Type': 'application/json'
         }
       });
-      console.log(`Created A record for ${data.name}.spawnly.net:`, response.data);
+      console.log(`Created A record for ${data.name}.spawnly.net:`, response.data.result?.id);
       recordIds.push(response.data.result.id);
     } catch (error) {
-      throw new Error(`Failed to create A record: ${error.message}`);
+      console.error(`Failed to create A record:`, error.response?.data || error.message);
     }
   }
   return recordIds;
@@ -275,7 +268,7 @@ const createSRVRecord = async (subdomain, serverIp) => {
       port: 25565,
       target: `${subdomain}.spawnly.net`
     },
-    ttl: 1
+    ttl: 60
   };
   
   try {
@@ -287,8 +280,8 @@ const createSRVRecord = async (subdomain, serverIp) => {
     });
     return response.data.result.id;
   } catch (error) {
-    const errorDetails = error.response?.data?.errors || error.message;
-    throw new Error(`Failed to create SRV record: ${JSON.stringify(errorDetails)}`);
+    console.error(`Failed to create SRV record:`, error.response?.data || error.message);
+    return null;
   }
 };
 
@@ -337,12 +330,8 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const escapedSupabaseKey = escapeForSingleQuotes(process.env.SUPABASE_SERVICE_ROLE_KEY);
   const escapedVersion = escapeForSingleQuotes(version);
 
-  // Installer/Software Flags
   const isForge = software === 'forge';
   const isNeoForge = software === 'neoforge';
-  const isFabric = software === 'fabric';
-  const isQuilt = software === 'quilt';
-  const isProxy = software === 'velocity' || software === 'waterfall';
   
   let isModernForge = false;
   if (isForge) {
@@ -351,7 +340,6 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
     if (parts.length >= 2 && parseInt(parts[1]) >= 17) isModernForge = true;
   }
 
-  // Determine Java package based on version
   let javaPackage = 'openjdk-21-jre-headless'; 
   if (version.startsWith('1.8') || version.startsWith('1.12')) javaPackage = 'openjdk-8-jre-headless';
   else if (version.startsWith('1.16')) javaPackage = 'openjdk-11-jre-headless';
@@ -363,7 +351,6 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const endpointCliOption = s3Config.S3_ENDPOINT ? `--endpoint-url '${s3Config.S3_ENDPOINT}'` : '';
 
   const userData = `#cloud-config
-# Generated by Spawnly at ${timestamp}
 users:
   - name: minecraft
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -820,7 +807,6 @@ runcmd:
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3003; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3004; done
   - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3005; done
-  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3006; done
   - ufw allow 22
   - ufw --force enable
   - echo "[FINAL DEBUG] Cloud-init finished at $(date)"
@@ -838,19 +824,34 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const needsFileDeletion = serverRow.needs_file_deletion;
     const subdomain = serverRow.subdomain.toLowerCase() || '';
 
-    let downloadUrl;
+    // --- 1. ZOMBIE CLEANUP (New Logic) ---
+    // Check if a server with this name exists and delete it
     try {
-      console.log('Fetching download URL for', software, version);
-      downloadUrl = await getSoftwareDownloadUrl(software, version);
-      console.log('Download URL resolved:', downloadUrl);
-    } catch (e) {
-      console.error('Failed to resolve download URL:', e.message, e.stack);
-      return res.status(400).json({ error: 'Failed to resolve download URL', detail: e.message, stack: e.stack });
+        console.log(`[Provision] Checking for existing servers with name: ${serverRow.name}`);
+        const existingRes = await fetch(`${HETZNER_API_BASE}/servers?name=${serverRow.name}`, {
+            headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
+        });
+        
+        if (existingRes.ok) {
+            const existingJson = await existingRes.json();
+            if (existingJson.servers && existingJson.servers.length > 0) {
+                console.log(`[Provision] Found ${existingJson.servers.length} existing server(s). Cleaning up...`);
+                for (const s of existingJson.servers) {
+                    console.log(`[Provision] Deleting zombie server: ${s.id} (${s.name})`);
+                    await fetch(`${HETZNER_API_BASE}/servers/${s.id}`, {
+                        method: 'DELETE',
+                        headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
+                    });
+                }
+                // Wait briefly for deletion to propagate
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        }
+    } catch (cleanupErr) {
+        console.warn(`[Provision] Zombie cleanup check failed, attempting creation anyway: ${cleanupErr.message}`);
     }
 
-    const rconPassword = serverRow.rcon_password || generateRconPassword();
-    console.log('Using RCON password (length):', rconPassword.length);
-
+    // --- 2. S3 Cleanup (Existing Logic) ---
     const s3Config = {
       S3_BUCKET: process.env.S3_BUCKET,
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
@@ -873,6 +874,20 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       }
     }
 
+    // --- 3. Get Download URL ---
+    let downloadUrl;
+    try {
+      console.log('Fetching download URL for', software, version);
+      downloadUrl = await getSoftwareDownloadUrl(software, version);
+      console.log('Download URL resolved:', downloadUrl);
+    } catch (e) {
+      console.error('Failed to resolve download URL:', e.message, e.stack);
+      return res.status(400).json({ error: 'Failed to resolve download URL', detail: e.message, stack: e.stack });
+    }
+
+    const rconPassword = serverRow.rcon_password || generateRconPassword();
+    console.log('Using RCON password (length):', rconPassword.length);
+
     const userData = buildCloudInitForMinecraft(
       downloadUrl, 
       serverRow.ram || 2, 
@@ -888,6 +903,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const sanitizedUserData = sanitizeYaml(userData);
     console.log('Sanitized user_data length:', sanitizedUserData.length, 'preview:', sanitizedUserData.slice(0, 400).replace(/\n/g, '\\n'));
 
+    // --- 4. SSH Key Resolution ---
     let sshKeysToUse = Array.isArray(ssh_keys) && ssh_keys.length > 0 ? ssh_keys : [];
     if (sshKeysToUse.length === 0 && DEFAULT_SSH_KEY) {
       try {
@@ -923,6 +939,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       }
     }
 
+    // --- 5. Create Server ---
     const payload = {
       name: serverRow.name,
       server_type: serverType,
@@ -1001,15 +1018,14 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const hetznerId = finalServer?.id || null;
     const newStatus = finalServer ? (finalServer.status === 'running' ? 'Running' : 'Initializing') : 'Initializing';
 
+    // --- 6. DNS Setup (Updated to Delete First) ---
     let subdomainResult = null;
     if (ipv4 && serverRow.subdomain) {
       try {
-        const isAvailable = await checkSubdomainAvailable(serverRow.subdomain);
-        if (!isAvailable) {
-          console.warn(`Subdomain ${serverRow.subdomain} already exists in Cloudflare`);
-          return res.status(400).json({ error: 'Subdomain already taken in DNS' });
-        }
+        // DELETE existing records (Sleeper IP)
+        await deleteCloudflareRecords(serverRow.subdomain);
 
+        // CREATE new records (Real Server IP)
         const aRecordIds = await createARecord(serverRow.subdomain, ipv4);
         console.log(`Created A records for ${serverRow.subdomain}.spawnly.net -> ${ipv4}`);
 
