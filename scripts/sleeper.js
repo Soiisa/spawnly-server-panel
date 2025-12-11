@@ -8,7 +8,6 @@ const varint = require('varint');
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const APP_BASE_URL = process.env.APP_BASE_URL || 'https://spawnly.net';
-// We use the provision endpoint to recreate the VM
 const PROVISION_API_URL = `${APP_BASE_URL}/api/servers/provision`;
 const SLEEPER_PORT = 25565;
 
@@ -57,7 +56,7 @@ const server = net.createServer((socket) => {
         if (state === 'HANDSHAKE') {
           handleHandshake(payload);
         } else if (state === 'STATUS') {
-          handleStatus(payload);
+          await handleStatus(payload); // Now Async
         } else if (state === 'LOGIN') {
           await handleLogin(payload);
         }
@@ -77,33 +76,24 @@ const server = net.createServer((socket) => {
   function handleHandshake(payload) {
     let pOffset = 0;
     
-    // Packet ID
     const packetId = varint.decode(payload, pOffset);
     pOffset += varint.decode.bytes;
 
-    if (packetId !== 0x00) return socket.end(); // Invalid handshake
+    if (packetId !== 0x00) return socket.end();
 
-    // Protocol Version
     varint.decode(payload, pOffset); 
     pOffset += varint.decode.bytes;
 
-    // Server Address Length
     const hostLen = varint.decode(payload, pOffset);
     pOffset += varint.decode.bytes;
 
-    // Server Address
     const host = payload.toString('utf8', pOffset, pOffset + hostLen);
     pOffset += hostLen;
 
-    // Server Port (Unsigned Short)
-    // payload.readUInt16BE(pOffset); 
-    pOffset += 2;
+    pOffset += 2; // Port
 
-    // Next State (1=Status, 2=Login)
     const nextState = varint.decode(payload, pOffset);
 
-    // Extract Subdomain
-    // Example: "myserver.spawnly.net" -> "myserver"
     const cleanHost = host.split(':')[0].replace(/\.$/, '');
     subdomain = cleanHost.split('.')[0].toLowerCase();
 
@@ -116,16 +106,33 @@ const server = net.createServer((socket) => {
     }
   }
 
-  function handleStatus(payload) {
+  async function handleStatus(payload) {
     let pOffset = 0;
     const packetId = varint.decode(payload, pOffset);
 
     // Packet 0x00: Request -> Respond with JSON
     if (packetId === 0x00) {
+      
+      // Fetch MOTD from DB
+      let motd = "§b§lSpawnly Server\n§7Server is Stopped. Join to Start!";
+      
+      if (subdomain) {
+        const { data } = await supabase
+          .from('servers')
+          .select('motd')
+          .eq('subdomain', subdomain)
+          .single();
+        
+        if (data?.motd) {
+          // Append " (Sleeping)" to let them know it's offline
+          motd = `${data.motd}\n§r§7(Server Sleeping)`;
+        }
+      }
+
       const response = {
         version: { name: "§4● Sleeping", protocol: -1 },
         players: { max: 0, online: 0 },
-        description: { text: "§b§lSpawnly Sleeper\n§7Server is Stopped. Join to Start!" }
+        description: { text: motd }
       };
 
       const json = JSON.stringify(response);
@@ -139,9 +146,7 @@ const server = net.createServer((socket) => {
     
     // Packet 0x01: Ping -> Respond with Pong
     else if (packetId === 0x01) {
-        // Payload contains a Long (8 bytes), echo it back
-        // Just send the payload payload back as the data
-        pOffset += varint.decode.bytes; // Skip Packet ID
+        pOffset += varint.decode.bytes; 
         const pingPayload = payload.slice(pOffset); 
         sendPacket(0x01, pingPayload);
     }
@@ -152,9 +157,7 @@ const server = net.createServer((socket) => {
     const packetId = varint.decode(payload, pOffset);
     pOffset += varint.decode.bytes;
 
-    // Packet 0x00: Login Start (Contains Username)
     if (packetId === 0x00) {
-      // Decode String (Username)
       const nameLen = varint.decode(payload, pOffset);
       pOffset += varint.decode.bytes;
       const username = payload.toString('utf8', pOffset, pOffset + nameLen);
@@ -167,7 +170,6 @@ const server = net.createServer((socket) => {
   // --- LOGIC HELPER ---
 
   async function attemptWakeServer(username) {
-    // 1. Fetch Server Info
     const { data: serverInfo, error } = await supabase
       .from('servers')
       .select('id, status, whitelist_enabled, version, name')
@@ -182,13 +184,12 @@ const server = net.createServer((socket) => {
       return kickClient("§eServer is already starting!\n§fPlease wait ~30 seconds and refresh.");
     }
 
-    // 2. Check Whitelist (If enabled)
     if (serverInfo.whitelist_enabled) {
       const { data: wlEntry } = await supabase
         .from('server_whitelist')
         .select('id')
         .eq('server_id', serverInfo.id)
-        .ilike('username', username) // Case-insensitive check
+        .ilike('username', username) 
         .single();
 
       if (!wlEntry) {
@@ -197,7 +198,6 @@ const server = net.createServer((socket) => {
       }
     }
 
-    // 3. Wake Server
     console.log(`[Sleeper] Waking up server ${serverInfo.id} for ${username}`);
     
     try {
@@ -208,7 +208,7 @@ const server = net.createServer((socket) => {
         headers: { 'Content-Type': 'application/json' }
       });
 
-      kickClient("§a§lWaking up Server!\n\n§7Authentication Accepted.\n§7Server is starting now.\n\n§fPlease refresh in roughly 60 seconds.");
+      kickClient("§a§lWaking up Server!\n\n§7Authentication Accepted.\n§7Server is starting now.\n\n§fPlease refresh in a bit");
     } catch (err) {
       console.error(`[Sleeper] Wake failed:`, err.message);
       kickClient("§cFailed to wake server. Please use the dashboard.");
@@ -225,8 +225,6 @@ const server = net.createServer((socket) => {
   function kickClient(message) {
     const json = JSON.stringify({ text: message });
     const jsonBuf = Buffer.from(json, 'utf8');
-    
-    // Packet 0x00 (Disconnect)
     sendPacket(0x00, Buffer.concat([
       Buffer.from(varint.encode(jsonBuf.length)), 
       jsonBuf
@@ -236,5 +234,5 @@ const server = net.createServer((socket) => {
 });
 
 server.listen(SLEEPER_PORT, () => {
-  console.log(`Sleeper Proxy v2 listening on port ${SLEEPER_PORT}`);
+  console.log(`Sleeper Proxy v3 listening on port ${SLEEPER_PORT}`);
 });

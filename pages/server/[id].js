@@ -15,7 +15,10 @@ import {
   ServerIcon,
   SignalIcon,
   UserGroupIcon,
-  PuzzlePieceIcon
+  PuzzlePieceIcon,
+  PencilSquareIcon,
+  CheckIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -62,6 +65,11 @@ export default function ServerDetailPage({ initialServer }) {
   const [savingAutoStop, setSavingAutoStop] = useState(false);
   const [copiedIp, setCopiedIp] = useState(false);
 
+  // MOTD State
+  const [isEditingMotd, setIsEditingMotd] = useState(false);
+  const [motdText, setMotdText] = useState(initialServer?.motd || '');
+  const [savingMotd, setSavingMotd] = useState(false);
+
   // Refs
   const profileChannelRef = useRef(null);
   const serverChannelRef = useRef(null);
@@ -71,7 +79,6 @@ export default function ServerDetailPage({ initialServer }) {
 
   // --- Effects ---
 
-  // Handle Tab Query Param
   useEffect(() => {
     const qTab = router?.query?.tab;
     if (qTab && typeof qTab === 'string') {
@@ -79,7 +86,6 @@ export default function ServerDetailPage({ initialServer }) {
     }
   }, [router?.query?.tab]);
 
-  // Initial Data Fetch
   useEffect(() => {
     mountedRef.current = true;
 
@@ -116,7 +122,6 @@ export default function ServerDetailPage({ initialServer }) {
     };
   }, [id]);
 
-  // Realtime Subscription
   useEffect(() => {
     if (!id || !user?.id) return;
     
@@ -129,7 +134,14 @@ export default function ServerDetailPage({ initialServer }) {
         { event: 'UPDATE', schema: 'public', table: 'servers', filter: `id=eq.${id}` },
         (payload) => {
           if (!mountedRef.current) return;
-          setServer((prev) => payload.new);
+          setServer((prev) => {
+            const updated = payload.new;
+            // Sync MOTD if updated externally and we aren't editing
+            if (!isEditingMotd && updated.motd !== prev.motd) {
+              setMotdText(updated.motd);
+            }
+            return updated;
+          });
           setError(null);
         }
       )
@@ -137,9 +149,8 @@ export default function ServerDetailPage({ initialServer }) {
 
     serverChannelRef.current = serverChannel;
     return () => { if (serverChannelRef.current) supabase.removeChannel(serverChannelRef.current); };
-  }, [id, user?.id]);
+  }, [id, user?.id, isEditingMotd]);
 
-  // File Token
   useEffect(() => {
     if (!server?.id || fileToken || !user) return;
     const fetchFileToken = async (retries = 3, delay = 1000) => {
@@ -163,12 +174,10 @@ export default function ServerDetailPage({ initialServer }) {
     fetchFileToken();
   }, [server?.id, user]);
 
-  // Player List Update
   useEffect(() => {
     setOnlinePlayers(getOnlinePlayersArray(server));
   }, [server?.players_online, server?.status]);
 
-  // Countdown Timer
   useEffect(() => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
 
@@ -222,8 +231,11 @@ export default function ServerDetailPage({ initialServer }) {
   const fetchServer = useCallback(
     debounce(async (serverId, userId) => {
       const { data } = await supabase.from('servers').select('*').eq('id', serverId).eq('user_id', userId).single();
-      if (data && mountedRef.current) setServer(prev => (JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
-    }, 1000), []
+      if (data && mountedRef.current) {
+        setServer(prev => (JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
+        if (!isEditingMotd) setMotdText(data.motd || '');
+      }
+    }, 1000), [isEditingMotd]
   );
 
   const pollUntilStatus = (expectedStatuses, timeout = 120000) => {
@@ -317,6 +329,48 @@ export default function ServerDetailPage({ initialServer }) {
     finally { setActionLoading(false); }
   };
 
+  // --- MOTD Handler ---
+  const handleSaveMotd = async () => {
+    setSavingMotd(true);
+    try {
+      // 1. Update DB (for Sleeper & Dashboard)
+      const { error: dbError } = await supabase
+        .from('servers')
+        .update({ motd: motdText })
+        .eq('id', server.id);
+      
+      if (dbError) throw dbError;
+
+      // 2. Update server.properties (for Actual Server)
+      // Note: If server is running, this updates via RCON/API. If stopped, updates via S3.
+      // We first fetch existing to preserve other settings.
+      const propsRes = await fetch(`/api/servers/${server.id}/properties`);
+      if (propsRes.ok) {
+        let propsText = await propsRes.text();
+        // Regex replace motd line
+        if (propsText.includes('motd=')) {
+          propsText = propsText.replace(/^motd=.*$/m, `motd=${motdText}`);
+        } else {
+          propsText += `\nmotd=${motdText}`;
+        }
+        
+        await fetch(`/api/servers/${server.id}/properties`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: propsText
+        });
+      }
+
+      setServer(prev => ({ ...prev, motd: motdText }));
+      setIsEditingMotd(false);
+    } catch (e) {
+      setError('Failed to save MOTD');
+      console.error(e);
+    } finally {
+      setSavingMotd(false);
+    }
+  };
+
   // --- Render Helpers ---
 
   if (!user || loading) return (
@@ -335,23 +389,15 @@ export default function ServerDetailPage({ initialServer }) {
   const isStopped = status === 'Stopped';
   const isBusy = !isRunning && !isStopped;
 
-  // Tabs Configuration
   const sType = (server.type || '').toLowerCase();
-  
-  // Updated list of types to include ALL supported software
   const moddedTypes = ['forge', 'neoforge', 'fabric', 'quilt'];
   const pluginTypes = ['paper', 'spigot', 'purpur', 'folia', 'velocity', 'waterfall', 'bukkit'];
   const hybridTypes = ['arclight', 'mohist', 'magma'];
-  
-  const isModded = moddedTypes.includes(sType);
-  const isPlugin = pluginTypes.includes(sType);
-  const isHybrid = hybridTypes.includes(sType);
-  
-  const showMods = isModded || isPlugin || isHybrid;
+  const showMods = moddedTypes.includes(sType) || pluginTypes.includes(sType) || hybridTypes.includes(sType);
   
   let modLabel = 'Mods';
-  if (isPlugin) modLabel = 'Plugins';
-  if (isHybrid) modLabel = 'Mods/Plugins';
+  if (pluginTypes.includes(sType)) modLabel = 'Plugins';
+  if (hybridTypes.includes(sType)) modLabel = 'Mods/Plugins';
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: SignalIcon },
@@ -369,7 +415,6 @@ export default function ServerDetailPage({ initialServer }) {
       <Header user={user} credits={credits} isLoading={creditsLoading} onLogout={() => { supabase.auth.signOut(); router.push('/login'); }} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Error Toast */}
         <AnimatePresence>
           {error && (
             <motion.div 
@@ -377,7 +422,7 @@ export default function ServerDetailPage({ initialServer }) {
               className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex justify-between items-center shadow-sm"
             >
               <div className="flex items-center gap-3">
-                <span className="bg-red-200 p-1 rounded-full"><svg className="w-4 h-4 text-red-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg></span>
+                <span className="bg-red-200 p-1 rounded-full"><XMarkIcon className="w-4 h-4 text-red-700" /></span>
                 <span>{error}</span>
               </div>
               <button onClick={() => setError(null)} className="text-sm font-semibold hover:underline">Dismiss</button>
@@ -390,12 +435,13 @@ export default function ServerDetailPage({ initialServer }) {
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             
             {/* Server Identity */}
-            <div>
+            <div className="flex-1">
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-3xl font-bold text-gray-900">{server.name}</h1>
                 <ServerStatusIndicator server={server} />
               </div>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+              
+              <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
                 <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-medium capitalize">{server.game}</span>
                 <span>•</span>
                 <button 
@@ -405,6 +451,46 @@ export default function ServerDetailPage({ initialServer }) {
                   <span className="font-mono">{server.name}.spawnly.net</span>
                   {copiedIp ? <span className="text-green-600 text-xs font-bold">Copied!</span> : <ClipboardDocumentIcon className="w-4 h-4 opacity-50 group-hover:opacity-100" />}
                 </button>
+              </div>
+
+              {/* Editable MOTD Section */}
+              <div className="flex items-center gap-2 text-sm text-gray-500 h-8">
+                {isEditingMotd ? (
+                  <div className="flex items-center gap-2 w-full max-w-md animate-in fade-in zoom-in duration-200">
+                    <input 
+                      type="text" 
+                      value={motdText}
+                      onChange={(e) => setMotdText(e.target.value)}
+                      className="flex-1 px-2 py-1 border border-indigo-300 rounded text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      placeholder="Enter Server MOTD..."
+                      maxLength={64}
+                    />
+                    <button 
+                      onClick={handleSaveMotd}
+                      disabled={savingMotd}
+                      className="p-1 bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
+                    >
+                      {savingMotd ? <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" /> : <CheckIcon className="w-4 h-4" />}
+                    </button>
+                    <button 
+                      onClick={() => { setIsEditingMotd(false); setMotdText(server.motd || ''); }}
+                      className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                    >
+                      <XMarkIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 group">
+                    <span className="italic text-gray-600">“{motdText || 'A Spawnly Server'}”</span>
+                    <button 
+                      onClick={() => setIsEditingMotd(true)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-600"
+                      title="Edit MOTD"
+                    >
+                      <PencilSquareIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -481,7 +567,6 @@ export default function ServerDetailPage({ initialServer }) {
             
             {activeTab === 'overview' && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                
                 {/* 1. Connection Card */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between">
                   <div>
@@ -511,7 +596,7 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 </div>
 
-                {/* 2. Resources & Metrics (Updated with Player Count) */}
+                {/* 2. Resources & Metrics */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 md:col-span-2 flex flex-col">
                   <h3 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
                     <CpuChipIcon className="w-4 h-4" /> Live Resources
@@ -520,8 +605,6 @@ export default function ServerDetailPage({ initialServer }) {
                     {isRunning ? (
                       <>
                         <ServerMetrics server={server} />
-                        
-                        {/* New Player Count Section */}
                         <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <UserGroupIcon className="w-5 h-5 text-gray-400" />
