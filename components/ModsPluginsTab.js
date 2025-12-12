@@ -15,13 +15,12 @@ export default function ModsPluginsTab({ server }) {
   // --- Constants ---
   const HYBRID_TYPES = ['arclight', 'mohist', 'magma'];
   const PLUGIN_TYPES = ['paper', 'spigot', 'purpur', 'folia', 'velocity', 'waterfall', 'bungeecord', 'bukkit'];
-  // Pure mod loaders (Hybrids handled separately)
+  // Pure mod loaders
   const MOD_TYPES = ['forge', 'neoforge', 'fabric', 'quilt']; 
 
   const isHybrid = HYBRID_TYPES.includes(server?.type);
   
   // --- State ---
-  // Default to 'plugins' for plugin servers, 'mods' for mod servers. Hybrids default to 'mods' but can switch.
   const [activeCategory, setActiveCategory] = useState(() => {
     if (PLUGIN_TYPES.includes(server?.type)) return 'plugins';
     return 'mods'; 
@@ -47,11 +46,25 @@ export default function ModsPluginsTab({ server }) {
       if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
       return await res.json();
     } catch (e) {
-      console.warn('Proxy failed, trying direct fetch:', e);
+      console.warn('Proxy failed, trying direct fetch (will fail for CurseForge due to missing key):', e);
+      // Direct fetch is fallback, but won't work for CurseForge since it needs the key injected by proxy
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Direct fetch failed: ${res.status}`);
       return await res.json();
     }
+  };
+
+  // Helper to map loader strings to CurseForge IDs
+  const getCurseForgeLoaderId = (type) => {
+    const map = {
+      'forge': 1,
+      'fabric': 4,
+      'quilt': 5,
+      'neoforge': 6
+    };
+    // Hybrid servers usually use Forge mods
+    if (HYBRID_TYPES.includes(type)) return 1;
+    return map[type] || 1; // Default to Forge if unknown
   };
 
   const fetchCatalog = async (page = 1, isNewSearch = false) => {
@@ -75,7 +88,7 @@ export default function ModsPluginsTab({ server }) {
 
         const spigetData = await fetchWithProxy(apiUrl);
 
-        totalItems = 9999; 
+        totalItems = 9999; // Spiget pagination is tricky, assuming many
         items = Array.isArray(spigetData) ? spigetData.map(item => ({
           id: item.id,
           name: item.name,
@@ -88,34 +101,38 @@ export default function ModsPluginsTab({ server }) {
         })) : [];
       } 
       
-      // --- MODS (MODRINTH) ---
+      // --- MODS (CURSEFORGE) ---
       else if (activeCategory === 'mods') {
-        let loader = server.type;
-        // Map hybrids to 'forge' for mod searching (usually compatible)
-        if (HYBRID_TYPES.includes(server.type)) loader = 'forge';
+        const loaderId = getCurseForgeLoaderId(server.type);
+        const gameId = 432; // Minecraft Game ID
+        const classId = 6;  // Mods Category ID
         
-        const facets = [
-          [`categories:${loader}`],
-          [`versions:${mcVersion}`],
-          ["project_type:mod"]
-        ];
+        // Calculate offset for CurseForge (index)
+        const index = (page - 1) * pageSize;
 
-        const facetStr = JSON.stringify(facets);
-        const apiUrl = `https://api.modrinth.com/v2/search?query=${encodeURIComponent(searchQuery)}&facets=${facetStr}&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
+        // Construct CurseForge Search URL
+        // Sorting: 2 = Popularity/Downloads, sortOrder: desc
+        const apiUrl = `https://api.curseforge.com/v1/mods/search?gameId=${gameId}&classId=${classId}&searchFilter=${encodeURIComponent(searchQuery)}&gameVersion=${mcVersion}&modLoaderType=${loaderId}&sortField=2&sortOrder=desc&pageSize=${pageSize}&index=${index}`;
 
-        const modrinthData = await fetchWithProxy(apiUrl);
+        const cfData = await fetchWithProxy(apiUrl);
 
-        totalItems = modrinthData.total_hits;
-        items = modrinthData.hits.map(item => ({
-          id: item.project_id,
-          name: item.title,
-          description: item.description,
-          version: item.latest_version,
-          downloads: item.downloads,
-          source: 'modrinth',
-          type: 'mod',
-          icon: item.icon_url
-        }));
+        // CurseForge returns { data: [...], pagination: { totalCount: ... } }
+        if (cfData && cfData.data) {
+          totalItems = cfData.pagination.totalCount; 
+          // API caps index+pageSize at 10,000, so we clamp totalItems for UI safety
+          if (totalItems > 10000) totalItems = 10000;
+
+          items = cfData.data.map(item => ({
+            id: item.id,
+            name: item.name,
+            description: item.summary, // CurseForge uses 'summary'
+            version: 'Latest', // We'll fetch specific versions later
+            downloads: item.downloadCount,
+            source: 'curseforge', 
+            type: 'mod',
+            icon: item.logo?.thumbnailUrl || null
+          }));
+        }
       }
 
       const calculatedTotalPages = Math.ceil(totalItems / pageSize);
@@ -174,22 +191,22 @@ export default function ModsPluginsTab({ server }) {
             filename: `${item.name}-${v.name}.jar`
           }));
         }
-      } else if (item.source === 'modrinth') {
-        let loader = server.type;
-        if (HYBRID_TYPES.includes(server.type)) loader = 'forge';
-
-        const res = await fetchWithProxy(`https://api.modrinth.com/v2/project/${item.id}/version?game_versions=["${mcVersion}"]&loaders=["${loader}"]`);
+      } else if (item.source === 'curseforge') {
+        // --- CURSEFORGE VERSIONS ---
+        const loaderId = getCurseForgeLoaderId(server.type);
         
-        if (Array.isArray(res)) {
-           versions = res.map(v => {
-            const file = v.files.find(f => f.primary) || v.files[0];
-            return {
-              id: v.id,
-              name: v.version_number,
-              downloadUrl: file?.url,
-              filename: file?.filename || `${item.name}-${v.version_number}.jar`
-            };
-          }).filter(v => v.downloadUrl);
+        // Fetch files for this specific mod, filtered by version and loader
+        const apiUrl = `https://api.curseforge.com/v1/mods/${item.id}/files?gameVersion=${mcVersion}&modLoaderType=${loaderId}&pageSize=20`;
+        
+        const res = await fetchWithProxy(apiUrl);
+        
+        if (res && res.data && Array.isArray(res.data)) {
+           versions = res.data.map(v => ({
+            id: v.id,
+            name: v.displayName,
+            downloadUrl: v.downloadUrl,
+            filename: v.fileName
+          })).filter(v => v.downloadUrl); // Filter out files without direct download links
         }
       }
       setSelectedVersions(versions);
@@ -203,9 +220,8 @@ export default function ModsPluginsTab({ server }) {
     setError(null);
     setSuccess(null);
     try {
-      // Determine folder based on source type, NOT just server type
-      // If we are in 'plugins' mode (Spigot source), it goes to /plugins
-      // If we are in 'mods' mode (Modrinth source), it goes to /mods
+      // Determine folder based on source type
+      // Spigot -> plugins, CurseForge -> mods
       const folder = selectedItem.type === 'plugin' ? 'plugins' : 'mods';
         
       const res = await fetch('/api/servers/install-mod', {
@@ -266,7 +282,7 @@ export default function ModsPluginsTab({ server }) {
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
-            placeholder={activeCategory === 'plugins' ? "Search plugins..." : "Search mods..."}
+            placeholder={activeCategory === 'plugins' ? "Search plugins..." : "Search mods (CurseForge)..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch(e)}
