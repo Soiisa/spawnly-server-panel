@@ -8,27 +8,34 @@ export default async function handler(req, res) {
 
   try {
     const targetUrl = decodeURIComponent(url);
-    const headers = {
-      'User-Agent': 'Spawnly-Panel/1.0'
-    };
+    
+    // Remove custom User-Agent to avoid blocking by Cloudflare/CurseForge
+    const headers = {}; 
 
-    // --- NEW: Inject CurseForge Key securely ---
-    // Ensure you have CURSEFORGE_API_KEY in your .env or .env.local file
     if (targetUrl.includes('api.curseforge.com')) {
-      if (!process.env.CURSEFORGE_API_KEY) {
-         console.error('Missing CURSEFORGE_API_KEY in server environment variables.');
+      const apiKey = process.env.CURSEFORGE_API_KEY;
+
+      if (!apiKey) {
+         console.error('❌ CURSEFORGE_API_KEY is missing from environment variables');
          return res.status(500).json({ error: 'Server configuration error: Missing CurseForge API Key' });
       }
-      headers['x-api-key'] = process.env.CURSEFORGE_API_KEY;
+
+      // DEBUG: Log the first few characters to verify it's loaded correctly
+      // (Don't log the full key in production logs)
+      console.log(`🔑 Using CurseForge Key: ${apiKey.substring(0, 5)}... (Length: ${apiKey.length})`);
+
+      headers['x-api-key'] = apiKey;
       headers['Accept'] = 'application/json';
+    } else {
+      // Only send User-Agent for non-CurseForge requests if needed
+      headers['User-Agent'] = 'Spawnly-Panel/1.0';
     }
 
     const response = await fetch(targetUrl, { headers });
     
     if (!response.ok) {
-      // Log the specific error for debugging
       const errorText = await response.text();
-      console.error(`Upstream error (${response.status}) for ${targetUrl}:`, errorText);
+      console.error(`❌ Upstream error (${response.status}) for ${targetUrl}:`, errorText);
       return res.status(response.status).json({ error: `Upstream error: ${response.statusText}` });
     }
 
