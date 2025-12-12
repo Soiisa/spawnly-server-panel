@@ -10,15 +10,15 @@ import {
   StopIcon, 
   ArrowPathIcon, 
   CpuChipIcon, 
-  CurrencyDollarIcon,
-  ClockIcon,
-  ServerIcon,
-  SignalIcon,
-  UserGroupIcon,
-  PuzzlePieceIcon,
-  PencilSquareIcon,
-  CheckIcon,
-  XMarkIcon
+  CurrencyDollarIcon, 
+  ClockIcon, 
+  ServerIcon, 
+  SignalIcon, 
+  UserGroupIcon, 
+  PuzzlePieceIcon, 
+  PencilSquareIcon, 
+  CheckIcon, 
+  XMarkIcon 
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -387,7 +387,9 @@ export default function ServerDetailPage({ initialServer }) {
   const status = server.status || 'Unknown';
   const isRunning = status === 'Running';
   const isStopped = status === 'Stopped';
-  const isBusy = !isRunning && !isStopped;
+  const isUnknown = status === 'Unknown';
+  // Allow "Stop" if unknown, so we exclude Unknown from "Busy" check
+  const isBusy = !isRunning && !isStopped && !isUnknown;
 
   const sType = (server.type || '').toLowerCase();
   const moddedTypes = ['forge', 'neoforge', 'fabric', 'quilt'];
@@ -507,16 +509,18 @@ export default function ServerDetailPage({ initialServer }) {
                 </button>
               )}
               
-              {isRunning && (
+              {(isRunning || isUnknown) && (
                 <>
-                  <button
-                    onClick={() => handleServerAction('restart')}
-                    disabled={actionLoading}
-                    className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50"
-                  >
-                    {actionLoading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowPathIcon className="w-5 h-5" />}
-                    Restart
-                  </button>
+                  {isRunning && (
+                    <button
+                      onClick={() => handleServerAction('restart')}
+                      disabled={actionLoading}
+                      className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50"
+                    >
+                      {actionLoading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowPathIcon className="w-5 h-5" />}
+                      Restart
+                    </button>
+                  )}
                   <button
                     onClick={() => handleServerAction('stop')}
                     disabled={actionLoading}
