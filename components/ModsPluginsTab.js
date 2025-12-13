@@ -10,7 +10,9 @@ import {
   PuzzlePieceIcon,
   AdjustmentsHorizontalIcon,
   CalendarDaysIcon,
-  CubeIcon
+  CubeIcon,
+  ArrowTopRightOnSquareIcon,
+  LinkIcon
 } from '@heroicons/react/24/outline';
 
 export default function ModsPluginsTab({ server }) {
@@ -37,8 +39,13 @@ export default function ModsPluginsTab({ server }) {
   const [totalPages, setTotalPages] = useState(1);
   const [hasMoreResults, setHasMoreResults] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // Selection & Modal State
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedVersions, setSelectedVersions] = useState([]);
+  const [modalTab, setModalTab] = useState('files'); // 'files' or 'dependencies'
+  const [itemDependencies, setItemDependencies] = useState([]); // Details of required deps
+  const [loadingDependencies, setLoadingDependencies] = useState(false);
 
   // Helper to use the local proxy
   const fetchWithProxy = async (url) => {
@@ -47,7 +54,7 @@ export default function ModsPluginsTab({ server }) {
       if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
       return await res.json();
     } catch (e) {
-      console.warn('Proxy failed, trying direct fetch (will fail for CurseForge due to missing key):', e);
+      console.warn('Proxy failed, trying direct fetch:', e);
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Direct fetch failed: ${res.status}`);
       return await res.json();
@@ -115,7 +122,8 @@ export default function ModsPluginsTab({ server }) {
           downloads: item.downloads,
           source: 'spiget',
           type: 'plugin',
-          icon: item.icon?.url ? `https://www.spigotmc.org/${item.icon.url}` : null
+          icon: item.icon?.url ? `https://www.spigotmc.org/${item.icon.url}` : null,
+          websiteUrl: `https://www.spigotmc.org/resources/${item.id}`
         })) : [];
       } 
       
@@ -142,7 +150,9 @@ export default function ModsPluginsTab({ server }) {
             downloads: item.downloadCount,
             source: 'curseforge', 
             type: 'mod',
-            icon: item.logo?.thumbnailUrl || null
+            icon: item.logo?.thumbnailUrl || null,
+            // Capture website URL or construct it via slug
+            websiteUrl: item.links?.websiteUrl || `https://www.curseforge.com/minecraft/mc-mods/${item.slug}`
           }));
         }
       }
@@ -186,11 +196,14 @@ export default function ModsPluginsTab({ server }) {
   const fetchVersions = async (item) => {
     setSelectedItem(item);
     setSelectedVersions([]);
+    setModalTab('files');
+    setItemDependencies([]);
     
     const mcVersion = server.version.split('-')[0];
 
     try {
       let versions = [];
+      let depIds = new Set();
       
       if (item.source === 'spiget') {
         const res = await fetchWithProxy(`https://api.spiget.org/v2/resources/${item.id}/versions?size=20&sort=-releaseDate`);
@@ -200,28 +213,64 @@ export default function ModsPluginsTab({ server }) {
             name: v.name,
             downloadUrl: `https://api.spiget.org/v2/resources/${item.id}/versions/${v.id}/download`,
             filename: `${item.name}-${v.name}.jar`,
-            releaseType: 1 // Assume release for spigot
+            releaseType: 1
           }));
         }
       } else if (item.source === 'curseforge') {
-        // --- CURSEFORGE VERSIONS ---
         const loaderId = getCurseForgeLoaderId(server.type);
         
         const apiUrl = `https://api.curseforge.com/v1/mods/${item.id}/files?gameVersion=${mcVersion}&modLoaderType=${loaderId}&pageSize=20`;
-        
         const res = await fetchWithProxy(apiUrl);
         
         if (res && res.data && Array.isArray(res.data)) {
-           versions = res.data.map(v => ({
-            id: v.id,
-            name: v.displayName,
-            downloadUrl: v.downloadUrl,
-            filename: v.fileName,
-            releaseType: v.releaseType, // 1=Release, 2=Beta, 3=Alpha
-            fileDate: v.fileDate,
-            size: v.fileLength,
-            dependencies: v.dependencies || [] // [{modId, relationType}]
-          })).filter(v => v.downloadUrl);
+           versions = res.data.map(v => {
+            // Collect dependencies from all valid files (or just the latest)
+            // Here we look at relationType 3 (Required Dependency)
+            if (v.dependencies) {
+              v.dependencies.forEach(d => {
+                if (d.relationType === 3) depIds.add(d.modId);
+              });
+            }
+
+            return {
+              id: v.id,
+              name: v.displayName,
+              downloadUrl: v.downloadUrl,
+              filename: v.fileName,
+              releaseType: v.releaseType,
+              fileDate: v.fileDate,
+              size: v.fileLength,
+              dependencies: v.dependencies || [] 
+            };
+          }).filter(v => v.downloadUrl);
+        }
+
+        // --- Fetch Dependency Details ---
+        if (depIds.size > 0) {
+          setLoadingDependencies(true);
+          // Convert Set to Array
+          const uniqueDepIds = Array.from(depIds);
+          
+          // CurseForge Get Mod endpoint is usually one by one via GET or batch via POST
+          // To stay compatible with the existing simple proxy (GET only), we'll do parallel GETs
+          // (Only fetch first 10 to avoid rate limits/spam)
+          const limitedIds = uniqueDepIds.slice(0, 10);
+          
+          Promise.all(limitedIds.map(id => 
+            fetchWithProxy(`https://api.curseforge.com/v1/mods/${id}`)
+              .catch(e => null) // Ignore failed fetches
+          )).then(results => {
+            const deps = results
+              .filter(r => r && r.data)
+              .map(r => ({
+                id: r.data.id,
+                name: r.data.name,
+                icon: r.data.logo?.thumbnailUrl,
+                url: r.data.links?.websiteUrl
+              }));
+            setItemDependencies(deps);
+            setLoadingDependencies(false);
+          });
         }
       }
       setSelectedVersions(versions);
@@ -269,9 +318,7 @@ export default function ModsPluginsTab({ server }) {
             <button
               onClick={() => setActiveCategory('mods')}
               className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                activeCategory === 'mods' 
-                  ? 'bg-white text-indigo-600 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-900'
+                activeCategory === 'mods' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               Mods
@@ -279,9 +326,7 @@ export default function ModsPluginsTab({ server }) {
             <button
               onClick={() => setActiveCategory('plugins')}
               className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                activeCategory === 'plugins' 
-                  ? 'bg-white text-indigo-600 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-900'
+                activeCategory === 'plugins' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               Plugins
@@ -393,73 +438,168 @@ export default function ModsPluginsTab({ server }) {
       {selectedItem && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Select Version</h3>
-                <p className="text-xs text-gray-500 mt-0.5">for {selectedItem.name}</p>
+            
+            {/* Modal Header */}
+            <div className="p-5 border-b border-gray-200 bg-gray-50">
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex-1 pr-4">
+                  <h3 className="text-lg font-bold text-gray-900">{selectedItem.name}</h3>
+                  {/* Clickable Description */}
+                  <p 
+                    onClick={() => selectedItem.websiteUrl && window.open(selectedItem.websiteUrl, '_blank')}
+                    className="text-sm text-gray-500 mt-1 line-clamp-2 cursor-pointer hover:text-indigo-600 hover:bg-indigo-50 rounded p-1 -ml-1 transition-colors"
+                    title="Click to view on CurseForge"
+                  >
+                    {selectedItem.description}
+                  </p>
+                </div>
+                <button onClick={() => setSelectedItem(null)} className="p-1 rounded-full hover:bg-gray-200 text-gray-500 transition-colors">
+                  <XCircleIcon className="w-6 h-6" />
+                </button>
               </div>
-              <button onClick={() => setSelectedItem(null)} className="p-1 rounded-full hover:bg-gray-200 text-gray-500 transition-colors">
-                <XCircleIcon className="w-6 h-6" />
+
+              {/* Header Actions */}
+              <div className="flex items-center gap-2">
+                {selectedItem.websiteUrl && (
+                  <a 
+                    href={selectedItem.websiteUrl} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-indigo-600 transition-colors"
+                  >
+                    <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
+                    Open in CurseForge
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 bg-white px-5 pt-2">
+              <button
+                onClick={() => setModalTab('files')}
+                className={`pb-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                  modalTab === 'files' 
+                    ? 'border-indigo-600 text-indigo-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Downloads
+              </button>
+              <button
+                onClick={() => setModalTab('dependencies')}
+                className={`pb-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                  modalTab === 'dependencies' 
+                    ? 'border-indigo-600 text-indigo-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Dependencies {itemDependencies.length > 0 && `(${itemDependencies.length})`}
               </button>
             </div>
 
+            {/* Content Area */}
             <div className="overflow-y-auto p-4 flex-1 bg-gray-50/30">
-              {selectedVersions.length === 0 ? (
-                <div className="py-12 flex flex-col items-center text-gray-400">
-                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent mb-2" />
-                  <p className="text-sm">Fetching versions...</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {selectedVersions.map((v) => (
-                    <div key={v.id} className="group bg-white border border-gray-200 p-3 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all flex items-center gap-3">
-                      
-                      {/* Left: Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-gray-900 truncate text-sm" title={v.name}>{v.name}</span>
-                          {getReleaseBadge(v.releaseType)}
-                        </div>
-                        
-                        <div className="text-xs text-gray-500 flex items-center flex-wrap gap-x-3 gap-y-1">
-                           <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 truncate max-w-[150px]" title={v.filename}>
-                             {v.filename}
-                           </span>
-                           {v.size && (
-                             <span className="flex items-center gap-1">
-                               <CubeIcon className="w-3 h-3" />
-                               {formatFileSize(v.size)}
-                             </span>
-                           )}
-                           {v.fileDate && (
-                             <span className="flex items-center gap-1">
-                               <CalendarDaysIcon className="w-3 h-3" />
-                               {new Date(v.fileDate).toLocaleDateString()}
-                             </span>
-                           )}
-                        </div>
-
-                        {/* Dependencies Warning */}
-                        {v.dependencies && v.dependencies.some(d => d.relationType === 3) && (
-                          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-100 px-2 py-1 rounded-md w-fit">
-                            <ExclamationCircleIcon className="w-3.5 h-3.5" />
-                            <span>Requires dependencies (check CurseForge page)</span>
+              
+              {/* --- FILES TAB --- */}
+              {modalTab === 'files' && (
+                <>
+                  {selectedVersions.length === 0 ? (
+                    <div className="py-12 flex flex-col items-center text-gray-400">
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent mb-2" />
+                      <p className="text-sm">Fetching versions...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedVersions.map((v) => (
+                        <div key={v.id} className="group bg-white border border-gray-200 p-3 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all flex items-center gap-3">
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-bold text-gray-900 truncate text-sm" title={v.name}>{v.name}</span>
+                              {getReleaseBadge(v.releaseType)}
+                            </div>
+                            
+                            <div className="text-xs text-gray-500 flex items-center flex-wrap gap-x-3 gap-y-1">
+                               <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 truncate max-w-[150px]" title={v.filename}>
+                                 {v.filename}
+                               </span>
+                               {v.size && (
+                                 <span className="flex items-center gap-1">
+                                   <CubeIcon className="w-3 h-3" />
+                                   {formatFileSize(v.size)}
+                                 </span>
+                               )}
+                               {v.fileDate && (
+                                 <span className="flex items-center gap-1">
+                                   <CalendarDaysIcon className="w-3 h-3" />
+                                   {new Date(v.fileDate).toLocaleDateString()}
+                                 </span>
+                               )}
+                            </div>
                           </div>
-                        )}
+
+                          <button
+                            onClick={() => handleInstall(v)}
+                            disabled={loadingInstall}
+                            className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {loadingInstall ? '...' : 'Install'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* --- DEPENDENCIES TAB --- */}
+              {modalTab === 'dependencies' && (
+                <div className="space-y-3">
+                  {loadingDependencies ? (
+                     <div className="py-12 flex flex-col items-center text-gray-400">
+                       <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent mb-2" />
+                       <p className="text-sm">Fetching dependency details...</p>
+                     </div>
+                  ) : itemDependencies.length === 0 ? (
+                    <div className="py-10 text-center text-gray-500">
+                      <CheckCircleIcon className="w-10 h-10 mx-auto text-green-500 opacity-50 mb-2" />
+                      <p>No required dependencies found.</p>
+                      <p className="text-xs text-gray-400">This mod should work standalone.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-800 flex gap-2">
+                        <ExclamationCircleIcon className="w-4 h-4 shrink-0 mt-0.5" />
+                        <p>These mods are required for <b>{selectedItem.name}</b> to work. Please install them as well.</p>
                       </div>
 
-                      {/* Right: Action */}
-                      <button
-                        onClick={() => handleInstall(v)}
-                        disabled={loadingInstall}
-                        className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
-                      >
-                        {loadingInstall ? '...' : 'Install'}
-                      </button>
-                    </div>
-                  ))}
+                      {itemDependencies.map(dep => (
+                        <div key={dep.id} className="bg-white border border-gray-200 p-3 rounded-xl flex items-center gap-3">
+                          <img 
+                            src={dep.icon || 'https://www.curseforge.com/images/favicon.ico'} 
+                            alt="" 
+                            className="w-10 h-10 rounded-lg bg-gray-100 object-cover" 
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-bold text-gray-900 text-sm truncate">{dep.name}</h4>
+                            <a 
+                              href={dep.url} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="text-xs text-indigo-600 hover:underline flex items-center gap-1 mt-0.5"
+                            >
+                              View Page <LinkIcon className="w-3 h-3" />
+                            </a>
+                          </div>
+                          {/* We don't have a direct install button for deps yet because we need to find compatible versions for them, which is complex. */}
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
+
             </div>
           </div>
         </div>
