@@ -801,12 +801,12 @@ runcmd:
   - systemctl start mc-metrics || true
   - systemctl enable mc-file-api || true
   - systemctl start mc-file-api || true
-  - echo "[DEBUG] Setting up firewall (NO PORT 3002)"
+  - echo "[DEBUG] Setting up firewall"
   - ufw allow 25565
   - ufw allow 25575
-  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3003; done
-  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3004; done
-  - for ip in $(curl -s https://www.cloudflare.com/ips-v4); do ufw allow from $ip to any port 3005; done
+  - ufw allow 3003/tcp comment 'Properties API'
+  - ufw allow 3004/tcp comment 'Metrics API'
+  - ufw allow 3005/tcp comment 'File API'
   - ufw allow 22
   - ufw --force enable
   - echo "[FINAL DEBUG] Cloud-init finished at $(date)"

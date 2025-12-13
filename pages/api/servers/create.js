@@ -33,55 +33,6 @@ const sanitizeSubdomain = (name) => {
     .slice(0, 63); // Ensure max length
 };
 
-const DEFAULT_PROPERTIES = `#Minecraft server properties
-spawn-protection=16
-max-tick-time=60000
-query.port=25565
-generator-settings=
-force-gamemode=false
-allow-nether=true
-enforce-whitelist=false
-gamemode=survival
-broadcast-console-to-ops=true
-enable-query=false
-player-idle-timeout=0
-difficulty=easy
-spawn-monsters=true
-op-permission-level=4
-pvp=true
-snooper-enabled=true
-level-type=default
-hardcore=false
-enable-command-block=false
-max-players=20
-network-compression-threshold=256
-resource-pack-sha1=
-max-world-size=29999984
-rcon.port=25575
-server-port=25565
-server-ip=
-spawn-npcs=true
-allow-flight=false
-level-name=world
-view-distance=10
-resource-pack=
-spawn-animals=true
-white-list=false
-rcon.password=
-generate-structures=true
-online-mode=true
-max-build-height=256
-level-seed=
-prevent-proxy-connections=false
-use-native-transport=true
-motd=A Spawnly Server
-enable-rcon=true
-`;
-
-const EULA_TXT = `#By changing the setting below to TRUE you are indicating your agreement to our EULA (https://account.mojang.com/documents/minecraft_eula).
-eula=true
-`;
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
@@ -145,30 +96,57 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to insert server into Supabase', detail: error.message });
     }
 
-    // Initialize S3 Files (server.properties & eula.txt)
-    // This allows the user to edit settings before the first launch.
+    // Initialize S3 Files if game is Minecraft
+    // This pre-populates the file manager so users can edit config before starting the server.
     if (game === 'minecraft') {
       const s3Prefix = `servers/${data.id}/`;
       
+      // Default Server Properties (Matches provision.js defaults)
+      const defaultProperties = [
+        'enable-rcon=true',
+        'rcon.port=25575',
+        `rcon.password=${rconPassword}`,
+        'broadcast-rcon-to-ops=true',
+        'server-port=25565',
+        'enable-query=true',
+        'query.port=25565',
+        'online-mode=false',
+        'max-players=20',
+        'difficulty=easy',
+        'gamemode=survival',
+        'spawn-protection=16',
+        'view-distance=10',
+        'simulation-distance=10',
+        'motd=A Spawnly Server',
+        'pvp=true',
+        'generate-structures=true',
+        'max-world-size=29999984'
+      ].join('\n');
+
+      const eulaTxt = 'eula=true\n';
+      const emptyJson = '[]';
+
       try {
         await Promise.all([
-          s3.putObject({
-            Bucket: S3_BUCKET,
-            Key: `${s3Prefix}server.properties`,
-            Body: DEFAULT_PROPERTIES,
-            ContentType: 'text/plain'
-          }).promise(),
-          s3.putObject({
-            Bucket: S3_BUCKET,
-            Key: `${s3Prefix}eula.txt`,
-            Body: EULA_TXT,
-            ContentType: 'text/plain'
-          }).promise()
+          // Server Properties
+          s3.putObject({ Bucket: S3_BUCKET, Key: `${s3Prefix}server.properties`, Body: defaultProperties, ContentType: 'text/plain' }).promise(),
+          
+          // EULA
+          s3.putObject({ Bucket: S3_BUCKET, Key: `${s3Prefix}eula.txt`, Body: eulaTxt, ContentType: 'text/plain' }).promise(),
+          
+          // Standard Minecraft JSON lists
+          s3.putObject({ Bucket: S3_BUCKET, Key: `${s3Prefix}banned-ips.json`, Body: emptyJson, ContentType: 'application/json' }).promise(),
+          s3.putObject({ Bucket: S3_BUCKET, Key: `${s3Prefix}banned-players.json`, Body: emptyJson, ContentType: 'application/json' }).promise(),
+          s3.putObject({ Bucket: S3_BUCKET, Key: `${s3Prefix}ops.json`, Body: emptyJson, ContentType: 'application/json' }).promise(),
+          s3.putObject({ Bucket: S3_BUCKET, Key: `${s3Prefix}usercache.json`, Body: emptyJson, ContentType: 'application/json' }).promise(),
+          s3.putObject({ Bucket: S3_BUCKET, Key: `${s3Prefix}whitelist.json`, Body: emptyJson, ContentType: 'application/json' }).promise()
         ]);
+        
+        console.log(`Initialized S3 files for server ${data.id}`);
       } catch (s3Err) {
         console.error('Failed to initialize S3 files:', s3Err);
-        // We don't fail the request here, as the server record was created successfully.
-        // The user might just see an empty file list initially.
+        // We log the error but don't fail the request, as the DB record is created.
+        // The server will still function, but files might appear empty initially.
       }
     }
 
