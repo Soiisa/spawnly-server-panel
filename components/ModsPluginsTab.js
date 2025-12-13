@@ -8,14 +8,15 @@ import {
   XCircleIcon,
   CpuChipIcon,
   PuzzlePieceIcon,
-  AdjustmentsHorizontalIcon
+  AdjustmentsHorizontalIcon,
+  CalendarDaysIcon,
+  CubeIcon
 } from '@heroicons/react/24/outline';
 
 export default function ModsPluginsTab({ server }) {
   // --- Constants ---
   const HYBRID_TYPES = ['arclight', 'mohist', 'magma'];
   const PLUGIN_TYPES = ['paper', 'spigot', 'purpur', 'folia', 'velocity', 'waterfall', 'bungeecord', 'bukkit'];
-  // Pure mod loaders
   const MOD_TYPES = ['forge', 'neoforge', 'fabric', 'quilt']; 
 
   const isHybrid = HYBRID_TYPES.includes(server?.type);
@@ -47,7 +48,6 @@ export default function ModsPluginsTab({ server }) {
       return await res.json();
     } catch (e) {
       console.warn('Proxy failed, trying direct fetch (will fail for CurseForge due to missing key):', e);
-      // Direct fetch is fallback, but won't work for CurseForge since it needs the key injected by proxy
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Direct fetch failed: ${res.status}`);
       return await res.json();
@@ -62,15 +62,33 @@ export default function ModsPluginsTab({ server }) {
       'quilt': 5,
       'neoforge': 6
     };
-    // Hybrid servers usually use Forge mods
     if (HYBRID_TYPES.includes(type)) return 1;
-    return map[type] || 1; // Default to Forge if unknown
+    return map[type] || 1; 
+  };
+
+  // Helper to format file size
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Helper to get Release Type Badge
+  const getReleaseBadge = (type) => {
+    switch (type) {
+      case 1: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200 uppercase tracking-wide">Release</span>;
+      case 2: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 uppercase tracking-wide">Beta</span>;
+      case 3: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200 uppercase tracking-wide">Alpha</span>;
+      default: return null;
+    }
   };
 
   const fetchCatalog = async (page = 1, isNewSearch = false) => {
     if (!server?.type || !server?.version) return;
 
-    const mcVersion = server.version.split('-')[0]; // "1.20.1"
+    const mcVersion = server.version.split('-')[0];
 
     setLoadingCatalog(true);
     setError(null);
@@ -88,7 +106,7 @@ export default function ModsPluginsTab({ server }) {
 
         const spigetData = await fetchWithProxy(apiUrl);
 
-        totalItems = 9999; // Spiget pagination is tricky, assuming many
+        totalItems = 9999; 
         items = Array.isArray(spigetData) ? spigetData.map(item => ({
           id: item.id,
           name: item.name,
@@ -104,29 +122,23 @@ export default function ModsPluginsTab({ server }) {
       // --- MODS (CURSEFORGE) ---
       else if (activeCategory === 'mods') {
         const loaderId = getCurseForgeLoaderId(server.type);
-        const gameId = 432; // Minecraft Game ID
-        const classId = 6;  // Mods Category ID
-        
-        // Calculate offset for CurseForge (index)
+        const gameId = 432; 
+        const classId = 6;  
         const index = (page - 1) * pageSize;
 
-        // Construct CurseForge Search URL
-        // Sorting: 2 = Popularity/Downloads, sortOrder: desc
         const apiUrl = `https://api.curseforge.com/v1/mods/search?gameId=${gameId}&classId=${classId}&searchFilter=${encodeURIComponent(searchQuery)}&gameVersion=${mcVersion}&modLoaderType=${loaderId}&sortField=2&sortOrder=desc&pageSize=${pageSize}&index=${index}`;
 
         const cfData = await fetchWithProxy(apiUrl);
 
-        // CurseForge returns { data: [...], pagination: { totalCount: ... } }
         if (cfData && cfData.data) {
           totalItems = cfData.pagination.totalCount; 
-          // API caps index+pageSize at 10,000, so we clamp totalItems for UI safety
           if (totalItems > 10000) totalItems = 10000;
 
           items = cfData.data.map(item => ({
             id: item.id,
             name: item.name,
-            description: item.summary, // CurseForge uses 'summary'
-            version: 'Latest', // We'll fetch specific versions later
+            description: item.summary,
+            version: 'Latest', 
             downloads: item.downloadCount,
             source: 'curseforge', 
             type: 'mod',
@@ -153,7 +165,6 @@ export default function ModsPluginsTab({ server }) {
     }
   };
 
-  // Reload when server type/version OR activeCategory changes
   useEffect(() => {
     fetchCatalog(1, true);
     setCurrentPage(1);
@@ -188,14 +199,14 @@ export default function ModsPluginsTab({ server }) {
             id: v.id,
             name: v.name,
             downloadUrl: `https://api.spiget.org/v2/resources/${item.id}/versions/${v.id}/download`,
-            filename: `${item.name}-${v.name}.jar`
+            filename: `${item.name}-${v.name}.jar`,
+            releaseType: 1 // Assume release for spigot
           }));
         }
       } else if (item.source === 'curseforge') {
         // --- CURSEFORGE VERSIONS ---
         const loaderId = getCurseForgeLoaderId(server.type);
         
-        // Fetch files for this specific mod, filtered by version and loader
         const apiUrl = `https://api.curseforge.com/v1/mods/${item.id}/files?gameVersion=${mcVersion}&modLoaderType=${loaderId}&pageSize=20`;
         
         const res = await fetchWithProxy(apiUrl);
@@ -205,8 +216,12 @@ export default function ModsPluginsTab({ server }) {
             id: v.id,
             name: v.displayName,
             downloadUrl: v.downloadUrl,
-            filename: v.fileName
-          })).filter(v => v.downloadUrl); // Filter out files without direct download links
+            filename: v.fileName,
+            releaseType: v.releaseType, // 1=Release, 2=Beta, 3=Alpha
+            fileDate: v.fileDate,
+            size: v.fileLength,
+            dependencies: v.dependencies || [] // [{modId, relationType}]
+          })).filter(v => v.downloadUrl);
         }
       }
       setSelectedVersions(versions);
@@ -220,8 +235,6 @@ export default function ModsPluginsTab({ server }) {
     setError(null);
     setSuccess(null);
     try {
-      // Determine folder based on source type
-      // Spigot -> plugins, CurseForge -> mods
       const folder = selectedItem.type === 'plugin' ? 'plugins' : 'mods';
         
       const res = await fetch('/api/servers/install-mod', {
@@ -251,8 +264,6 @@ export default function ModsPluginsTab({ server }) {
       
       {/* Header / Search */}
       <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-col md:flex-row gap-3">
-        
-        {/* Toggle for Hybrids */}
         {isHybrid && (
           <div className="flex bg-gray-200 rounded-lg p-1 shrink-0">
             <button
@@ -381,7 +392,7 @@ export default function ModsPluginsTab({ server }) {
       {/* Version Selector Modal */}
       {selectedItem && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[85vh]">
             <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Select Version</h3>
@@ -392,24 +403,56 @@ export default function ModsPluginsTab({ server }) {
               </button>
             </div>
 
-            <div className="overflow-y-auto p-2 flex-1">
+            <div className="overflow-y-auto p-4 flex-1 bg-gray-50/30">
               {selectedVersions.length === 0 ? (
                 <div className="py-12 flex flex-col items-center text-gray-400">
                   <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent mb-2" />
                   <p className="text-sm">Fetching versions...</p>
                 </div>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-3">
                   {selectedVersions.map((v) => (
-                    <div key={v.id} className="group flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors">
-                      <div className="flex flex-col min-w-0 pr-4">
-                        <span className="font-medium text-gray-900 truncate">{v.name}</span>
-                        <span className="text-xs text-gray-400 truncate font-mono">{v.filename}</span>
+                    <div key={v.id} className="group bg-white border border-gray-200 p-3 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all flex items-center gap-3">
+                      
+                      {/* Left: Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-bold text-gray-900 truncate text-sm" title={v.name}>{v.name}</span>
+                          {getReleaseBadge(v.releaseType)}
+                        </div>
+                        
+                        <div className="text-xs text-gray-500 flex items-center flex-wrap gap-x-3 gap-y-1">
+                           <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 truncate max-w-[150px]" title={v.filename}>
+                             {v.filename}
+                           </span>
+                           {v.size && (
+                             <span className="flex items-center gap-1">
+                               <CubeIcon className="w-3 h-3" />
+                               {formatFileSize(v.size)}
+                             </span>
+                           )}
+                           {v.fileDate && (
+                             <span className="flex items-center gap-1">
+                               <CalendarDaysIcon className="w-3 h-3" />
+                               {new Date(v.fileDate).toLocaleDateString()}
+                             </span>
+                           )}
+                        </div>
+
+                        {/* Dependencies Warning */}
+                        {v.dependencies && v.dependencies.some(d => d.relationType === 3) && (
+                          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-100 px-2 py-1 rounded-md w-fit">
+                            <ExclamationCircleIcon className="w-3.5 h-3.5" />
+                            <span>Requires dependencies (check CurseForge page)</span>
+                          </div>
+                        )}
                       </div>
+
+                      {/* Right: Action */}
                       <button
                         onClick={() => handleInstall(v)}
                         disabled={loadingInstall}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
+                        className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
                       >
                         {loadingInstall ? '...' : 'Install'}
                       </button>
