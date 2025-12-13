@@ -12,7 +12,8 @@ import {
   CalendarDaysIcon,
   CubeIcon,
   ArrowTopRightOnSquareIcon,
-  LinkIcon
+  LinkIcon,
+  ArrowRightCircleIcon
 } from '@heroicons/react/24/outline';
 
 export default function ModsPluginsTab({ server }) {
@@ -44,7 +45,7 @@ export default function ModsPluginsTab({ server }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedVersions, setSelectedVersions] = useState([]);
   const [modalTab, setModalTab] = useState('files'); // 'files' or 'dependencies'
-  const [itemDependencies, setItemDependencies] = useState([]); // Details of required deps
+  const [itemDependencies, setItemDependencies] = useState([]); 
   const [loadingDependencies, setLoadingDependencies] = useState(false);
 
   // Helper to use the local proxy
@@ -151,7 +152,6 @@ export default function ModsPluginsTab({ server }) {
             source: 'curseforge', 
             type: 'mod',
             icon: item.logo?.thumbnailUrl || null,
-            // Capture website URL or construct it via slug
             websiteUrl: item.links?.websiteUrl || `https://www.curseforge.com/minecraft/mc-mods/${item.slug}`
           }));
         }
@@ -224,8 +224,6 @@ export default function ModsPluginsTab({ server }) {
         
         if (res && res.data && Array.isArray(res.data)) {
            versions = res.data.map(v => {
-            // Collect dependencies from all valid files (or just the latest)
-            // Here we look at relationType 3 (Required Dependency)
             if (v.dependencies) {
               v.dependencies.forEach(d => {
                 if (d.relationType === 3) depIds.add(d.modId);
@@ -248,17 +246,13 @@ export default function ModsPluginsTab({ server }) {
         // --- Fetch Dependency Details ---
         if (depIds.size > 0) {
           setLoadingDependencies(true);
-          // Convert Set to Array
           const uniqueDepIds = Array.from(depIds);
-          
-          // CurseForge Get Mod endpoint is usually one by one via GET or batch via POST
-          // To stay compatible with the existing simple proxy (GET only), we'll do parallel GETs
-          // (Only fetch first 10 to avoid rate limits/spam)
+          // Limit parallel fetches
           const limitedIds = uniqueDepIds.slice(0, 10);
           
           Promise.all(limitedIds.map(id => 
             fetchWithProxy(`https://api.curseforge.com/v1/mods/${id}`)
-              .catch(e => null) // Ignore failed fetches
+              .catch(e => null) 
           )).then(results => {
             const deps = results
               .filter(r => r && r.data)
@@ -266,7 +260,11 @@ export default function ModsPluginsTab({ server }) {
                 id: r.data.id,
                 name: r.data.name,
                 icon: r.data.logo?.thumbnailUrl,
-                url: r.data.links?.websiteUrl
+                url: r.data.links?.websiteUrl,
+                // Additional fields needed to treat this as a "selectedItem"
+                description: r.data.summary,
+                downloads: r.data.downloadCount,
+                slug: r.data.slug
               }));
             setItemDependencies(deps);
             setLoadingDependencies(false);
@@ -300,12 +298,35 @@ export default function ModsPluginsTab({ server }) {
       if (!res.ok) throw new Error((await res.json()).error || 'Installation failed');
       
       setSuccess(`Installed ${selectedItem.name} (${version.name}) to /${folder}! Restart server to apply.`);
-      setSelectedItem(null);
+      // We don't close the modal immediately so they can see the success or install deps
     } catch (error) {
       setError(error.message);
     } finally {
       setLoadingInstall(false);
     }
+  };
+
+  // --- NEW: Switch modal to the dependency ---
+  const handleViewDependency = (dep) => {
+    // Construct an item object compatible with selectedItem
+    const item = {
+      id: dep.id,
+      name: dep.name,
+      description: dep.description,
+      version: 'Latest', // Placeholder
+      downloads: dep.downloads,
+      source: 'curseforge',
+      type: 'mod',
+      icon: dep.icon,
+      websiteUrl: dep.url
+    };
+    
+    // Switch view
+    setSelectedItem(item);
+    // Reset to files tab so they can immediately see versions to install
+    setModalTab('files'); 
+    // Load versions for this new item
+    fetchVersions(item); 
   };
 
   return (
@@ -444,7 +465,6 @@ export default function ModsPluginsTab({ server }) {
               <div className="flex justify-between items-start mb-3">
                 <div className="flex-1 pr-4">
                   <h3 className="text-lg font-bold text-gray-900">{selectedItem.name}</h3>
-                  {/* Clickable Description */}
                   <p 
                     onClick={() => selectedItem.websiteUrl && window.open(selectedItem.websiteUrl, '_blank')}
                     className="text-sm text-gray-500 mt-1 line-clamp-2 cursor-pointer hover:text-indigo-600 hover:bg-indigo-50 rounded p-1 -ml-1 transition-colors"
@@ -583,16 +603,18 @@ export default function ModsPluginsTab({ server }) {
                           />
                           <div className="flex-1 min-w-0">
                             <h4 className="font-bold text-gray-900 text-sm truncate">{dep.name}</h4>
-                            <a 
-                              href={dep.url} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="text-xs text-indigo-600 hover:underline flex items-center gap-1 mt-0.5"
-                            >
-                              View Page <LinkIcon className="w-3 h-3" />
-                            </a>
+                            <div className="flex gap-2 text-xs text-gray-500 mt-0.5">
+                              <span>{dep.downloads > 0 ? formatFileSize(dep.downloads) + ' downloads' : 'Dependency'}</span>
+                            </div>
                           </div>
-                          {/* We don't have a direct install button for deps yet because we need to find compatible versions for them, which is complex. */}
+                          
+                          {/* Navigate to Dependency Button */}
+                          <button
+                            onClick={() => handleViewDependency(dep)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-indigo-50 text-indigo-700 border border-gray-200 hover:border-indigo-200 rounded-lg text-xs font-medium transition-all"
+                          >
+                            Select Version <ArrowRightCircleIcon className="w-4 h-4" />
+                          </button>
                         </div>
                       ))}
                     </>
