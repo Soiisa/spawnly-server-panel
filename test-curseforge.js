@@ -1,7 +1,7 @@
 // test-curseforge.js
 
 // REPLACE THIS with your actual API Key from the CurseForge Console
-const API_KEY = '$2a$10$O8htVi5bIPkuJXVEj8apEOo8pHcW90Af.gJZ1lo5Gu0u0wvtDflGm'; 
+const API_KEY = '$2a$10$C3eETtxhymLpEpVCf82OmuTsTJizrfTN0gPyl.kICQDSmEWcAqsjm'; 
 
 async function testCurseForge() {
   // Minecraft Game ID is 432

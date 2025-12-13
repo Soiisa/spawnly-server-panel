@@ -627,7 +627,7 @@ write_files:
     permissions: '0644'
     content: |
       [Unit]
-      Description=Minecraft Server
+      Description=Minecraft Server (Wrapper)
       After=network.target
 
       [Service]
@@ -635,17 +635,19 @@ write_files:
       Environment=SOFTWARE=${software}
       Environment=VERSION=${escapedVersion}
       Environment=IS_MODERN_FORGE=${isModernForge}
+      Environment=SERVER_ID=${serverId}
+      Environment=SUPABASE_URL=${escapedSupabaseUrl}
+      Environment=SUPABASE_SERVICE_ROLE_KEY=${escapedSupabaseKey}
+      Environment=HEAP_GB=${heapGb}
+      
+      # Run the wrapper logic
       ExecStartPre=/usr/local/bin/mc-sync-from-s3.sh
-      
-      # Flexible ExecStart to handle both run.sh (modern loaders) and java -jar (vanilla/legacy/hybrids)
-      ExecStart=/bin/bash -c 'if [ -f "run.sh" ]; then ./run.sh; else /usr/bin/java -Xmx${heapGb}G -Xms1G -jar server.jar nogui; fi'
-      
-      ExecStop=/bin/bash -c 'echo stop | /usr/bin/mcrcon -H 127.0.0.1 -P 25575 -p "${rconPassword}"'
+      ExecStart=/usr/bin/node /opt/minecraft/server-wrapper.js
       ExecStopPost=/usr/local/bin/mc-sync.sh
+      
       Restart=always
       RestartSec=10
       User=minecraft
-      Nice=5
       StandardOutput=journal
       StandardError=journal
       TimeoutStopSec=3000
@@ -667,27 +669,6 @@ write_files:
       Environment=NEXTJS_API_URL=${appBaseUrl.replace(/\/+$/,'')}/api/servers/update-status
       Environment=SUBDOMAIN=${escapedSubdomain}-api
       ExecStart=/usr/bin/node /opt/minecraft/status-reporter.js
-      Restart=always
-      RestartSec=5
-      User=minecraft
-      StandardOutput=journal
-      StandardError=journal
-
-      [Install]
-      WantedBy=multi-user.target
-  - path: /etc/systemd/system/mc-console.service
-    permissions: '0644'
-    content: |
-      [Unit]
-      Description=Minecraft Console to Supabase (Single Row)
-      After=network.target
-
-      [Service]
-      WorkingDirectory=/opt/minecraft
-      Environment=SERVER_ID=${serverId}
-      Environment=SUPABASE_URL=${escapedSupabaseUrl}
-      Environment=SUPABASE_SERVICE_ROLE_KEY=${escapedSupabaseKey}
-      ExecStart=/usr/bin/node /opt/minecraft/console-server.js
       Restart=always
       RestartSec=5
       User=minecraft
@@ -771,7 +752,7 @@ runcmd:
   - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
   - apt-get install -y nodejs awscli || true
   - cd /opt/minecraft || true
-  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors dotenv minecraft-query || true
+  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors dotenv minecraft-query body-parser || true
   - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
   - wget -O /usr/local/bin/mcrcon.tar.gz https://github.com/Tiiffi/mcrcon/releases/download/v0.7.2/mcrcon-0.7.2-linux-x86-64.tar.gz || true
@@ -779,7 +760,7 @@ runcmd:
   - chmod +x /usr/local/bin/mcrcon || true
   - rm /usr/local/bin/mcrcon.tar.gz || true
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption} || echo "[ERROR] Failed to download status-reporter.js"
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js ${endpointCliOption} || echo "[ERROR] Failed to download console-server.js"
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js ${endpointCliOption} || echo "[ERROR] Failed to download server-wrapper.js"
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js ${endpointCliOption} || echo "[ERROR] Failed to download properties-api.js"
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js ${endpointCliOption} || echo "[ERROR] Failed to download metrics-server.js"
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js ${endpointCliOption} || echo "[ERROR] Failed to download file-api.js"
@@ -789,8 +770,6 @@ runcmd:
   - systemctl enable mc-sync.service || true
   - systemctl enable mc-sync.timer || true
   - systemctl start mc-sync.timer || true
-  - systemctl enable mc-console || true
-  - systemctl start mc-console || true
   - systemctl enable minecraft || true
   - systemctl start minecraft || true
   - systemctl enable mc-status-reporter || true
@@ -807,6 +786,8 @@ runcmd:
   - ufw allow 3003/tcp comment 'Properties API'
   - ufw allow 3004/tcp comment 'Metrics API'
   - ufw allow 3005/tcp comment 'File API'
+  - ufw allow 3006/tcp comment 'Wrapper Command API'
+  - ufw allow 3007/tcp comment 'Status Reporter WS'
   - ufw allow 22
   - ufw --force enable
   - echo "[FINAL DEBUG] Cloud-init finished at $(date)"
@@ -824,7 +805,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const needsFileDeletion = serverRow.needs_file_deletion;
     const subdomain = serverRow.subdomain.toLowerCase() || '';
 
-    // --- 1. ZOMBIE CLEANUP (New Logic) ---
+    // --- 1. ZOMBIE CLEANUP ---
     // Check if a server with this name exists and delete it
     try {
         console.log(`[Provision] Checking for existing servers with name: ${serverRow.name}`);
@@ -851,7 +832,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         console.warn(`[Provision] Zombie cleanup check failed, attempting creation anyway: ${cleanupErr.message}`);
     }
 
-    // --- 2. S3 Cleanup (Existing Logic) ---
+    // --- 2. S3 Cleanup ---
     const s3Config = {
       S3_BUCKET: process.env.S3_BUCKET,
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
@@ -1018,7 +999,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const hetznerId = finalServer?.id || null;
     const newStatus = finalServer ? (finalServer.status === 'running' ? 'Running' : 'Initializing') : 'Initializing';
 
-    // --- 6. DNS Setup (Updated to Delete First) ---
+    // --- 6. DNS Setup ---
     let subdomainResult = null;
     if (ipv4 && serverRow.subdomain) {
       try {
