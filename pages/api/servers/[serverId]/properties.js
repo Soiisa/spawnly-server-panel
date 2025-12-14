@@ -32,23 +32,40 @@ const s3 = new AWS.S3({
 export default async function handler(req, res) {
   const { serverId } = req.query;
 
+  // --- SECURITY FIX: Authentication ---
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const token = authHeader.split(' ')[1];
+  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  // Check Ownership
+  const { data: server, error } = await supabaseAdmin
+    .from('servers')
+    .select('subdomain, rcon_password, status, user_id')
+    .eq('id', serverId)
+    .single();
+
+  if (error || !server) {
+    return res.status(404).json({ error: 'Server not found' });
+  }
+
+  if (server.user_id !== user.id) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  // ------------------------------------
+
   // Initialize S3 key for server.properties
   const s3Key = `servers/${serverId}/server.properties`;
 
   // Handle GET request - fetch server properties
   if (req.method === 'GET') {
     try {
-      // Get server info from database
-      const { data: server, error } = await supabaseAdmin
-        .from('servers')
-        .select('subdomain, rcon_password, status')
-        .eq('id', serverId)
-        .single();
-
-      if (error || !server) {
-        return res.status(404).json({ error: 'Server not found' });
-      }
-
       // If server is running and has an subdomain, try to fetch from game server
       if (server.status === 'Running' && server.subdomain) {
         try {
@@ -96,17 +113,6 @@ export default async function handler(req, res) {
   // Handle POST request - update server properties
   if (req.method === 'POST') {
     try {
-      // Get server info from database
-      const { data: server, error } = await supabaseAdmin
-        .from('servers')
-        .select('subdomain, rcon_password, status')
-        .eq('id', serverId)
-        .single();
-
-      if (error || !server) {
-        return res.status(404).json({ error: 'Server not found' });
-      }
-
       // If server is running and has an subdomain, try to save to game server
       if (server.status === 'Running' && server.subdomain) {
         try {

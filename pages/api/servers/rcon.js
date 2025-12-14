@@ -9,18 +9,36 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  // --- SECURITY FIX: Authentication ---
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const token = authHeader.split(' ')[1];
+  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const { serverId, command } = req.body || {};
   if (!serverId || !command) return res.status(400).json({ error: 'Missing serverId or command' });
 
   try {
-    // 1. Get Server Details
+    // 1. Get Server Details & Check Ownership
     const { data: server, error } = await supabaseAdmin
       .from('servers')
-      .select('subdomain, rcon_password')
+      .select('subdomain, rcon_password, user_id')
       .eq('id', serverId)
       .single();
 
     if (error || !server) return res.status(404).json({ error: 'Server not found' });
+    
+    // Authorization Check
+    if (server.user_id !== user.id) {
+        return res.status(403).json({ error: 'Forbidden: You do not own this server' });
+    }
+
     if (!server.subdomain) return res.status(400).json({ error: 'Server has no subdomain' });
 
     // 2. Send Command to Wrapper API (Port 3006)

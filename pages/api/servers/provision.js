@@ -1089,6 +1089,18 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // --- SECURITY FIX: Authentication ---
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const token = authHeader.split(' ')[1];
+  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const { serverId, version, ssh_keys = [] } = req.body;
 
   if (!serverId) {
@@ -1107,11 +1119,17 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Server not found', detail: error?.message });
     }
 
+    // --- SECURITY FIX: Authorization ---
+    if (serverRow.user_id !== user.id) {
+        return res.status(403).json({ error: 'Forbidden: You do not own this server' });
+    }
+
     if (!serverRow.subdomain) {
       console.error('No subdomain specified for serverId:', serverId);
       return res.status(400).json({ error: 'No subdomain specified' });
     }
 
+    // Pass validated data to the provisioning logic
     return await provisionServer(serverRow, version, ssh_keys, res);
   } catch (err) {
     console.error('Handler error:', err.message, err.stack);

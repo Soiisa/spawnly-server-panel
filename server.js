@@ -4,7 +4,6 @@ const express       = require('express');
 const http          = require('http');
 const { createClient } = require('@supabase/supabase-js');
 const WebSocket     = require('ws');
-const { v4: uuidv4 } = require('uuid');
 
 const PORT                = Number(process.env.PORT) || 3001;
 const SUPABASE_URL        = process.env.SUPABASE_URL;
@@ -24,95 +23,96 @@ const wss      = new WebSocket.Server({ noServer: true });
 /* ------------------------------------------------------------------
    Helper: broadcast to all browser clients of a serverId
 ------------------------------------------------------------------ */
-const clients = new Map(); // serverId → Set<WebSocket>
+const clients = new Map(); // serverId → Set<WebSocket|Response>
 
 function broadcast(serverId, msg) {
   const set = clients.get(serverId) || [];
-  set.forEach(ws => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+  set.forEach(client => {
+    // WebSocket Clients
+    if (client.readyState === WebSocket.OPEN) {
+        client.send(msg);
+    } 
+    // SSE Clients (Response objects)
+    else if (client.writable) {
+        client.write(`data: ${msg}\n\n`);
+    }
   });
 }
 
 /* ------------------------------------------------------------------
-   1. WebSocket endpoint for **browsers**
------------------------------------------------------------------- */
-wss.on('connection', async (ws, req) => {
-  const url = new URL(req.headers['x-forwarded-proto'] === 'https' ? 'https://' + req.headers.host : req.url, 'http://localhost');
-  const serverId = url.pathname.split('/').pop();
-
-  // ---- fetch last N lines for instant UI fill ----
-  const { data: history } = await supabase
-    .from('console_logs')
-    .select('line')
-    .eq('server_id', serverId)
-    .order('created_at', { ascending: false })
-    .limit(200);
-
-  if (history) {
-    history.reverse().forEach(row => ws.send(JSON.stringify({ type: 'log', line: row.line })));
-  }
-
-  // register client
-  if (!clients.has(serverId)) clients.set(serverId, new Set());
-  clients.get(serverId).add(ws);
-
-  ws.on('close', () => {
-    const set = clients.get(serverId);
-    if (set) { set.delete(ws); if (set.size === 0) clients.delete(serverId); }
-  });
-});
-
-/* ------------------------------------------------------------------
-   2. Upgrade handler – authenticates game-server WS
+   1. Upgrade handler – authenticates game-server WS
 ------------------------------------------------------------------ */
 server.on('upgrade', async (req, socket, head) => {
-  const pathname = req.url.split('?')[0];
-  if (!pathname.startsWith('/ws/console/')) { socket.destroy(); return; }
-
-  const serverId = pathname.split('/').pop();
   const url = new URL(req.url, 'http://localhost');
-  const token = url.searchParams.get('token');
+  const pathname = url.pathname;
 
-  if (token !== SERVER_TOKEN) {
-    console.warn('Invalid token from', req.socket.remoteAddress);
-    socket.destroy();
+  // A. Game Server Connection (Source of logs)
+  if (pathname.startsWith('/ws/console/')) {
+    const serverId = pathname.split('/').pop();
+    const token = url.searchParams.get('token');
+
+    if (token !== SERVER_TOKEN) {
+      console.warn('Invalid token from', req.socket.remoteAddress);
+      socket.destroy();
+      return;
+    }
+
+    // Verify server exists
+    const { data } = await supabase.from('servers').select('id').eq('id', serverId).single();
+    if (!data) { socket.destroy(); return; }
+
+    wss.handleUpgrade(req, socket, head, ws => {
+      wss.emit('connection', ws, req);
+      // Game-server → proxy messages
+      ws.on('message', async raw => {
+        let msg;
+        try { msg = JSON.parse(raw); } catch { return; }
+        if (msg.type !== 'log' || typeof msg.line !== 'string') return;
+
+        // 1. Persist
+        await supabase.from('console_logs').insert({
+          server_id: serverId,
+          line: msg.line.trim()
+        });
+
+        // 2. Broadcast to browsers
+        broadcast(serverId, raw);
+      });
+    });
     return;
   }
 
-  // Verify server really exists (optional but nice)
-  const { data } = await supabase.from('servers').select('id').eq('id', serverId).single();
-  if (!data) { socket.destroy(); return; }
-
-  wss.handleUpgrade(req, socket, head, ws => {
-    wss.emit('connection', ws, req);
-    // Game-server → proxy messages
-    ws.on('message', async raw => {
-      let msg;
-      try { msg = JSON.parse(raw); } catch { return; }
-      if (msg.type !== 'log' || typeof msg.line !== 'string') return;
-
-      // 1. Persist
-      await supabase.from('console_logs').insert({
-        server_id: serverId,
-        line: msg.line.trim()
-      });
-
-      // 2. Broadcast to browsers
-      broadcast(serverId, raw);
-    });
-  });
+  // B. Browser Connection - If your app uses WS for clients, secure it here.
+  // For now, based on your files, clients use SSE. Reject other WS attempts.
+  socket.destroy();
 });
 
 /* ------------------------------------------------------------------
-   3. SSE fallback (for browsers that cannot open raw WS)
+   2. SSE fallback (Secured)
 ------------------------------------------------------------------ */
 app.get('/sse/console/:serverId', async (req, res) => {
   const { serverId } = req.params;
-  const { data: server } = await supabase.from('servers').select('id').eq('id', serverId).single();
+  const { token } = req.query; // Client MUST provide JWT
+
+  if (!token) return res.status(401).json({ error: 'Missing authentication token' });
+
+  // --- SECURITY FIX: Verify User & Ownership ---
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { data: server } = await supabase.from('servers').select('user_id').eq('id', serverId).single();
   if (!server) return res.status(404).end('Server not found');
+
+  if (server.user_id !== user.id) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this server' });
+  }
+  // ---------------------------------------------
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
   // send history
@@ -134,14 +134,10 @@ app.get('/sse/console/:serverId', async (req, res) => {
     if (set) set.delete(res);
   });
 
-  // forward future logs
-  const listener = setInterval(() => {}, 30000); // keep-alive
-  const handler = (msg) => {
-    try { res.write(`data: ${msg}\n\n`); } catch {}
-  };
-  const broadcastSet = clients.get(serverId);
-  broadcastSet.forEach(c => c === res || c.readyState === WebSocket.OPEN && c.onmessage && c.onmessage({ data: '' })); // dummy
-  // actual broadcast is done in the WS handler above; SSE just receives the same JSON string
+  // keep-alive heartbeat
+  const listener = setInterval(() => {
+      if (res.writable) res.write(': keep-alive\n\n');
+  }, 30000); 
 });
 
 /* ------------------------------------------------------------------
@@ -151,7 +147,4 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 
 server.listen(PORT, () => {
   console.log(`Proxy listening on ${PORT}`);
-  console.log(`  WS browsers → wss://spawnly.net/ws/console/:id`);
-  console.log(`  WS game    → wss://spawnly.net/ws/console/:id?token=…`);
-  console.log(`  SSE fallback → /sse/console/:id`);
 });

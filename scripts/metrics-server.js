@@ -1,6 +1,9 @@
 // scripts/metrics-server.js
 const WebSocket = require('ws');
 const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const url = require('url');
 
 const PORT = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT, 10) : 3004;
 
@@ -23,10 +26,31 @@ function getSystemMetrics() {
   };
 }
 
-wss.on('connection', (ws) => {
+// Helper to read RCON password for auth
+function getRconPassword() {
+  try {
+    const props = fs.readFileSync(path.join(process.cwd(), 'server.properties'), 'utf8');
+    const match = props.match(/^rcon\.password=(.*)$/m);
+    return match ? match[1].trim() : null;
+  } catch (e) { return null; }
+}
+
+wss.on('connection', (ws, req) => {
+  // --- SECURITY FIX: Authenticate Client ---
+  const parameters = url.parse(req.url, true);
+  const token = parameters.query.token;
+  const rconPass = getRconPassword();
+
+  if (!rconPass || token !== rconPass) {
+    console.log('Metrics connection rejected: Invalid or missing token');
+    ws.close(1008, 'Unauthorized');
+    return;
+  }
+  // ----------------------------------------
+
   console.log('Metrics client connected');
   const interval = setInterval(() => {
-    if (ws.readyState === ws.OPEN) {
+    if (ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(JSON.stringify(getSystemMetrics()));
       } catch (e) {
@@ -34,6 +58,7 @@ wss.on('connection', (ws) => {
       }
     }
   }, 2000);
+
   ws.on('close', () => {
     console.log('Metrics client disconnected');
     clearInterval(interval);
