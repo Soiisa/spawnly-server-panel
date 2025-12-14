@@ -33,6 +33,54 @@ const sanitizeSubdomain = (name) => {
     .slice(0, 63); // Ensure max length
 };
 
+// --- NEW: Helper to auto-detect latest version ---
+const getLatestVersion = async (software) => {
+  try {
+    const s = software.toLowerCase();
+    
+    // Vanilla
+    if (s === 'vanilla') {
+      const res = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
+      if (res.ok) {
+        const data = await res.json();
+        return data.latest.release;
+      }
+    }
+    // Paper Ecosystem
+    if (['paper', 'folia', 'velocity', 'waterfall'].includes(s)) {
+      const res = await fetch(`https://api.papermc.io/v2/projects/${s}`);
+      if (res.ok) {
+        const data = await res.json();
+        const v = data.versions;
+        return v[v.length - 1]; // Last is latest
+      }
+    }
+    // Purpur
+    if (s === 'purpur') {
+      const res = await fetch('https://api.purpurmc.org/v2/purpur');
+      if (res.ok) {
+        const data = await res.json();
+        const v = data.versions;
+        return v[v.length - 1];
+      }
+    }
+    // Fabric
+    if (s === 'fabric') {
+        const res = await fetch('https://meta.fabricmc.net/v2/versions/game');
+        if (res.ok) {
+            const data = await res.json();
+            const stable = data.find(v => v.stable);
+            return stable ? stable.version : data[0].version;
+        }
+    }
+    
+    return null; // Fallback to null (user must select manually)
+  } catch (e) {
+    console.warn('Failed to fetch latest version for', software, e.message);
+    return null;
+  }
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
@@ -44,8 +92,15 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Missing S3 configuration env vars' });
   }
 
-  const { name, game = 'minecraft', software = 'paper', version = null, ram = 4, costPerHour = 0, userId, subdomain } = req.body;
+  // Changed const to let for version
+  let { name, game = 'minecraft', software = 'paper', version = null, ram = 4, costPerHour = 0, userId, subdomain } = req.body;
   if (!name || !userId) return res.status(400).json({ error: 'Missing required fields: name, userId' });
+
+  // --- NEW: Auto-fill version if missing ---
+  if (!version && game === 'minecraft') {
+    version = await getLatestVersion(software);
+    console.log(`[Create] Auto-detected latest version for ${software}: ${version}`);
+  }
 
   // Use provided subdomain or derive from name
   const finalSubdomain = subdomain ? sanitizeSubdomain(subdomain) : sanitizeSubdomain(name);
@@ -75,14 +130,14 @@ export default async function handler(req, res) {
       name,
       game,
       type: software,
-      version,
+      version, // Will now be the latest version if it was null
       ram,
       status: 'Stopped',
       cost_per_hour: costPerHour,
       hetzner_id: null,
       ipv4: null,
       subdomain: finalSubdomain,
-      rcon_password: rconPassword, // Store generated password
+      rcon_password: rconPassword, 
     };
 
     const { data, error } = await supabaseAdmin
@@ -97,11 +152,10 @@ export default async function handler(req, res) {
     }
 
     // Initialize S3 Files if game is Minecraft
-    // This pre-populates the file manager so users can edit config before starting the server.
     if (game === 'minecraft') {
       const s3Prefix = `servers/${data.id}/`;
       
-      // Default Server Properties (Matches provision.js defaults)
+      // Default Server Properties
       const defaultProperties = [
         'enable-rcon=true',
         'rcon.port=25575',
@@ -145,8 +199,6 @@ export default async function handler(req, res) {
         console.log(`Initialized S3 files for server ${data.id}`);
       } catch (s3Err) {
         console.error('Failed to initialize S3 files:', s3Err);
-        // We log the error but don't fail the request, as the DB record is created.
-        // The server will still function, but files might appear empty initially.
       }
     }
 
