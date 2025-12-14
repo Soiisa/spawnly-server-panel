@@ -1,3 +1,5 @@
+// pages/server/[id].js
+
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
@@ -277,6 +279,12 @@ export default function ServerDetailPage({ initialServer }) {
     setActionLoading(true);
     setError(null);
     try {
+      // --- FIX: Get Session for Authorization ---
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+      const token = session.access_token;
+      // ------------------------------------------
+
       if (action === 'start') {
         setServer(p => ({ ...p, status: 'Starting' }));
         const { data: sData } = await supabase.from('servers').select('type, version, pending_type, pending_version').eq('id', server.id).single();
@@ -284,7 +292,10 @@ export default function ServerDetailPage({ initialServer }) {
         
         await safeFetchJson('/api/servers/provision', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` // <--- Added Header
+          },
           body: JSON.stringify({
             serverId: server.id,
             type: sData.pending_type || sData.type,
@@ -301,9 +312,13 @@ export default function ServerDetailPage({ initialServer }) {
         const targetStatus = action === 'stop' ? 'Stopping' : 'Restarting';
         const expected = action === 'stop' ? ['Stopped'] : ['Running'];
         setServer(p => ({ ...p, status: targetStatus }));
+        
         await safeFetchJson('/api/servers/action', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` // <--- Added Header
+          },
           body: JSON.stringify({ serverId: server.id, action }),
         });
         pollUntilStatus(expected);
@@ -333,6 +348,11 @@ export default function ServerDetailPage({ initialServer }) {
   const handleSaveMotd = async () => {
     setSavingMotd(true);
     try {
+      // --- FIX: Get Session for Authorization ---
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+      // ------------------------------------------
+
       // 1. Update DB (for Sleeper & Dashboard)
       const { error: dbError } = await supabase
         .from('servers')
@@ -342,9 +362,10 @@ export default function ServerDetailPage({ initialServer }) {
       if (dbError) throw dbError;
 
       // 2. Update server.properties (for Actual Server)
-      // Note: If server is running, this updates via RCON/API. If stopped, updates via S3.
-      // We first fetch existing to preserve other settings.
-      const propsRes = await fetch(`/api/servers/${server.id}/properties`);
+      const propsRes = await fetch(`/api/servers/${server.id}/properties`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` } // <--- Added Header
+      });
+      
       if (propsRes.ok) {
         let propsText = await propsRes.text();
         // Regex replace motd line
@@ -356,7 +377,10 @@ export default function ServerDetailPage({ initialServer }) {
         
         await fetch(`/api/servers/${server.id}/properties`, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
+          headers: { 
+            'Content-Type': 'text/plain',
+            'Authorization': `Bearer ${session.access_token}` // <--- Added Header
+          },
           body: propsText
         });
       }
