@@ -370,6 +370,7 @@ packages:
   - apt-transport-https
   - ca-certificates
   - unzip
+  - zip
   - python3
   - python3-pip
   - groff

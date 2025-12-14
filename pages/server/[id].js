@@ -20,7 +20,8 @@ import {
   PuzzlePieceIcon, 
   PencilSquareIcon, 
   CheckIcon, 
-  XMarkIcon 
+  XMarkIcon,
+  ArchiveBoxIcon // Added Icon
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -35,6 +36,7 @@ import Header from '../../components/ServersHeader';
 import Footer from '../../components/ServersFooter';
 import PlayersTab from '../../components/PlayersTab';
 import WorldTab from '../../components/WorldTab';
+import BackupsTab from '../../components/BackupsTab'; // Added Import
 
 // Helper: Convert DB player string to array
 const getOnlinePlayersArray = (server) => {
@@ -279,11 +281,9 @@ export default function ServerDetailPage({ initialServer }) {
     setActionLoading(true);
     setError(null);
     try {
-      // --- FIX: Get Session for Authorization ---
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
       const token = session.access_token;
-      // ------------------------------------------
 
       if (action === 'start') {
         setServer(p => ({ ...p, status: 'Starting' }));
@@ -294,7 +294,7 @@ export default function ServerDetailPage({ initialServer }) {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` // <--- Added Header
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
             serverId: server.id,
@@ -317,7 +317,7 @@ export default function ServerDetailPage({ initialServer }) {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` // <--- Added Header
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ serverId: server.id, action }),
         });
@@ -344,16 +344,12 @@ export default function ServerDetailPage({ initialServer }) {
     finally { setActionLoading(false); }
   };
 
-  // --- MOTD Handler ---
   const handleSaveMotd = async () => {
     setSavingMotd(true);
     try {
-      // --- FIX: Get Session for Authorization ---
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
-      // ------------------------------------------
 
-      // 1. Update DB (for Sleeper & Dashboard)
       const { error: dbError } = await supabase
         .from('servers')
         .update({ motd: motdText })
@@ -361,14 +357,12 @@ export default function ServerDetailPage({ initialServer }) {
       
       if (dbError) throw dbError;
 
-      // 2. Update server.properties (for Actual Server)
       const propsRes = await fetch(`/api/servers/${server.id}/properties`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` } // <--- Added Header
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
       
       if (propsRes.ok) {
         let propsText = await propsRes.text();
-        // Regex replace motd line
         if (propsText.includes('motd=')) {
           propsText = propsText.replace(/^motd=.*$/m, `motd=${motdText}`);
         } else {
@@ -379,7 +373,7 @@ export default function ServerDetailPage({ initialServer }) {
           method: 'POST',
           headers: { 
             'Content-Type': 'text/plain',
-            'Authorization': `Bearer ${session.access_token}` // <--- Added Header
+            'Authorization': `Bearer ${session.access_token}`
           },
           body: propsText
         });
@@ -412,7 +406,6 @@ export default function ServerDetailPage({ initialServer }) {
   const isRunning = status === 'Running';
   const isStopped = status === 'Stopped';
   const isUnknown = status === 'Unknown';
-  // Allow "Stop" if unknown, so we exclude Unknown from "Busy" check
   const isBusy = !isRunning && !isStopped && !isUnknown;
 
   const sType = (server.type || '').toLowerCase();
@@ -430,6 +423,7 @@ export default function ServerDetailPage({ initialServer }) {
     { id: 'software', label: 'Software', icon: CpuChipIcon },
     ...(showMods ? [{ id: 'mods', label: modLabel, icon: PuzzlePieceIcon }] : []),
     { id: 'files', label: 'Files', icon: ClipboardDocumentIcon },
+    { id: 'backups', label: 'Backups', icon: ArchiveBoxIcon }, // Added Backups Tab
     { id: 'console', label: 'Console', icon: ClockIcon },
     { id: 'properties', label: 'Properties', icon: ServerIcon },
     { id: 'players', label: 'Players', icon: UserGroupIcon },
@@ -754,6 +748,9 @@ export default function ServerDetailPage({ initialServer }) {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                   {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} /> : <p className="text-center text-gray-500">Authenticating file access...</p>}
                 </div>
+              )}
+              {activeTab === 'backups' && (
+                <BackupsTab server={server} />
               )}
               {activeTab === 'console' && (
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
