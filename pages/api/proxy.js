@@ -1,4 +1,8 @@
 // pages/api/proxy.js
+
+// Allowlist of domains that are safe to proxy
+const ALLOWED_HOSTS = ['api.curseforge.com'];
+
 export default async function handler(req, res) {
   const { url } = req.query;
   
@@ -7,12 +11,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    const targetUrl = decodeURIComponent(url);
-    
+    const targetUrlString = decodeURIComponent(url);
+    const targetUrl = new URL(targetUrlString);
+
+    // --- SECURITY FIX: Validate Hostname ---
+    if (!ALLOWED_HOSTS.includes(targetUrl.hostname)) {
+      console.warn(`[Proxy] Blocked SSRF attempt to: ${targetUrl.hostname}`);
+      return res.status(403).json({ error: 'Forbidden: Domain not allowed' });
+    }
+    // ---------------------------------------
+
     // Remove custom User-Agent to avoid blocking by Cloudflare/CurseForge
     const headers = {}; 
 
-    if (targetUrl.includes('api.curseforge.com')) {
+    if (targetUrlString.includes('api.curseforge.com')) {
       const apiKey = process.env.CURSEFORGE_API_KEY;
 
       if (!apiKey) {
@@ -31,11 +43,11 @@ export default async function handler(req, res) {
       headers['User-Agent'] = 'Spawnly-Panel/1.0';
     }
 
-    const response = await fetch(targetUrl, { headers });
+    const response = await fetch(targetUrlString, { headers });
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Upstream error (${response.status}) for ${targetUrl}:`, errorText);
+      console.error(`❌ Upstream error (${response.status}) for ${targetUrlString}:`, errorText);
       return res.status(response.status).json({ error: `Upstream error: ${response.statusText}` });
     }
 

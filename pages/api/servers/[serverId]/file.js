@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   // Authenticate using server row
   const { data: server, error } = await supabaseAdmin
     .from('servers')
-    .select('rcon_password, ipv4, status')
+    .select('rcon_password, ipv4, status, subdomain')
     .eq('id', serverId)
     .single();
 
@@ -55,13 +55,32 @@ export default async function handler(req, res) {
     try {
       let relPath = req.query.path;
       if (!relPath) return res.status(400).json({ error: 'Missing path' });
-      relPath = relPath.replace(/^\/+/, '');
+      
+      // --- Security Fix: Path Sanitization ---
+      // 1. Remove null bytes
+      if (relPath.indexOf('\0') !== -1) return res.status(400).json({ error: 'Invalid path' });
+      
+      // 2. Normalize and check for traversal
+      let safePath = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '');
+      if (safePath.includes('..')) {
+         return res.status(400).json({ error: 'Path traversal detected' });
+      }
+      
+      // 3. Remove leading slashes
+      relPath = safePath.replace(/^\/+/, '');
+      
       const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
+      
+      // 4. Strict Scope Check
+      if (!s3Key.startsWith(s3Prefix)) {
+          return res.status(400).json({ error: 'Access denied: Path outside server scope' });
+      }
+      // ---------------------------------------
 
       let content;
       if (server.status === 'Running' && server.ipv4) {
         try {
-          const response = await fetch(`https://${server.subdomain}.spawnly.net/files/api/file?path=${encodeURIComponent(relPath)}`, {
+          const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/file?path=${encodeURIComponent(relPath)}`, {
             headers: {
               'Authorization': `Bearer ${server.rcon_password}`,
             },
@@ -69,20 +88,21 @@ export default async function handler(req, res) {
           });
 
           if (!response.ok) {
-            throw new Error(`Failed to fetch file from game server: ${response.status} ${await response.text().catch(() => '')}`);
+             // Fall through to S3
+             console.warn(`Game server file fetch failed: ${response.status}`);
+          } else {
+             content = await response.buffer();
+             // Async sync to S3 for consistency
+             s3.putObject({
+                Bucket: S3_BUCKET,
+                Key: s3Key,
+                Body: content,
+                ContentType: 'application/octet-stream',
+             }).promise().catch(err => console.error('Failed to sync to S3:', err));
           }
 
-          content = await response.buffer();
-          // Async sync to S3 for consistency
-          s3.putObject({
-            Bucket: S3_BUCKET,
-            Key: s3Key,
-            Body: content,
-            ContentType: 'application/octet-stream',
-          }).promise().catch(err => console.error('Failed to sync to S3:', err));
-
         } catch (fetchError) {
-          console.error('Game server fetch failed:', fetchError.message);  // More detailed log
+          console.error('Game server fetch failed:', fetchError.message);
           // Fall back to S3
         }
       }

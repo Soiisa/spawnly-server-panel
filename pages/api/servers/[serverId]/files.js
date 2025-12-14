@@ -51,6 +51,25 @@ async function getRawBody(req) {
   });
 }
 
+// Helper to sanitize path
+const sanitizePath = (inputPath) => {
+  // 1. Remove any null bytes
+  if (inputPath.indexOf('\0') !== -1) throw new Error('Invalid path');
+
+  // 2. Normalize and remove leading/trailing slashes
+  let safePath = path.normalize(inputPath || '').replace(/^(\.\.(\/|\\|$))+/, '');
+  
+  // 3. Prevent traversal (double verify)
+  if (safePath.includes('..')) {
+      throw new Error('Path traversal detected');
+  }
+  
+  // 4. Clean up slashes
+  safePath = safePath.replace(/^\/+/, '').replace(/\/+$/, '');
+  
+  return safePath;
+};
+
 export default async function handler(req, res) {
   const { serverId } = req.query;
   const s3Prefix = `servers/${serverId}/`;
@@ -58,7 +77,7 @@ export default async function handler(req, res) {
   // Authenticate using server row
   const { data: server, error } = await supabaseAdmin
     .from('servers')
-    .select('rcon_password, ipv4, status')
+    .select('rcon_password, ipv4, status, subdomain')
     .eq('id', serverId)
     .single();
 
@@ -71,13 +90,24 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // --- SECURITY FIX: Path Sanitization ---
+  let relPath = '';
+  try {
+      relPath = sanitizePath(req.query.path || '');
+  } catch (e) {
+      return res.status(400).json({ error: 'Invalid path' });
+  }
+  
+  // Construct absolute S3 Key and verify prefix
+  const s3Path = relPath ? path.join(s3Prefix, relPath).replace(/\\/g, '/') + '/' : s3Prefix;
+  if (!s3Path.startsWith(s3Prefix)) {
+      return res.status(400).json({ error: 'Access denied: Invalid path scope' });
+  }
+  // ---------------------------------------
+
   // Handle GET /files - list files
   if (req.method === 'GET') {
   try {
-    let relPath = req.query.path || '';
-    relPath = relPath.replace(/^\/+/, '').replace(/\/+$/, '');
-    const s3Path = relPath ? path.join(s3Prefix, relPath).replace(/\\/g, '/') + '/' : s3Prefix;
-
     if (server.status === 'Running' && server.ipv4) {
       try {
         const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/files?path=${encodeURIComponent(relPath)}`, {
@@ -165,8 +195,6 @@ export default async function handler(req, res) {
         }
 
         try {
-          let relPath = req.query.path || '';
-          relPath = relPath.replace(/^\/+/, '').replace(/\/+$/, '');
           const s3Key = path.join(s3Prefix, relPath, fileName).replace(/\\/g, '/');
 
           // Read file content
@@ -199,9 +227,6 @@ export default async function handler(req, res) {
       const body = await getRawBody(req);
       console.log('PUT request received for:', req.query.path, 'Body length:', body.length);
 
-      let relPath = req.query.path;
-      if (!relPath) return res.status(400).json({ error: 'Missing path' });
-      relPath = relPath.replace(/^\/+/, '').replace(/\/+$/, '');
       const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
 
       // Removed try to game server
@@ -225,9 +250,6 @@ export default async function handler(req, res) {
   // Handle DELETE /files - delete file or folder
   if (req.method === 'DELETE') {
     try {
-      let relPath = req.query.path;
-      if (!relPath) return res.status(400).json({ error: 'Missing path' });
-      relPath = relPath.replace(/^\/+/, '').replace(/\/+$/, '');
       const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
 
       // Removed try to game server

@@ -39,6 +39,19 @@ export const config = {
   },
 };
 
+// Allowed domains for datapacks
+const ALLOWED_DATAPACK_DOMAINS = [
+  'github.com',
+  'raw.githubusercontent.com',
+  'planetminecraft.com',
+  'cdn.modrinth.com',
+  'mediafilez.forgecdn.net', 
+  'edge.forgecdn.net',
+  'api.papermc.io',
+  'drive.google.com', 
+  'dropbox.com'
+];
+
 export default async function handler(req, res) {
   const { serverId } = req.query;
   const s3Prefix = `servers/${serverId}/`;
@@ -166,11 +179,30 @@ export default async function handler(req, res) {
       if (datapacks) {
         const dpUrls = datapacks.split(',').map(url => url.trim());
         for (const url of dpUrls) {
-          if (url) {
+          if (!url) continue;
+
+          // --- Security Fix: SSRF Check ---
+          try {
+             const urlObj = new URL(url);
+             const isAllowed = ALLOWED_DATAPACK_DOMAINS.some(domain => urlObj.hostname.endsWith(domain));
+             if (!isAllowed) {
+                 console.warn(`[Security] Skipped disallowed datapack URL: ${url}`);
+                 continue;
+             }
+          } catch (e) {
+             console.warn(`[Security] Skipped invalid datapack URL: ${url}`);
+             continue;
+          }
+          // -------------------------------
+
+          try {
             const dpRes = await fetch(url);
             if (!dpRes.ok) continue;
             const buffer = await dpRes.buffer();
-            const dpName = url.split('/').pop() || 'datapack.zip';
+            // Sanitize datapack name
+            const rawName = url.split('/').pop() || 'datapack.zip';
+            const dpName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_');
+            
             const dpKey = path.join(worldPrefix, 'datapacks', dpName).replace(/\\/g, '/');
             await s3.putObject({
               Bucket: S3_BUCKET,
@@ -178,6 +210,8 @@ export default async function handler(req, res) {
               Body: buffer,
               ContentType: 'application/zip',
             }).promise();
+          } catch (fetchErr) {
+             console.error(`Failed to fetch datapack ${url}:`, fetchErr.message);
           }
         }
       }
@@ -232,11 +266,24 @@ export default async function handler(req, res) {
             }
           }
 
-          // Extract and upload
+          // Extract and upload with Zip Slip Protection
           const entries = zip.getEntries();
           for (const entry of entries) {
             if (!entry.isDirectory) {
-              const key = path.join(worldPrefix, entry.entryName).replace(/\\/g, '/');
+              // --- Security Fix: Zip Slip Protection ---
+              const safeName = path.normalize(entry.entryName).replace(/^(\.\.(\/|\\|$))+/, '');
+              if (safeName.includes('..')) {
+                  console.warn(`[Security] Skipped suspicious zip entry: ${entry.entryName}`);
+                  continue;
+              }
+              
+              const key = path.join(worldPrefix, safeName).replace(/\\/g, '/');
+              if (!key.startsWith(worldPrefix)) {
+                  console.warn(`[Security] Skipped entry outside world prefix: ${entry.entryName}`);
+                  continue;
+              }
+              // -----------------------------------------
+
               await s3.putObject({
                 Bucket: S3_BUCKET,
                 Key: key,

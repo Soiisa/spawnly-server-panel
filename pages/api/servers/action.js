@@ -263,6 +263,19 @@ export default async function handler(req, res) {
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // --- SECURITY FIX: Authenticate User ---
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized', detail: 'Missing Authorization header' });
+    }
+    const token = authHeader.split(' ')[1];
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Unauthorized', detail: 'Invalid token' });
+    }
+    // ---------------------------------------
+
     const { serverId, action } = req.body || {};
     if (!serverId || !action) {
       console.error('[API:action] Missing serverId or action in request body');
@@ -280,6 +293,14 @@ export default async function handler(req, res) {
       console.error('[API:action] Server not found or error:', serverErr?.message);
       return res.status(404).json({ error: 'Server not found', detail: serverErr?.message || null });
     }
+    
+    // --- SECURITY FIX: Authorize Ownership ---
+    if (server.user_id !== user.id) {
+      console.warn(`[Security] User ${user.id} attempted to control server ${server.id} owned by ${server.user_id}`);
+      return res.status(403).json({ error: 'Forbidden', detail: 'You do not own this server' });
+    }
+    // ----------------------------------------
+
     console.log(`[API:action] Server data retrieved:`, { id: server.id, subdomain: server.subdomain, hetzner_id: server.hetzner_id, status: server.status, ipv4: server.ipv4, current_session_id: server.current_session_id });
 
     const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();

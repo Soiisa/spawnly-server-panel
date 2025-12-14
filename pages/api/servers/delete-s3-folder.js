@@ -1,10 +1,16 @@
+// pages/api/servers/delete-s3-folder.js
+import { createClient } from '@supabase/supabase-js';
 import { S3Client, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const S3_ENDPOINT = process.env.S3_ENDPOINT;
 const S3_BUCKET = process.env.S3_BUCKET;
 const S3_REGION = process.env.S3_REGION;
 const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
 const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
+
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 const s3Client = new S3Client({
   endpoint: S3_ENDPOINT,
@@ -51,10 +57,37 @@ export default async function handler(req, res) {
     console.log('[API:delete-s3-folder] Received request:', { method: req.method, body: req.body });
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+    // --- 1. Authentication ---
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized', detail: 'Missing Authorization header' });
+    }
+    const token = authHeader.split(' ')[1];
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Unauthorized', detail: 'Invalid token' });
+    }
+
     const { serverId } = req.body || {};
     if (!serverId) {
       console.error('[API:delete-s3-folder] Missing serverId in request body');
       return res.status(400).json({ error: 'Missing serverId' });
+    }
+
+    // --- 2. Authorization (Ownership Check) ---
+    const { data: server, error: serverErr } = await supabaseAdmin
+      .from('servers')
+      .select('user_id')
+      .eq('id', serverId)
+      .single();
+
+    if (serverErr || !server) {
+      return res.status(404).json({ error: 'Server not found' });
+    }
+    
+    if (server.user_id !== user.id) {
+      return res.status(403).json({ error: 'Forbidden', detail: 'You do not own this server' });
     }
 
     await deleteS3ServerFolder(serverId);

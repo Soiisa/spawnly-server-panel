@@ -42,6 +42,27 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing serverId' });
     }
 
+    // --- SECURITY FIX: Authenticate Reporter ---
+    // Fetch credentials securely using admin client
+    const { data: serverAuth, error: authErr } = await supabaseAdmin
+      .from('servers')
+      .select('rcon_password')
+      .eq('id', serverId)
+      .single();
+
+    if (authErr || !serverAuth) {
+        return res.status(404).json({ error: 'Server not found' });
+    }
+
+    const authHeader = req.headers.authorization;
+    // The server-wrapper MUST send "Bearer <RCON_PASSWORD>"
+    // This authenticates that the update is coming from the actual VPS.
+    if (!authHeader || authHeader !== `Bearer ${serverAuth.rcon_password}`) {
+      console.warn(`[Security] Invalid status update attempt for ${serverId}`);
+      return res.status(401).json({ error: 'Unauthorized status update' });
+    }
+    // -------------------------------------------
+
     const now = timestamp ? new Date(timestamp) : new Date();
 
     // Fetch current server state to check existing timers
@@ -52,7 +73,6 @@ export default async function handler(req, res) {
       .single();
 
     if (fetchErr || !server) {
-      console.error('Server not found:', serverId, fetchErr?.message);
       return res.status(404).json({ error: 'Server not found' });
     }
 
@@ -78,7 +98,6 @@ export default async function handler(req, res) {
           // It was not empty before, start the timer now
           updates.last_empty_at = now.toISOString();
         } 
-        // If server.last_empty_at is already set, we leave it alone so it counts from the *first* time it became empty
       }
     } else {
       // If not running, clear the timer

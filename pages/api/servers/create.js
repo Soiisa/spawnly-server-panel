@@ -92,9 +92,25 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Missing S3 configuration env vars' });
   }
 
+  // --- SECURITY FIX: Authenticate User ---
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized', detail: 'Missing Authorization header' });
+  }
+  const token = authHeader.split(' ')[1];
+  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Unauthorized', detail: 'Invalid token' });
+  }
+  const authenticatedUserId = user.id;
+  // ---------------------------------------
+
   // Changed const to let for version
-  let { name, game = 'minecraft', software = 'paper', version = null, ram = 4, costPerHour = 0, userId, subdomain } = req.body;
-  if (!name || !userId) return res.status(400).json({ error: 'Missing required fields: name, userId' });
+  let { name, game = 'minecraft', software = 'paper', version = null, ram = 4, costPerHour = 0, subdomain } = req.body;
+  
+  // We do not trust req.body.userId anymore. We check name only.
+  if (!name) return res.status(400).json({ error: 'Missing required fields: name' });
 
   // --- NEW: Auto-fill version if missing ---
   if (!version && game === 'minecraft') {
@@ -126,7 +142,7 @@ export default async function handler(req, res) {
     const rconPassword = crypto.randomBytes(12).toString('hex');
 
     const insertPayload = {
-      user_id: userId,
+      user_id: authenticatedUserId, // --- SECURITY FIX: Use authenticated User ID ---
       name,
       game,
       type: software,

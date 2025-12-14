@@ -1,3 +1,4 @@
+// pages/api/servers/recreate.js
 import { createClient } from '@supabase/supabase-js';
 import { S3Client, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 
@@ -113,14 +114,26 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Missing environment variables' });
   }
 
+  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  // --- 1. Authentication ---
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized', detail: 'Missing Authorization header' });
+  }
+  const token = authHeader.split(' ')[1];
+  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Unauthorized', detail: 'Invalid token' });
+  }
+
   const { serverId, software, version } = req.body;
   
   if (!serverId || !software || !version) {
     console.error('Missing required parameters:', { serverId, software, version });
     return res.status(400).json({ error: 'Missing required parameters' });
   }
-
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
     const { data: server, error: serverError } = await supabaseAdmin
@@ -132,6 +145,11 @@ export default async function handler(req, res) {
     if (serverError || !server) {
       console.error('Server not found:', serverError?.message);
       return res.status(404).json({ error: 'Server not found', detail: serverError?.message });
+    }
+
+    // --- 2. Authorization (Ownership Check) ---
+    if (server.user_id !== user.id) {
+        return res.status(403).json({ error: 'Forbidden', detail: 'You do not own this server' });
     }
 
     // Stop the server if it's running

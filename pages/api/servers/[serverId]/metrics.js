@@ -1,6 +1,12 @@
 // pages/api/servers/[serverId]/metrics.js
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
 export default async function handler(req, res) {
-  const { serverId } = req.query;
+  const { serverId } = req.query; // This is the Supabase UUID
   if (!serverId) {
     return res.status(400).json({ error: "Missing serverId" });
   }
@@ -9,6 +15,41 @@ export default async function handler(req, res) {
   if (!token) {
     return res.status(500).json({ error: "Hetzner API token not set" });
   }
+
+  // --- SECURITY FIX: Auth & Ownership Check ---
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const userToken = authHeader.split(' ')[1];
+  const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(userToken);
+  
+  if (authErr || !user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  // Fetch the REAL Hetzner ID from DB to prevent Proxy Injection
+  const { data: server, error: dbErr } = await supabaseAdmin
+    .from('servers')
+    .select('hetzner_id, user_id')
+    .eq('id', serverId)
+    .single();
+
+  if (dbErr || !server) {
+      return res.status(404).json({ error: 'Server not found' });
+  }
+  
+  if (server.user_id !== user.id) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this server' });
+  }
+
+  if (!server.hetzner_id) {
+      return res.status(400).json({ error: 'Server not provisioned' });
+  }
+
+  // Use the trusted hetzner_id from the database
+  const hetznerId = server.hetzner_id;
+  // ---------------------------------------------
 
   try {
     // Time window: last 5 minutes
@@ -22,14 +63,18 @@ export default async function handler(req, res) {
       step: "60",
     });
 
-    const url = `https://api.hetzner.cloud/v1/servers/${serverId}/metrics?${params}`;
+    // Safe URL construction using verified ID
+    const url = `https://api.hetzner.cloud/v1/servers/${hetznerId}/metrics?${params}`;
+    
     const r = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!r.ok) {
       const txt = await r.text();
-      return res.status(r.status).json({ error: "Hetzner API error", detail: txt });
+      // Don't leak upstream errors blindly
+      console.error('Hetzner API Error:', r.status, txt);
+      return res.status(502).json({ error: "Upstream API error" });
     }
 
     const data = await r.json();
@@ -51,6 +96,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("Hetzner metrics error:", err);
-    res.status(500).json({ error: "Failed to fetch Hetzner metrics", detail: String(err) });
+    res.status(500).json({ error: "Failed to fetch metrics" });
   }
 }
