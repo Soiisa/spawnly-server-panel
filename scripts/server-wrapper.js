@@ -9,18 +9,18 @@ const cors = require('cors');
 
 // --- Configuration ---
 const PORT = 3006;
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SERVER_ID = process.env.SERVER_ID;
+const NEXTJS_API_URL = process.env.NEXTJS_API_URL;
+const RCON_PASSWORD = process.env.RCON_PASSWORD; // Required for log auth
 const HEAP_GB = process.env.HEAP_GB || '2';
 const USE_RUN_SH = fs.existsSync(path.join(process.cwd(), 'run.sh'));
 
-if (!SUPABASE_URL || !SUPABASE_KEY || !SERVER_ID) {
-  console.error('[Wrapper] Missing env: SUPABASE_URL, SUPABASE_KEY, SERVER_ID');
+if (!SERVER_ID || !NEXTJS_API_URL) {
+  console.error('[Wrapper] Missing env: SERVER_ID or NEXTJS_API_URL');
   process.exit(1);
 }
 
-// --- Log Buffer Logic (from console-server.js) ---
+// --- Log Buffer Logic ---
 const MAX_LOG_LINES = 500;
 const UPDATE_INTERVAL = 2000;
 let logBuffer = [];
@@ -29,7 +29,7 @@ const appendLog = (data) => {
   const line = data.toString().trim();
   if (!line) return;
   
-  // Print to system journal so we can still use journalctl if needed
+  // Print to system journal
   console.log(line); 
 
   logBuffer.push(line);
@@ -40,24 +40,26 @@ const appendLog = (data) => {
 
 const sendUpdate = async () => {
   if (logBuffer.length === 0) return;
-  const fullLog = logBuffer.join('\n');
+  
+  const logsToSend = logBuffer.join('\n');
+  logBuffer = []; // Clear buffer
   
   try {
-    const resp = await fetch(`${SUPABASE_URL}/rest/v1/server_console`, {
+    const resp = await fetch(NEXTJS_API_URL, {
       method: 'POST',
       headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates',
+        'Authorization': `Bearer ${RCON_PASSWORD}` // --- FIXED: Added Auth ---
       },
       body: JSON.stringify({
-        server_id: SERVER_ID,
-        console_log: fullLog,
-        updated_at: new Date().toISOString(),
+        serverId: SERVER_ID,
+        console_log: logsToSend, // --- FIXED: Changed 'log' to 'console_log' ---
       }),
     });
-    if (!resp.ok) console.error('[Wrapper] Log sync failed:', await resp.text());
+    
+    if (!resp.ok) {
+        console.error(`[Wrapper] Log sync failed (${resp.status}):`, await resp.text());
+    }
   } catch (err) {
     console.error('[Wrapper] Log sync error:', err.message);
   }
@@ -73,7 +75,8 @@ console.log(`[Wrapper] Starting server... Mode: ${USE_RUN_SH ? 'run.sh' : 'Direc
 
 if (USE_RUN_SH) {
   // Fix permissions just in case
-  fs.chmodSync('./run.sh', '755');
+  try { fs.chmodSync('./run.sh', '755'); } catch (e) {}
+  
   mcProcess = spawn('./run.sh', [], {
     cwd: process.cwd(),
     stdio: ['pipe', 'pipe', 'pipe'] // Pipe STDIN, STDOUT, STDERR
@@ -81,7 +84,7 @@ if (USE_RUN_SH) {
 } else {
   const args = [
     `-Xmx${HEAP_GB}G`,
-    `-Xms${Math.min(1, HEAP_GB)}G`, // Don't alloc full start ram if small
+    `-Xms${Math.min(1, HEAP_GB)}G`,
     '-jar', 'server.jar', 
     'nogui'
   ];
@@ -105,8 +108,8 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Helper to read password from properties file (same as file-api.js)
-const getRconPassword = async () => {
+// Helper to read password from properties file
+const getRconPasswordFromFile = async () => {
   try {
     const props = await fs.promises.readFile(path.join(process.cwd(), 'server.properties'), 'utf8');
     const match = props.match(/^rcon\.password=(.*)$/m);
@@ -119,7 +122,7 @@ const authenticate = async (req, res, next) => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
   
   const token = authHeader.substring(7);
-  const correctPass = await getRconPassword();
+  const correctPass = await getRconPasswordFromFile();
   
   if (!correctPass || token !== correctPass) return res.status(403).json({ error: 'Invalid token' });
   next();

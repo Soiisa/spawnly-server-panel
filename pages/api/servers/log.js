@@ -4,8 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Admin client to write to the database
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// Max log size in characters (approx 50KB) to prevent DB bloat
+const MAX_LOG_SIZE = 50000;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -22,7 +24,6 @@ export default async function handler(req, res) {
 
   try {
     // 1. Authenticate the VPS
-    // We check if the provided token matches the RCON password stored in the DB.
     const { data: server, error: dbErr } = await supabaseAdmin
       .from('servers')
       .select('rcon_password')
@@ -38,13 +39,35 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // 2. Persist the log securely
-    // Using upsert to update the single row for this server's console
+    // 2. Fetch Existing Log
+    const { data: currentData } = await supabaseAdmin
+      .from('server_console')
+      .select('console_log')
+      .eq('server_id', serverId)
+      .single();
+
+    let existingLog = currentData?.console_log || '';
+
+    // 3. Append & Trim
+    // We add a newline if there isn't one at the boundary
+    const separator = existingLog.endsWith('\n') ? '' : '\n';
+    let newFullLog = existingLog + separator + console_log;
+
+    if (newFullLog.length > MAX_LOG_SIZE) {
+      newFullLog = newFullLog.substring(newFullLog.length - MAX_LOG_SIZE);
+      // Clean up partial line at the start if cut
+      const firstNewline = newFullLog.indexOf('\n');
+      if (firstNewline !== -1 && firstNewline < 100) {
+        newFullLog = newFullLog.substring(firstNewline + 1);
+      }
+    }
+
+    // 4. Update DB
     const { error: upsertErr } = await supabaseAdmin
       .from('server_console')
       .upsert({ 
         server_id: serverId, 
-        console_log: console_log, 
+        console_log: newFullLog, 
         updated_at: new Date().toISOString() 
       }, { onConflict: 'server_id' });
 
