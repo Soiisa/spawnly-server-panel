@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+// CHANGED: Import shared client to prevent "Multiple GoTrueClient" warnings
+import { supabase } from '../lib/supabaseClient'; 
 import { 
   CommandLineIcon, 
   PaperAirplaneIcon, 
@@ -9,8 +10,6 @@ import {
   ArrowDownCircleIcon, 
   StopCircleIcon 
 } from '@heroicons/react/24/outline';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export default function ConsoleViewer({ server }) {
   // --- State ---
@@ -123,9 +122,17 @@ export default function ConsoleViewer({ server }) {
     setLines(prev => [...prev, `> ${cmdToSend}`]);
 
     try {
+      // --- FIX: Get Session for Authorization ---
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+      // ------------------------------------------
+
       const resp = await fetch('/api/servers/rcon', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}` // <--- Added Header
+        },
         body: JSON.stringify({ 
           serverId: server.id, 
           command: cmdToSend 
