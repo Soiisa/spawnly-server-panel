@@ -1,91 +1,89 @@
-// console-server.js
+// scripts/console-server.js
 require('dotenv').config();
 const { spawn } = require('child_process');
-const fetch = globalThis.fetch;
+const fetch = globalThis.fetch; // Node 18+ native fetch
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// --- CONFIGURATION ---
+// SECURITY FIX: Removed SUPABASE_KEY. Uses API endpoint instead.
+const API_URL = process.env.NEXTJS_API_URL || 'https://spawnly.net/api/servers/log';
 const SERVER_ID = process.env.SERVER_ID;
+const RCON_PASSWORD = process.env.RCON_PASSWORD; // Safe to exist on VPS
 
-if (!SUPABASE_URL || !SUPABASE_KEY || !SERVER_ID) {
-  console.error('Missing env: SUPABASE_URL, SUPABASE_KEY, SERVER_ID');
+if (!SERVER_ID || !RCON_PASSWORD) {
+  console.error('Missing env: SERVER_ID or RCON_PASSWORD');
   process.exit(1);
 }
 
-const SUPABASE_API = `${SUPABASE_URL}/rest/v1/server_console`;
 const HEADERS = {
-  'apikey': SUPABASE_KEY,
-  'Authorization': `Bearer ${SUPABASE_KEY}`,
+  'Authorization': `Bearer ${RCON_PASSWORD}`,
   'Content-Type': 'application/json',
-  'Prefer': 'resolution=merge-duplicates',
 };
 
-// Config
+// --- BUFFER LOGIC ---
 const MAX_LOG_LINES = 500;        // Max lines to keep
 const UPDATE_INTERVAL = 3000;     // Send update every 3s
 let logBuffer = [];
 
 // Append new lines and truncate
 const appendLog = (line) => {
-  logBuffer.push(line.trim());
+  const cleanLine = line.toString().trim();
+  if (!cleanLine) return;
+  
+  logBuffer.push(cleanLine);
   if (logBuffer.length > MAX_LOG_LINES) {
     logBuffer = logBuffer.slice(-MAX_LOG_LINES);
   }
 };
 
-// Send current buffer to Supabase (UPSERT via POST)
+// Send current buffer to API
 const sendUpdate = async () => {
   if (logBuffer.length === 0) return;
 
   const fullLog = logBuffer.join('\n');
 
   try {
-    const resp = await fetch(SUPABASE_API, {
+    const resp = await fetch(API_URL, {
       method: 'POST',
       headers: HEADERS,
       body: JSON.stringify({
-        server_id: SERVER_ID,
+        serverId: SERVER_ID,
         console_log: fullLog,
-        updated_at: new Date().toISOString(),
       }),
     });
 
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(`HTTP ${resp.status}: ${text}`);
+      console.warn(`[Console Sync] Upload failed: ${resp.status} ${resp.statusText}`);
     }
-
-    console.log(`Updated console log for server ${SERVER_ID} (${logBuffer.length} lines)`);
   } catch (err) {
-    console.error('Failed to update console:', err.message);
+    console.error('[Console Sync] Network error:', err.message);
   }
 };
 
+// Start Loop
 setInterval(sendUpdate, UPDATE_INTERVAL);
 
-console.log('Streaming console to single Supabase row (per server)');
+console.log('Starting secure log streamer...');
 
+// --- PROCESS SPAWNER ---
 const journalctl = spawn('journalctl', ['-u', 'minecraft.service', '-f', '-o', 'cat']);
 
 let buffer = '';
 journalctl.stdout.on('data', (chunk) => {
   buffer += chunk.toString();
   const lines = buffer.split('\n');
-  buffer = lines.pop(); // incomplete line
+  buffer = lines.pop(); // Keep incomplete line
 
-  lines
-    .filter(Boolean)
-    .map(l => l.trim())
-    .filter(l => l)
-    .forEach(appendLog);
+  lines.forEach(appendLog);
 });
 
 journalctl.stderr.on('data', d => console.error('journalctl stderr:', d.toString()));
+
 journalctl.on('close', code => {
   console.error(`journalctl exited with code ${code}`);
   process.exit(1);
 });
 
+// Graceful Shutdown
 process.on('SIGTERM', () => {
   journalctl.kill();
   sendUpdate().finally(() => process.exit(0));

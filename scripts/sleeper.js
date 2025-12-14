@@ -1,3 +1,4 @@
+// scripts/sleeper.js
 require('dotenv').config({ path: '.env.local' });
 const net = require('net');
 const { createClient } = require('@supabase/supabase-js');
@@ -10,110 +11,86 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const APP_BASE_URL = process.env.APP_BASE_URL || 'https://spawnly.net';
 const PROVISION_API_URL = `${APP_BASE_URL}/api/servers/provision`;
 const SLEEPER_PORT = 25565;
+const SLEEPER_SECRET = process.env.SLEEPER_SECRET; // Must match .env on Next.js
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  console.error("Missing Supabase credentials.");
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !SLEEPER_SECRET) {
+  console.error("Missing Supabase credentials or SLEEPER_SECRET.");
   process.exit(1);
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const server = net.createServer((socket) => {
-  // Connection State
-  let state = 'HANDSHAKE'; // HANDSHAKE -> STATUS or LOGIN
+  let state = 'HANDSHAKE'; 
   let buffer = Buffer.alloc(0);
   let subdomain = null;
 
   socket.on('data', async (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
 
-    // Process all complete packets in the buffer
     while (true) {
-      // 1. Read Packet Length (VarInt)
       let offset = 0;
       let packetLength = 0;
       try {
         packetLength = varint.decode(buffer, offset);
         offset += varint.decode.bytes;
-      } catch (e) {
-        // Incomplete VarInt, wait for more data
-        break;
-      }
+      } catch (e) { break; }
 
-      // 2. Check if we have the full packet
-      if (buffer.length < offset + packetLength) {
-        // Incomplete packet, wait for more data
-        break;
-      }
+      if (buffer.length < offset + packetLength) break;
 
-      // 3. Extract Payload
       const payload = buffer.slice(offset, offset + packetLength);
-      // Remove processed packet from buffer
       buffer = buffer.slice(offset + packetLength);
 
-      // 4. Handle Packet based on State
       try {
         if (state === 'HANDSHAKE') {
           handleHandshake(payload);
         } else if (state === 'STATUS') {
-          await handleStatus(payload); // Now Async
+          await handleStatus(payload);
         } else if (state === 'LOGIN') {
           await handleLogin(payload);
         }
       } catch (err) {
-        console.error(`[Sleeper] Error processing packet:`, err.message);
+        console.error(`[Sleeper] Packet error:`, err.message);
         socket.end();
       }
     }
   });
 
-  socket.on('error', (err) => {
-    // Ignore connection resets
-  });
+  socket.on('error', () => {});
 
-  // --- PROTOCOL HANDLERS ---
+  // --- HANDLERS ---
 
   function handleHandshake(payload) {
     let pOffset = 0;
-    
     const packetId = varint.decode(payload, pOffset);
     pOffset += varint.decode.bytes;
 
     if (packetId !== 0x00) return socket.end();
 
-    varint.decode(payload, pOffset); 
+    varint.decode(payload, pOffset); pOffset += varint.decode.bytes; // Proto ver
+    
+    const hostLen = varint.decode(payload, pOffset); 
     pOffset += varint.decode.bytes;
-
-    const hostLen = varint.decode(payload, pOffset);
-    pOffset += varint.decode.bytes;
-
     const host = payload.toString('utf8', pOffset, pOffset + hostLen);
     pOffset += hostLen;
-
     pOffset += 2; // Port
 
     const nextState = varint.decode(payload, pOffset);
 
+    // Extract subdomain (e.g. "my-server.spawnly.net" -> "my-server")
     const cleanHost = host.split(':')[0].replace(/\.$/, '');
     subdomain = cleanHost.split('.')[0].toLowerCase();
 
-    if (nextState === 1) {
-      state = 'STATUS';
-    } else if (nextState === 2) {
-      state = 'LOGIN';
-    } else {
-      socket.end();
-    }
+    if (nextState === 1) state = 'STATUS';
+    else if (nextState === 2) state = 'LOGIN';
+    else socket.end();
   }
 
   async function handleStatus(payload) {
     let pOffset = 0;
     const packetId = varint.decode(payload, pOffset);
 
-    // Packet 0x00: Request -> Respond with JSON
     if (packetId === 0x00) {
-      
-      // Fetch MOTD from DB
       let motd = "§b§lSpawnly Server\n§7Server is Stopped. Join to Start!";
       
       if (subdomain) {
@@ -122,11 +99,7 @@ const server = net.createServer((socket) => {
           .select('motd')
           .eq('subdomain', subdomain)
           .single();
-        
-        if (data?.motd) {
-          // Append " (Sleeping)" to let them know it's offline
-          motd = `${data.motd}\n§r§7(Server Sleeping)`;
-        }
+        if (data?.motd) motd = `${data.motd}\n§r§7(Server Sleeping)`;
       }
 
       const response = {
@@ -142,13 +115,9 @@ const server = net.createServer((socket) => {
         Buffer.from(varint.encode(jsonBuf.length)), 
         jsonBuf
       ]));
-    }
-    
-    // Packet 0x01: Ping -> Respond with Pong
-    else if (packetId === 0x01) {
+    } else if (packetId === 0x01) {
         pOffset += varint.decode.bytes; 
-        const pingPayload = payload.slice(pOffset); 
-        sendPacket(0x01, pingPayload);
+        sendPacket(0x01, payload.slice(pOffset));
     }
   }
 
@@ -167,23 +136,19 @@ const server = net.createServer((socket) => {
     }
   }
 
-  // --- LOGIC HELPER ---
-
   async function attemptWakeServer(username) {
     const { data: serverInfo, error } = await supabase
       .from('servers')
-      .select('id, status, whitelist_enabled, version, name')
+      .select('id, status, whitelist_enabled, version')
       .eq('subdomain', subdomain)
       .single();
 
-    if (error || !serverInfo) {
-      return kickClient("§cServer not found.");
-    }
-
+    if (error || !serverInfo) return kickClient("§cServer not found.");
     if (serverInfo.status === 'Running' || serverInfo.status === 'Starting') {
-      return kickClient("§eServer is already starting!\n§fPlease wait ~30 seconds and refresh.");
+      return kickClient("§eServer is already starting!\n§fPlease wait ~30 seconds.");
     }
 
+    // Whitelist Check
     if (serverInfo.whitelist_enabled) {
       const { data: wlEntry } = await supabase
         .from('server_whitelist')
@@ -193,22 +158,26 @@ const server = net.createServer((socket) => {
         .single();
 
       if (!wlEntry) {
-        console.log(`[Sleeper] Blocked ${username} from ${subdomain} (Not Whitelisted)`);
+        console.log(`[Sleeper] Blocked ${username} (Not Whitelisted)`);
         return kickClient("§cYou are not whitelisted on this server.");
       }
     }
 
-    console.log(`[Sleeper] Waking up server ${serverInfo.id} for ${username}`);
+    console.log(`[Sleeper] Waking up server ${serverInfo.id}...`);
     
     try {
+      // SECURITY FIX: Send Secret Header
       await axios.post(PROVISION_API_URL, {
         serverId: serverInfo.id,
         version: serverInfo.version
       }, {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+            'Content-Type': 'application/json',
+            'x-sleeper-secret': SLEEPER_SECRET 
+        }
       });
 
-      kickClient("§a§lWaking up Server!\n\n§7Authentication Accepted.\n§7Server is starting now.\n\n§fPlease refresh in a bit");
+      kickClient("§a§lWaking up Server!\n\n§7Authentication Accepted.\n§7Server is starting now.\n\n§fPlease refresh in 1-2 minutes.");
     } catch (err) {
       console.error(`[Sleeper] Wake failed:`, err.message);
       kickClient("§cFailed to wake server. Please use the dashboard.");
@@ -234,5 +203,5 @@ const server = net.createServer((socket) => {
 });
 
 server.listen(SLEEPER_PORT, () => {
-  console.log(`Sleeper Proxy v3 listening on port ${SLEEPER_PORT}`);
+  console.log(`Sleeper Proxy listening on port ${SLEEPER_PORT}`);
 });

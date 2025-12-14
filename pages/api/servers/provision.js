@@ -15,6 +15,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-key';
 const APP_BASE_URL = process.env.NEXTAUTH_URL || process.env.VERCEL_URL || 'http://localhost:3000';
 const DOMAIN_SUFFIX = '.spawnly.net';
+const SLEEPER_SECRET = process.env.SLEEPER_SECRET;
 
 const sanitizeYaml = (str) => str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, '');
 
@@ -188,7 +189,6 @@ const generateRconPassword = () => {
 
 // --- DNS & S3 Helpers ---
 
-// Replaces checkSubdomainAvailable with AGGRESSIVE cleanup
 const deleteCloudflareRecords = async (subdomain) => {
   console.log(`[DNS] Cleaning records for subdomain: ${subdomain}`);
   
@@ -636,8 +636,12 @@ write_files:
       Environment=VERSION=${escapedVersion}
       Environment=IS_MODERN_FORGE=${isModernForge}
       Environment=SERVER_ID=${serverId}
-      Environment=SUPABASE_URL=${escapedSupabaseUrl}
-      Environment=SUPABASE_SERVICE_ROLE_KEY=${escapedSupabaseKey}
+      # SECURITY FIX: Do NOT inject SUPABASE keys here.
+      # Environment=SUPABASE_URL=${escapedSupabaseUrl}
+      # Environment=SUPABASE_SERVICE_ROLE_KEY=${escapedSupabaseKey}
+      # INSTEAD: Inject API URL for secure log upload
+      Environment=NEXTJS_API_URL=${appBaseUrl.replace(/\/+$/, '')}/api/servers/log
+      Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=HEAP_GB=${heapGb}
       
       # Run the wrapper logic
@@ -760,7 +764,15 @@ runcmd:
   - chmod +x /usr/local/bin/mcrcon || true
   - rm /usr/local/bin/mcrcon.tar.gz || true
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption} || echo "[ERROR] Failed to download status-reporter.js"
+  # Replace server-wrapper and console-server logic: console-server now runs inside the main process via logging logic or separately.
+  # The original file used console-server.js AND server-wrapper.js.
+  # We should use the SECURE console-server.js logic inside server-wrapper.js or as a separate service.
+  # Assuming server-wrapper.js handles the process and logging now.
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js ${endpointCliOption} || echo "[ERROR] Failed to download server-wrapper.js"
+  # Also download the new SECURE console-server.js if needed, or if server-wrapper handles it.
+  # Based on context, we updated console-server.js to be secure. Let's ensure it's downloaded if used.
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js ${endpointCliOption} || echo "[ERROR] Failed to download console-server.js"
+  
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js ${endpointCliOption} || echo "[ERROR] Failed to download properties-api.js"
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js ${endpointCliOption} || echo "[ERROR] Failed to download metrics-server.js"
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js ${endpointCliOption} || echo "[ERROR] Failed to download file-api.js"
@@ -806,7 +818,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const subdomain = serverRow.subdomain.toLowerCase() || '';
 
     // --- 1. ZOMBIE CLEANUP ---
-    // Check if a server with this name exists and delete it
     try {
         console.log(`[Provision] Checking for existing servers with name: ${serverRow.name}`);
         const existingRes = await fetch(`${HETZNER_API_BASE}/servers?name=${serverRow.name}`, {
@@ -824,7 +835,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
                         headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
                     });
                 }
-                // Wait briefly for deletion to propagate
                 await new Promise(r => setTimeout(r, 2000));
             }
         }
@@ -1089,23 +1099,46 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // --- SECURITY FIX: Authentication ---
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  const token = authHeader.split(' ')[1];
-  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-
-  if (authError || !user) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
   const { serverId, version, ssh_keys = [] } = req.body;
 
   if (!serverId) {
     return res.status(400).json({ error: 'serverId is required' });
   }
+
+  // --- SECURITY FIX: Dual Authentication (User OR Sleeper) ---
+  let isAuthorized = false;
+
+  // 1. Check Sleeper Secret (Service-to-Service)
+  const sleeperHeader = req.headers['x-sleeper-secret'];
+  if (SLEEPER_SECRET && sleeperHeader === SLEEPER_SECRET) {
+      isAuthorized = true;
+      console.log(`[Provision] Authorized via Sleeper Secret for ${serverId}`);
+  } else {
+      // 2. Check User Token (Client-to-Service)
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+          const token = authHeader.split(' ')[1];
+          const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+          
+          if (user && !authError) {
+              // Verify Ownership
+              const { data: serverCheck } = await supabaseAdmin
+                  .from('servers')
+                  .select('user_id')
+                  .eq('id', serverId)
+                  .single();
+              
+              if (serverCheck && serverCheck.user_id === user.id) {
+                  isAuthorized = true;
+              }
+          }
+      }
+  }
+
+  if (!isAuthorized) {
+      return res.status(401).json({ error: 'Unauthorized' });
+  }
+  // ------------------------------------------------
 
   try {
     const { data: serverRow, error } = await supabaseAdmin
@@ -1119,17 +1152,11 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Server not found', detail: error?.message });
     }
 
-    // --- SECURITY FIX: Authorization ---
-    if (serverRow.user_id !== user.id) {
-        return res.status(403).json({ error: 'Forbidden: You do not own this server' });
-    }
-
     if (!serverRow.subdomain) {
       console.error('No subdomain specified for serverId:', serverId);
       return res.status(400).json({ error: 'No subdomain specified' });
     }
 
-    // Pass validated data to the provisioning logic
     return await provisionServer(serverRow, version, ssh_keys, res);
   } catch (err) {
     console.error('Handler error:', err.message, err.stack);
