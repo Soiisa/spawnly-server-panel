@@ -206,9 +206,18 @@ export default function Dashboard() {
     setShowModal(false);
 
     try {
+      // --- FIX: Get Session Token for Authorization Header ---
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+      const token = session.access_token;
+      // -----------------------------------------------------
+
       const resp = await fetch('/api/servers/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // <--- Added Authorization Header
+        },
         body: JSON.stringify({ ...serverData, userId: user.id }),
       });
 
