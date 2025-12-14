@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../lib/supabaseClient'; // Imported for DB sync
+import { supabase } from '../lib/supabaseClient'; 
 import { 
   MagnifyingGlassIcon, 
   CommandLineIcon, 
@@ -203,7 +203,15 @@ export default function ServerPropertiesEditor({ server }) {
     const load = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch(`/api/servers/${server.id}/properties`);
+        // --- AUTH FIX: Get Token ---
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("No active session");
+        // --------------------------
+
+        const res = await fetch(`/api/servers/${server.id}/properties`, {
+           headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+
         if (!res.ok) throw new Error('Failed to load properties');
         const text = await res.text();
         setPropertiesText(text);
@@ -232,15 +240,23 @@ export default function ServerPropertiesEditor({ server }) {
       setError(null);
       setMessage(null);
       
+      // --- AUTH FIX: Get Token ---
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+      // --------------------------
+
       const res = await fetch(`/api/servers/${server.id}/properties`, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 
+          'Content-Type': 'text/plain',
+          'Authorization': `Bearer ${session.access_token}` 
+        },
         body: propertiesText,
       });
       
       if (!res.ok) throw new Error('Failed to save properties');
       
-      // *** NEW: Update whitelist_enabled status in Supabase ***
+      // Update whitelist_enabled status in Supabase
       const propsMap = parseProperties(propertiesText);
       const isWhitelistOn = toBool(propsMap['white-list']);
       

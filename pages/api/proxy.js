@@ -1,7 +1,14 @@
 // pages/api/proxy.js
 
 // Allowlist of domains that are safe to proxy
-const ALLOWED_HOSTS = ['api.curseforge.com'];
+const ALLOWED_HOSTS = [
+  'api.curseforge.com',
+  'launchermeta.mojang.com',
+  'piston-meta.mojang.com',
+  'api.papermc.io',
+  'api.purpurmc.org',
+  'meta.fabricmc.net'
+];
 
 export default async function handler(req, res) {
   const { url } = req.query;
