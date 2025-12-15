@@ -84,15 +84,17 @@ export default async function handler(req, res) {
             headers: {
               'Authorization': `Bearer ${server.rcon_password}`,
             },
-            timeout: 10000,  // Increase timeout to 10s for reliability
+            timeout: 10000, 
           });
 
           if (!response.ok) {
-             // Fall through to S3
              console.warn(`Game server file fetch failed: ${response.status}`);
           } else {
-             content = await response.buffer();
-             // Async sync to S3 for consistency
+             // --- FIX: Use arrayBuffer() for native fetch ---
+             const arrayBuffer = await response.arrayBuffer();
+             content = Buffer.from(arrayBuffer);
+             
+             // Async sync to S3 for consistency (optional, but good for caching)
              s3.putObject({
                 Bucket: S3_BUCKET,
                 Key: s3Key,
@@ -103,7 +105,7 @@ export default async function handler(req, res) {
 
         } catch (fetchError) {
           console.error('Game server fetch failed:', fetchError.message);
-          // Fall back to S3
+          // Fall back to S3 will happen if content is still undefined
         }
       }
 
