@@ -348,6 +348,7 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const S3_BUCKET = (s3Config.S3_BUCKET || '').replace(/'/g, "'\"'\"'");
   const AWS_ACCESS_KEY_ID = (s3Config.AWS_ACCESS_KEY_ID || '').replace(/'/g, "'\"'\"'");
   const AWS_SECRET_ACCESS_KEY = (s3Config.AWS_SECRET_ACCESS_KEY || '').replace(/'/g, "'\"'\"'");
+  const S3_ENDPOINT = (s3Config.S3_ENDPOINT || '').replace(/'/g, "'\"'\"'");
   const endpointCliOption = s3Config.S3_ENDPOINT ? `--endpoint-url '${s3Config.S3_ENDPOINT}'` : '';
 
   const userData = `#cloud-config
@@ -741,6 +742,9 @@ write_files:
       Environment=FILE_API_PORT=3005
       Environment=SERVER_ID=${serverId}
       Environment=S3_BUCKET=${S3_BUCKET}
+      Environment=AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      Environment=AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      Environment=S3_ENDPOINT=${S3_ENDPOINT}
       ExecStart=/usr/bin/node /opt/minecraft/file-api.js
       Restart=always
       RestartSec=5
