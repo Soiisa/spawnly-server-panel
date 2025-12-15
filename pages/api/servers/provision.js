@@ -739,6 +739,8 @@ write_files:
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=APP_BASE_URL=${appBaseUrl}
       Environment=FILE_API_PORT=3005
+      Environment=SERVER_ID=${serverId}
+      Environment=S3_BUCKET=${S3_BUCKET}
       ExecStart=/usr/bin/node /opt/minecraft/file-api.js
       Restart=always
       RestartSec=5
