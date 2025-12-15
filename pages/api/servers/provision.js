@@ -434,8 +434,7 @@ write_files:
 
       if [ -n "$RESTORE_KEY" ]; then
          echo "[mc-sync-from-s3] PENDING RESTORE FOUND. Restoring from $RESTORE_KEY..."
-         # Clean destination first
-         rm -rf $DEST/*
+         # RESTORE OVERLAY ONLY - DO NOT WIPE DIRECTORY
          sudo -u minecraft bash -lc "aws s3 cp \"s3://$BUCKET/$RESTORE_KEY\" \"$DEST/restore.zip\" $ENDPOINT_OPT"
          if [ -f "$DEST/restore.zip" ]; then
              cd $DEST

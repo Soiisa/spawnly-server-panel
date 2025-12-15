@@ -5,13 +5,14 @@ const express = require('express');
 const multer = require('multer');
 const archiver = require('archiver');
 const cors = require('cors');
-const { execFile, exec } = require('child_process'); // Added exec for pipe operations
+const { execFile, exec } = require('child_process');
 
 const app = express();
 const PORT = process.env.FILE_API_PORT || 3005;
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 const SERVER_ID = process.env.SERVER_ID;
 const S3_BUCKET = process.env.S3_BUCKET;
+const S3_ENDPOINT = process.env.S3_ENDPOINT;
 
 app.use(cors());
 app.use(express.json());
@@ -39,34 +40,19 @@ const authenticate = async (req, res, next) => {
   next();
 };
 
-// Helper to validate paths securely
 const validatePath = (reqPath) => {
-  // Normalize and prevent traversal
   const relPath = (reqPath || '').replace(/^(\.\.(\/|\\|$))+/, '').replace(/^\/+/, '');
-  
-  if (relPath.includes('..')) {
-      throw new Error('Invalid path: Traversal detected');
-  }
-
+  if (relPath.includes('..')) throw new Error('Invalid path: Traversal detected');
   const absPath = path.resolve(process.cwd(), relPath);
-  
-  // Strict scope check
-  if (!absPath.startsWith(process.cwd())) {
-      throw new Error('Invalid path: Access denied');
-  }
-  
+  if (!absPath.startsWith(process.cwd())) throw new Error('Invalid path: Access denied');
   return { relPath, absPath };
 };
 
 app.get('/api/files', authenticate, async (req, res) => {
   try {
     const { relPath, absPath } = validatePath(req.query.path);
-    
     const stats = await fs.stat(absPath);
-    if (!stats.isDirectory()) {
-      return res.status(400).json({ error: 'Not a directory' });
-    }
-    
+    if (!stats.isDirectory()) return res.status(400).json({ error: 'Not a directory' });
     const entries = await fs.readdir(absPath, { withFileTypes: true });
     const files = await Promise.all(entries.map(async (entry) => {
       const entryPath = path.join(absPath, entry.name);
@@ -80,7 +66,6 @@ app.get('/api/files', authenticate, async (req, res) => {
         };
       } catch (e) { return null; }
     }));
-    
     res.json({ path: relPath, files: files.filter(f => f) });
   } catch (err) {
     console.error('List files error:', err.message);
@@ -91,7 +76,6 @@ app.get('/api/files', authenticate, async (req, res) => {
 app.get('/api/file', authenticate, async (req, res) => {
   try {
     const { absPath } = validatePath(req.query.path);
-    
     const stats = await fs.stat(absPath);
     if (stats.isDirectory()) {
       const archive = archiver('zip', { zlib: { level: 9 } });
@@ -111,18 +95,11 @@ app.get('/api/file', authenticate, async (req, res) => {
 app.post('/api/file', authenticate, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    
     const { absPath: targetDir, relPath } = validatePath(req.body.path);
-    
-    // Ensure filename is safe
     const safeFilename = path.basename(req.file.originalname);
-    if (safeFilename !== req.file.originalname) {
-        return res.status(400).json({ error: 'Invalid filename' });
-    }
-
+    if (safeFilename !== req.file.originalname) return res.status(400).json({ error: 'Invalid filename' });
     await fs.mkdir(targetDir, { recursive: true });
     const targetPath = path.join(targetDir, safeFilename);
-    
     await fs.writeFile(targetPath, req.file.buffer);
     res.json({ success: true, path: path.join(relPath, safeFilename) });
   } catch (err) {
@@ -134,7 +111,6 @@ app.post('/api/file', authenticate, upload.single('file'), async (req, res) => {
 app.put('/api/file', authenticate, async (req, res) => {
   try {
     const { absPath } = validatePath(req.query.path);
-    
     await fs.mkdir(path.dirname(absPath), { recursive: true });
     await fs.writeFile(absPath, req.body);
     res.json({ success: true });
@@ -147,12 +123,9 @@ app.put('/api/file', authenticate, async (req, res) => {
 app.post('/api/rcon', authenticate, async (req, res) => {
   const { command } = req.body;
   if (!command) return res.status(400).json({ error: 'Missing command' });
-  
   try {
     const rconPass = await getRconPassword();
     if (!rconPass) return res.status(500).json({ error: 'RCON not configured' });
-    
-    // SECURITY FIX: Use execFile to prevent shell injection.
     execFile('mcrcon', ['-H', '127.0.0.1', '-p', rconPass, command], (error, stdout, stderr) => {
       if (error) {
         console.error('RCON exec error:', error);
@@ -176,10 +149,10 @@ app.post('/api/backups', authenticate, (req, res) => {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `backup-${timestamp}.zip`;
   const s3Path = `s3://${S3_BUCKET}/backups/${SERVER_ID}/${filename}`;
+  const endpointFlag = S3_ENDPOINT ? `--endpoint-url "${S3_ENDPOINT}"` : '';
 
-  // Use zip to stream directly to AWS CLI
-  // Excludes node_modules, backups folder, zip files, and the server jar (optional, but saves space)
-  const cmd = `zip -r - . -x "node_modules/*" "backups/*" "*.zip" "server.jar" | aws s3 cp - "${s3Path}"`;
+  // --- CHANGED: Only include specific folders/files (Selective Backup) ---
+  const cmd = `zip -r - . -i "world/*" "world_nether/*" "world_the_end/*" "mods/*" "plugins/*" "server.properties" "*.json" | aws s3 cp - "${s3Path}" ${endpointFlag}`;
 
   console.log(`[Backups] Starting backup: ${cmd}`);
   
@@ -194,20 +167,17 @@ app.post('/api/backups', authenticate, (req, res) => {
 });
 
 app.post('/api/backups/restore', authenticate, (req, res) => {
+  // Note: This endpoint is technically only used if restoring while running, 
+  // but our architecture prefers restore-on-boot via provision.js
   const { s3Key } = req.body;
-  
-  if (!SERVER_ID || !S3_BUCKET) {
-    return res.status(500).json({ error: 'Server configuration error' });
-  }
-  if (!s3Key || !s3Key.startsWith(`backups/${SERVER_ID}/`)) {
-    return res.status(400).json({ error: 'Invalid backup key' });
-  }
+  if (!SERVER_ID || !S3_BUCKET) return res.status(500).json({ error: 'Server configuration error' });
+  if (!s3Key || !s3Key.startsWith(`backups/${SERVER_ID}/`)) return res.status(400).json({ error: 'Invalid backup key' });
 
   const s3Url = `s3://${S3_BUCKET}/${s3Key}`;
   const localZip = 'restore-temp.zip';
+  const endpointFlag = S3_ENDPOINT ? `--endpoint-url "${S3_ENDPOINT}"` : '';
 
-  // Download -> Unzip -> Clean
-  const cmd = `aws s3 cp "${s3Url}" "${localZip}" && unzip -o "${localZip}" && rm "${localZip}"`;
+  const cmd = `aws s3 cp "${s3Url}" "${localZip}" ${endpointFlag} && unzip -o "${localZip}" && rm "${localZip}"`;
 
   console.log(`[Backups] Restoring from: ${s3Url}`);
 
