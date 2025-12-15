@@ -1,6 +1,5 @@
 // pages/api/servers/provision.js
 import { createClient } from '@supabase/supabase-js';
-import path from 'path';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
@@ -191,13 +190,10 @@ const generateRconPassword = () => {
 
 const deleteCloudflareRecords = async (subdomain) => {
   console.log(`[DNS] Cleaning records for subdomain: ${subdomain}`);
-  
   let subdomainPrefix = subdomain;
   if (subdomain.endsWith(DOMAIN_SUFFIX)) {
     subdomainPrefix = subdomain.replace(DOMAIN_SUFFIX, '');
   }
-
-  // Sanity check
   if (!subdomainPrefix || !subdomainPrefix.match(/^[a-zA-Z0-9-]+$/)) return;
 
   const recordTypes = [
@@ -218,7 +214,6 @@ const deleteCloudflareRecords = async (subdomain) => {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
           });
-          console.log(`[DNS] Deleted ${recordType.type} record for ${recordType.name}`);
         }
     } catch (err) {
         console.warn(`[DNS] Failed to clean record ${recordType.name}: ${err.message}`);
@@ -246,7 +241,6 @@ const createARecord = async (subdomain, serverIp) => {
           'Content-Type': 'application/json'
         }
       });
-      console.log(`Created A record for ${data.name}.spawnly.net:`, response.data.result?.id);
       recordIds.push(response.data.result.id);
     } catch (error) {
       console.error(`Failed to create A record:`, error.response?.data || error.message);
@@ -297,8 +291,6 @@ const deleteS3Files = async (serverId, s3Config) => {
     const bucket = s3Config.S3_BUCKET;
     const prefix = `servers/${serverId}/`;
 
-    console.log(`Deleting S3 files for server ${serverId} in bucket ${bucket} with prefix ${prefix}`);
-
     const listParams = { Bucket: bucket, Prefix: prefix };
     const listedObjects = await s3.listObjectsV2(listParams).promise();
     if (!listedObjects.Contents || listedObjects.Contents.length === 0) return;
@@ -310,7 +302,6 @@ const deleteS3Files = async (serverId, s3Config) => {
     };
 
     await s3.deleteObjects(deleteParams).promise();
-    console.log(`Successfully deleted ${objectsToDelete.length} files from S3`);
   } catch (err) {
     console.error('Error deleting S3 files:', err);
     throw err;
@@ -319,9 +310,8 @@ const deleteS3Files = async (serverId, s3Config) => {
 
 // --- Cloud-Init Builder ---
 
-const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '') => {
+const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '', pendingRestoreKey = null) => {
   const heapGb = Math.max(1, Math.floor(Number(ramGb) * 0.8));
-  const timestamp = new Date().toISOString();
   const escapedDl = escapeForSingleQuotes(downloadUrl || '');
   const escapedRconPassword = escapeForSingleQuotes(rconPassword);
   const escapedSubdomain = escapeForSingleQuotes(subdomain.toLowerCase() || '');
@@ -329,6 +319,7 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const escapedSupabaseUrl = escapeForSingleQuotes(process.env.SUPABASE_URL);
   const escapedSupabaseKey = escapeForSingleQuotes(process.env.SUPABASE_SERVICE_ROLE_KEY);
   const escapedVersion = escapeForSingleQuotes(version);
+  const escapedRestoreKey = escapeForSingleQuotes(pendingRestoreKey || '');
 
   const isForge = software === 'forge';
   const isNeoForge = software === 'neoforge';
@@ -439,6 +430,24 @@ write_files:
       AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
       AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
       REQUESTED_VERSION='${escapedVersion}'
+      RESTORE_KEY="${escapedRestoreKey}"
+
+      if [ -n "$RESTORE_KEY" ]; then
+         echo "[mc-sync-from-s3] PENDING RESTORE FOUND. Restoring from $RESTORE_KEY..."
+         # Clean destination first
+         rm -rf $DEST/*
+         sudo -u minecraft bash -lc "aws s3 cp \"s3://$BUCKET/$RESTORE_KEY\" \"$DEST/restore.zip\" $ENDPOINT_OPT"
+         if [ -f "$DEST/restore.zip" ]; then
+             cd $DEST
+             sudo -u minecraft unzip -o restore.zip
+             rm restore.zip
+             echo "[mc-sync-from-s3] Restore complete. Skipping standard sync."
+             exit 0
+         else
+             echo "[mc-sync-from-s3] Failed to download backup. Falling back to standard sync."
+         fi
+      fi
+
       if [ "${needsFileDeletion}" = "true" ]; then
         echo "[mc-sync-from-s3] File deletion requested, skipping S3 sync."
         exit 0
@@ -822,6 +831,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const serverType = ramToServerType(Number(serverRow.ram || 4));
     const software = serverRow.type || 'vanilla';
     const needsFileDeletion = serverRow.needs_file_deletion;
+    const pendingRestoreKey = serverRow.pending_backup_restore; // Retrieve pending restore
     const subdomain = serverRow.subdomain.toLowerCase() || '';
 
     // --- 1. ZOMBIE CLEANUP ---
@@ -892,10 +902,11 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       rconPassword, 
       software, 
       serverRow.id,
-      s3Config,
+      s3Config, 
       version,
       needsFileDeletion,
-      subdomain
+      subdomain,
+      pendingRestoreKey // PASS THE RESTORE KEY
     );
 
     const sanitizedUserData = sanitizeYaml(userData);
@@ -1068,6 +1079,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         rcon_password: rconPassword,
         subdomain: serverRow.subdomain,
         needs_file_deletion: false,
+        pending_backup_restore: null, // CLEAR THE RESTORE KEY
         current_session_id: currentSessionId, // Set the session ID
       })
       .eq('id', serverRow.id)
