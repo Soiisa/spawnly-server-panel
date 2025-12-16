@@ -14,31 +14,31 @@ import {
 
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 font-sans text-slate-900">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100">
       <Navbar />
 
       <main className="flex-grow">
         {/* Hero Section */}
         <section className="relative overflow-hidden pt-16 pb-20 lg:pt-24 lg:pb-28">
           <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl md:text-6xl">
+            <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-5xl md:text-6xl">
               <span className="block xl:inline">Spawn a server in</span>{" "}
-              <span className="text-indigo-600">seconds</span>
+              <span className="text-indigo-600 dark:text-indigo-500">seconds</span>
             </h1>
-            <p className="mx-auto mt-3 max-w-md text-base text-gray-500 sm:text-lg md:mt-5 md:max-w-3xl md:text-xl">
+            <p className="mx-auto mt-3 max-w-md text-base text-gray-500 dark:text-gray-400 sm:text-lg md:mt-5 md:max-w-3xl md:text-xl">
               Instant game server hosting with flexible, hourly billing. 
               Pay only for what you use. No monthly contracts, no hidden fees.
             </p>
             <div className="mx-auto mt-10 max-w-sm sm:flex sm:max-w-none sm:justify-center gap-4">
               <Link
                 href="/register"
-                className="flex items-center justify-center rounded-xl border border-transparent bg-indigo-600 px-8 py-3 text-base font-medium text-white hover:bg-indigo-700 md:py-4 md:px-10 md:text-lg shadow-lg shadow-indigo-200 transition-all hover:-translate-y-0.5"
+                className="flex items-center justify-center rounded-xl border border-transparent bg-indigo-600 px-8 py-3 text-base font-medium text-white hover:bg-indigo-700 md:py-4 md:px-10 md:text-lg shadow-lg shadow-indigo-200 dark:shadow-none transition-all hover:-translate-y-0.5"
               >
                 Get Started
               </Link>
               <Link
                 href="/pricing"
-                className="mt-3 flex items-center justify-center rounded-xl border border-gray-300 bg-white px-8 py-3 text-base font-medium text-indigo-700 hover:bg-gray-50 md:mt-0 md:py-4 md:px-10 md:text-lg shadow-sm transition-all hover:-translate-y-0.5"
+                className="mt-3 flex items-center justify-center rounded-xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-8 py-3 text-base font-medium text-indigo-700 dark:text-indigo-400 hover:bg-gray-50 dark:hover:bg-slate-700 md:mt-0 md:py-4 md:px-10 md:text-lg shadow-sm transition-all hover:-translate-y-0.5"
               >
                 View Pricing
               </Link>
@@ -47,11 +47,11 @@ export default function Home() {
         </section>
 
         {/* Features Grid */}
-        <section className="bg-white py-16 lg:py-24">
+        <section className="bg-white dark:bg-slate-900 py-16 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
-              <h2 className="text-base font-semibold uppercase tracking-wide text-indigo-600">Features</h2>
-              <p className="mt-2 text-3xl font-extrabold leading-8 text-gray-900 sm:text-4xl">
+              <h2 className="text-base font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Features</h2>
+              <p className="mt-2 text-3xl font-extrabold leading-8 text-gray-900 dark:text-white sm:text-4xl">
                 Everything you need to play
               </p>
             </div>
@@ -60,12 +60,12 @@ export default function Home() {
               {/* Feature 1 */}
               <div className="relative group">
                 <div className="absolute -inset-1 rounded-lg bg-gradient-to-r from-teal-400 to-indigo-500 opacity-25 blur transition duration-200 group-hover:opacity-50"></div>
-                <div className="relative h-full bg-white p-8 rounded-xl border border-gray-100 shadow-sm flex flex-col">
-                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                <div className="relative h-full bg-white dark:bg-slate-800 p-8 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm flex flex-col">
+                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
                     <RocketLaunchIcon className="h-6 w-6" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">Instant Deployment</h3>
-                  <p className="mt-2 text-gray-500 flex-grow">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Instant Deployment</h3>
+                  <p className="mt-2 text-gray-500 dark:text-gray-400 flex-grow">
                     Launch Minecraft, Valheim, or Rust servers in under 60 seconds. Our automated provisioning handles the heavy lifting.
                   </p>
                 </div>
@@ -74,12 +74,12 @@ export default function Home() {
               {/* Feature 2 */}
               <div className="relative group">
                 <div className="absolute -inset-1 rounded-lg bg-gradient-to-r from-purple-400 to-pink-500 opacity-25 blur transition duration-200 group-hover:opacity-50"></div>
-                <div className="relative h-full bg-white p-8 rounded-xl border border-gray-100 shadow-sm flex flex-col">
-                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
+                <div className="relative h-full bg-white dark:bg-slate-800 p-8 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm flex flex-col">
+                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
                     <CreditCardIcon className="h-6 w-6" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">Hourly Billing</h3>
-                  <p className="mt-2 text-gray-500 flex-grow">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Hourly Billing</h3>
+                  <p className="mt-2 text-gray-500 dark:text-gray-400 flex-grow">
                     Stop paying for idle servers. Top up credits and only pay while your server is running. Perfect for weekend gaming sessions.
                   </p>
                 </div>
@@ -88,12 +88,12 @@ export default function Home() {
               {/* Feature 3 */}
               <div className="relative group">
                 <div className="absolute -inset-1 rounded-lg bg-gradient-to-r from-orange-400 to-amber-500 opacity-25 blur transition duration-200 group-hover:opacity-50"></div>
-                <div className="relative h-full bg-white p-8 rounded-xl border border-gray-100 shadow-sm flex flex-col">
-                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                <div className="relative h-full bg-white dark:bg-slate-800 p-8 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm flex flex-col">
+                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
                     <CircleStackIcon className="h-6 w-6" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">Persistent Storage</h3>
-                  <p className="mt-2 text-gray-500 flex-grow">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Persistent Storage</h3>
+                  <p className="mt-2 text-gray-500 dark:text-gray-400 flex-grow">
                     Your world files are safe even when the server is stopped. We automatically back up your data to secure cloud storage.
                   </p>
                 </div>
