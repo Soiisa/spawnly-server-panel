@@ -122,11 +122,13 @@ const toNum = (val, def = 0) => {
 // --- Sub-components ---
 
 const ToggleInput = ({ label, value, onChange }) => (
-  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
-    <span className="text-sm font-medium text-gray-700">{label}</span>
+  // UPDATED: Added dark mode classes
+  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600">
+    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{label}</span>
     <button
       onClick={() => onChange(!value)}
-      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${value ? 'bg-indigo-600' : 'bg-gray-200'}`}
+      // UPDATED: Added dark mode class for off state track
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${value ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-slate-600'}`}
     >
       <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${value ? 'translate-x-5' : 'translate-x-0'}`} />
     </button>
@@ -134,12 +136,14 @@ const ToggleInput = ({ label, value, onChange }) => (
 );
 
 const SelectInput = ({ label, value, options, onChange }) => (
-  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{label}</label>
+  // UPDATED: Added dark mode classes
+  <div className="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600">
+    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{label}</label>
     <select
       value={value || options[0].value}
       onChange={(e) => onChange(e.target.value)}
-      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2"
+      // UPDATED: Added dark mode classes
+      className="block w-full rounded-lg border-gray-300 dark:border-slate-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 dark:bg-slate-800 dark:text-gray-100"
     >
       {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
     </select>
@@ -147,36 +151,42 @@ const SelectInput = ({ label, value, options, onChange }) => (
 );
 
 const NumberInput = ({ label, value, min = 0, max = 9999, onChange }) => (
-  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{label}</label>
+  // UPDATED: Added dark mode classes
+  <div className="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600">
+    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{label}</label>
     <div className="flex items-center">
       <button 
         onClick={() => onChange(Math.max(min, Number(value) - 1))}
-        className="w-8 h-8 flex items-center justify-center bg-white border border-gray-300 rounded-l-lg hover:bg-gray-100 text-gray-600"
+        // UPDATED: Added dark mode classes
+        className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-600 border border-gray-300 dark:border-slate-500 rounded-l-lg hover:bg-gray-100 dark:hover:bg-slate-500 text-gray-600 dark:text-gray-200"
       >-</button>
       <input
         type="number"
         value={value}
         onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value))))}
-        className="block w-full border-y border-gray-300 text-center focus:ring-0 focus:border-indigo-500 sm:text-sm py-1.5 z-10"
+        // UPDATED: Added dark mode classes
+        className="block w-full border-y border-gray-300 dark:border-slate-500 text-center focus:ring-0 focus:border-indigo-500 sm:text-sm py-1.5 z-10 dark:bg-slate-800 dark:text-gray-100"
       />
       <button 
         onClick={() => onChange(Math.min(max, Number(value) + 1))}
-        className="w-8 h-8 flex items-center justify-center bg-white border border-gray-300 rounded-r-lg hover:bg-gray-100 text-gray-600"
+        // UPDATED: Added dark mode classes
+        className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-600 border border-gray-300 dark:border-slate-500 rounded-r-lg hover:bg-gray-100 dark:hover:bg-slate-500 text-gray-600 dark:text-gray-200"
       >+</button>
     </div>
   </div>
 );
 
 const TextInput = ({ label, value, placeholder, onChange }) => (
-  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 md:col-span-2">
-    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{label}</label>
+  // UPDATED: Added dark mode classes
+  <div className="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600 md:col-span-2">
+    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{label}</label>
     <input
       type="text"
       value={value || ''}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+      // UPDATED: Added dark mode classes
+      className="block w-full rounded-lg border-gray-300 dark:border-slate-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm dark:bg-slate-800 dark:text-gray-100"
     />
   </div>
 );
@@ -314,7 +324,8 @@ export default function ServerPropertiesEditor({ server }) {
   };
 
   if (isLoading) return (
-    <div className="flex justify-center items-center py-20">
+    // UPDATED: Added dark mode classes
+    <div className="flex justify-center items-center py-20 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
       <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
     </div>
   );
@@ -323,23 +334,28 @@ export default function ServerPropertiesEditor({ server }) {
     <div className="space-y-6">
       
       {/* Header & Controls */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+      {/* UPDATED: Added dark mode classes */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
         <div className="relative flex-1 w-full md:w-auto md:max-w-md">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          {/* UPDATED: Added dark mode class for icon */}
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
           <input 
             type="text" 
             placeholder="Search settings..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+            // UPDATED: Added dark mode classes for input
+            className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
           />
         </div>
         
-        <div className="flex items-center gap-2 w-full md:w-auto bg-gray-100 p-1 rounded-xl">
+        {/* UPDATED: Added dark mode class for button container */}
+        <div className="flex items-center gap-2 w-full md:w-auto bg-gray-100 dark:bg-slate-700 p-1 rounded-xl">
           <button
             onClick={() => setViewMode('visual')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              viewMode === 'visual' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+              // UPDATED: Added dark mode classes for active and inactive buttons
+              viewMode === 'visual' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
             <AdjustmentsHorizontalIcon className="w-4 h-4" /> Visual
@@ -347,7 +363,8 @@ export default function ServerPropertiesEditor({ server }) {
           <button
             onClick={() => setViewMode('raw')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              viewMode === 'raw' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+              // UPDATED: Added dark mode classes for active and inactive buttons
+              viewMode === 'raw' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
             <CommandLineIcon className="w-4 h-4" /> Raw File
@@ -356,16 +373,19 @@ export default function ServerPropertiesEditor({ server }) {
       </div>
 
       {/* Main Content Area */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px]">
+      {/* UPDATED: Added dark mode classes */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden min-h-[500px]">
         {viewMode === 'raw' ? (
           <div className="h-full flex flex-col">
-            <div className="bg-gray-50 px-6 py-3 border-b border-gray-200 text-xs text-gray-500 font-mono">
+            {/* UPDATED: Added dark mode classes */}
+            <div className="bg-gray-50 dark:bg-slate-700 px-6 py-3 border-b border-gray-200 dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400 font-mono">
               server.properties
             </div>
             <textarea
               value={propertiesText}
               onChange={(e) => setPropertiesText(e.target.value)}
-              className="w-full h-[600px] p-6 font-mono text-sm bg-white text-slate-800 border-none outline-none resize-y"
+              // UPDATED: Added dark mode classes
+              className="w-full h-[600px] p-6 font-mono text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-300 border-none outline-none resize-y"
               spellCheck="false"
             />
           </div>
@@ -384,7 +404,8 @@ export default function ServerPropertiesEditor({ server }) {
 
               return (
                 <div key={group.id} className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-100 pb-2">
+                  {/* UPDATED: Added dark mode classes for group title */}
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2 border-b border-gray-100 dark:border-slate-700 pb-2">
                     <group.icon className="w-5 h-5 text-indigo-500" />
                     {group.label}
                   </h3>
@@ -398,7 +419,8 @@ export default function ServerPropertiesEditor({ server }) {
             {/* Show "Other" properties not in our strict groups if searched */}
             {searchQuery && (
               <div className="pt-4">
-                <h4 className="text-sm font-semibold text-gray-500 mb-2 uppercase">Other Matches</h4>
+                {/* UPDATED: Added dark mode class for sub-title */}
+                <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase">Other Matches</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {Object.keys(properties)
                     .filter(k => !KEY_TO_GROUP[k] && k.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -418,17 +440,21 @@ export default function ServerPropertiesEditor({ server }) {
             initial={{ y: 100, opacity: 0 }} 
             animate={{ y: 0, opacity: 1 }} 
             exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/90 backdrop-blur-md border border-indigo-200 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 max-w-lg w-[90%]"
+            // UPDATED: Added dark mode classes
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border border-indigo-200 dark:border-indigo-900 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 max-w-lg w-[90%]"
           >
             <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900">Unsaved Changes</p>
-              <p className="text-xs text-gray-500">Changes will apply after a server restart.</p>
+              {/* UPDATED: Added dark mode class for text */}
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Unsaved Changes</p>
+              {/* UPDATED: Added dark mode class for text */}
+              <p className="text-xs text-gray-500 dark:text-gray-400">Changes will apply after a server restart.</p>
             </div>
             <div className="flex items-center gap-3">
               <button 
                 onClick={handleReset}
                 disabled={isSaving}
-                className="text-sm font-medium text-gray-600 hover:text-red-600 transition-colors"
+                // UPDATED: Added dark mode class for button text
+                className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-red-600 transition-colors"
               >
                 Discard
               </button>
@@ -445,7 +471,7 @@ export default function ServerPropertiesEditor({ server }) {
         )}
       </AnimatePresence>
 
-      {/* Feedback Toasts */}
+      {/* Feedback Toasts (No change needed) */}
       <AnimatePresence>
         {message && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-6 right-6 z-50 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">

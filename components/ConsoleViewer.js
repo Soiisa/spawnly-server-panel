@@ -161,24 +161,24 @@ export default function ConsoleViewer({ server }) {
   // --- Render ---
 
   return (
-    <div className="flex flex-col h-[600px] bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="flex flex-col h-[600px] bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
       
       {/* 1. Header & Toolbar */}
-      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3">
+      <div className="bg-gray-50 dark:bg-slate-700 px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-3">
         
         {/* Title & Status */}
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${connected ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200 text-gray-500'}`}>
+          <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${connected ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200 text-gray-500 dark:bg-slate-600 dark:text-gray-300'}`}>
             <CommandLineIcon className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-gray-900">Terminal</h3>
+            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Terminal</h3>
             <div className="flex items-center gap-2">
               <span className={`relative flex h-2 w-2`}>
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${connected ? 'bg-green-400' : 'bg-red-400'}`}></span>
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${connected ? 'bg-green-500' : 'bg-red-500'}`}></span>
               </span>
-              <p className="text-xs text-gray-500 font-mono">{status}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-300 font-mono">{status}</p>
             </div>
           </div>
         </div>
@@ -189,8 +189,8 @@ export default function ConsoleViewer({ server }) {
             onClick={() => setAutoScroll(!autoScroll)}
             className={`p-2 rounded-md text-xs font-medium border transition-colors flex items-center gap-1.5
               ${autoScroll 
-                ? 'bg-indigo-50 text-indigo-700 border-indigo-200' 
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-600 dark:text-indigo-400' 
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700'
               }`}
             title="Toggle Auto-scroll"
           >
@@ -202,8 +202,8 @@ export default function ConsoleViewer({ server }) {
             onClick={() => setPaused(!paused)}
             className={`p-2 rounded-md text-xs font-medium border transition-colors flex items-center gap-1.5
               ${paused 
-                ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:border-amber-600 dark:text-amber-400' 
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700'
               }`}
             title={paused ? "Resume updates" : "Pause updates"}
           >
@@ -213,7 +213,7 @@ export default function ConsoleViewer({ server }) {
 
           <button
             onClick={clearConsole}
-            className="p-2 rounded-md text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors flex items-center gap-1.5"
+            className="p-2 rounded-md text-xs font-medium border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-red-600 hover:bg-red-50 hover:border-red-200 dark:hover:bg-red-900/20 dark:hover:border-red-600 transition-colors flex items-center gap-1.5"
             title="Clear Console"
           >
             <TrashIcon className="w-4 h-4" />
@@ -253,12 +253,12 @@ export default function ConsoleViewer({ server }) {
       </div>
 
       {/* 3. Input Area */}
-      <div className="bg-white border-t border-gray-200 p-3">
+      <div className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-3">
         <form onSubmit={sendCommand} className="relative flex items-center">
-          <div className="absolute left-3 text-gray-400 select-none font-mono">{'>'}</div>
+          <div className="absolute left-3 text-gray-400 dark:text-gray-500 select-none font-mono">{'>'}</div>
           <input
             type="text"
-            className="w-full pl-7 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full pl-7 pr-12 py-3 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg text-sm font-mono text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white dark:focus:bg-slate-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             placeholder="Type a command (e.g. /op user, /time set day)..."
             value={command}
             onChange={(e) => setCommand(e.target.value)}

@@ -128,18 +128,18 @@ export default function BackupsTab({ server }) {
       
       {/* Pending Restore Banner */}
       {pendingRestore && (
-        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg shadow-sm animate-pulse">
+        <div className="bg-amber-50 dark:bg-amber-900/50 border-l-4 border-amber-400 dark:border-amber-700 p-4 rounded-r-lg shadow-sm animate-pulse">
           <div className="flex items-start">
             <div className="flex-shrink-0">
               <ClockIcon className="h-5 w-5 text-amber-400" aria-hidden="true" />
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-amber-800">Restore Pending</h3>
-              <div className="mt-2 text-sm text-amber-700">
+              <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300">Restore Pending</h3>
+              <div className="mt-2 text-sm text-amber-700 dark:text-amber-200">
                 <p>
                   A backup restore is queued. <strong>The next time you click Start</strong>, the server will be wiped and restored from:
                 </p>
-                <code className="bg-amber-100 px-2 py-1 rounded mt-1 block w-fit font-mono text-xs">
+                <code className="bg-amber-100 dark:bg-amber-900 px-2 py-1 rounded mt-1 block w-fit font-mono text-xs">
                   {pendingRestore.split('/').pop()}
                 </code>
               </div>
@@ -148,19 +148,20 @@ export default function BackupsTab({ server }) {
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+      {/* Main Content Card */}
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
-            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <ArchiveBoxIcon className="w-5 h-5 text-gray-500" />
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <ArchiveBoxIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               Backups
             </h3>
-            <p className="text-sm text-gray-500">Create snapshots (While Running) or restore them (On Startup).</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Create snapshots (While Running) or restore them (On Startup).</p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
               <button 
                   onClick={fetchBackups} 
-                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg border border-gray-200"
+                  className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:text-gray-100 rounded-lg border border-gray-200 dark:border-slate-700"
                   title="Refresh List"
               >
                   <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -186,36 +187,36 @@ export default function BackupsTab({ server }) {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+            <thead className="bg-gray-50 dark:bg-slate-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">File Name</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Size</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">File Name</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Size</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Created</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
+            <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-100 dark:divide-slate-700">
               {backups.length === 0 ? (
                   <tr>
                       <td colSpan="4" className="px-6 py-12 text-center">
-                          <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                          <div className="mx-auto w-12 h-12 bg-gray-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-3">
                               <CloudArrowUpIcon className="w-6 h-6 text-gray-400" />
                           </div>
-                          <p className="text-gray-900 font-medium">No backups found</p>
-                          <p className="text-gray-500 text-sm">Start the server to create your first backup.</p>
+                          <p className="text-gray-900 dark:text-gray-100 font-medium">No backups found</p>
+                          <p className="text-gray-500 dark:text-gray-400 text-sm">Start the server to create your first backup.</p>
                       </td>
                   </tr>
               ) : (
                   backups.map((backup) => (
-                  <tr key={backup.key} className="hover:bg-gray-50 transition-colors group">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 flex items-center gap-2">
+                  <tr key={backup.key} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors group">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
                         <ArchiveBoxIcon className="w-4 h-4 text-indigo-400" />
                         {backup.name}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{formatSize(backup.size)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(backup.lastModified).toLocaleString()}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-mono">{formatSize(backup.size)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{new Date(backup.lastModified).toLocaleString()}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button 
                             onClick={() => handleRestore(backup.key)}
@@ -223,7 +224,7 @@ export default function BackupsTab({ server }) {
                             title={!isStopped ? "Server must be STOPPED to queue a restore" : "Queue Restore for next startup"}
                             className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 justify-end ml-auto ${
                               isStopped
-                                ? 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50'
+                                ? 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 dark:hover:text-indigo-400'
                                 : 'text-gray-400 cursor-not-allowed'
                             }`}
                         >

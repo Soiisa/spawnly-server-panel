@@ -312,8 +312,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     <div className="space-y-6">
       
       {/* 1. Software Selection Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+      {/* UPDATED: Added dark mode classes */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
           <ChipIcon className="w-5 h-5 text-gray-500" /> Software Platform
         </h2>
         
@@ -321,7 +322,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
           {softwareOptions.map((opt) => {
             const isSelected = serverType === opt.id;
             
-            // Helper for badge styling
+            // Helper for badge styling (No dark mode needed, uses fixed colors)
             const badgeStyle = 
               opt.badge === 'Vanilla' ? 'bg-emerald-100 text-emerald-800' :
               opt.badge === 'Plugins' ? 'bg-blue-100 text-blue-800' :
@@ -341,14 +342,17 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 className={`relative cursor-pointer rounded-xl p-3 border-2 transition-all duration-200 flex flex-col items-center text-center gap-2 group
                   ${isSelected 
                     ? `border-indigo-600 bg-indigo-50 shadow-md ring-1 ring-indigo-600` 
-                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    // UPDATED: Added dark mode classes for inactive state
+                    : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/50'
                   }`}
               >
-                <div className={`p-2 rounded-full ${isSelected ? 'bg-white text-indigo-600' : 'bg-gray-100 text-gray-500 group-hover:bg-white'}`}>
+                {/* UPDATED: Added dark mode classes for icon background */}
+                <div className={`p-2 rounded-full ${isSelected ? 'bg-white text-indigo-600' : 'bg-gray-100 dark:bg-slate-700 text-gray-500 group-hover:bg-white dark:group-hover:bg-slate-800'}`}>
                   <opt.icon className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className={`font-bold text-sm ${isSelected ? 'text-indigo-900' : 'text-gray-900'}`}>{opt.label}</h3>
+                  {/* UPDATED: Added dark mode class for title */}
+                  <h3 className={`font-bold text-sm ${isSelected ? 'text-indigo-900' : 'text-gray-900 dark:text-gray-100'}`}>{opt.label}</h3>
                   <span className={`inline-block mt-1 text-[10px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-full ${badgeStyle}`}>
                     {opt.badge}
                   </span>
@@ -365,21 +369,23 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       </div>
 
       {/* 2. Version Selection Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+      {/* UPDATED: Added dark mode classes */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <ArchiveBoxIcon className="w-5 h-5 text-gray-500" /> Game Version
           </h2>
           
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <div className="relative flex-1 sm:flex-none">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
               <input 
                 type="text" 
                 placeholder="Search version..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-48"
+                // UPDATED: Added dark mode classes for search input
+                className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-48"
               />
             </div>
 
@@ -387,8 +393,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
               onClick={() => setShowAllVersions(!showAllVersions)}
               className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
                 showAllVersions
-                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                  : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-700'
+                  // UPDATED: Added dark mode classes for inactive toggle button
+                  : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600'
               }`}
             >
               {showAllVersions ? 'Show All' : 'Show Stable'}
@@ -398,8 +405,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
         {loadingVersions ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 animate-pulse">
+            {/* UPDATED: Added dark mode class for skeleton */}
             {[...Array(12)].map((_, i) => (
-              <div key={i} className="h-10 bg-gray-100 rounded-lg"></div>
+              <div key={i} className="h-10 bg-gray-100 dark:bg-slate-700 rounded-lg"></div>
             ))}
           </div>
         ) : displayedVersions.length > 0 ? (
@@ -415,9 +423,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                   className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border transition-all duration-150 relative overflow-hidden truncate text-left
                     ${isSelected 
                       ? 'border-indigo-600 bg-indigo-600 text-white shadow-md' 
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                      : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-slate-500 hover:bg-gray-50 dark:hover:bg-slate-700'
                     }
-                    ${!isStable && !isSelected ? 'opacity-80 bg-gray-50 text-gray-500' : ''}
+                    ${!isStable && !isSelected ? 'opacity-80 bg-gray-50 dark:bg-slate-700 text-gray-500' : ''}
                   `}
                   title={v}
                 >
@@ -427,13 +435,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             })}
           </div>
         ) : (
-          <div className="text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-            <p className="text-gray-500">No versions found matching "{searchQuery}"</p>
+          <div className="text-center py-10 bg-gray-50 dark:bg-slate-700 rounded-xl border border-dashed border-gray-300 dark:border-slate-600">
+            <p className="text-gray-500 dark:text-gray-400">No versions found matching "{searchQuery}"</p>
           </div>
         )}
       </div>
 
-      {/* 3. Action Bar */}
+      {/* 3. Action Bar (No changes needed for action bar colors) */}
       <div className="flex items-center justify-end gap-4 pt-2">
         <AnimatePresence>
           {success && (
@@ -467,23 +475,30 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       <AnimatePresence>
         {showVersionWarning && versionChangeInfo && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            {/* UPDATED: Added dark mode class for modal container */}
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
+              className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
             >
               <div className={`p-6 border-b ${
-                versionChangeInfo.severity === 'high' ? 'bg-red-50 border-red-100' : 'bg-yellow-50 border-yellow-100'
+                versionChangeInfo.severity === 'high' 
+                  ? 'bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-800' 
+                  : 'bg-yellow-50 border-yellow-100 dark:bg-yellow-900/20 dark:border-yellow-800'
               }`}>
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-full ${
-                    versionChangeInfo.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'
+                    versionChangeInfo.severity === 'high' 
+                      ? 'bg-red-100 text-red-600' 
+                      : 'bg-yellow-100 text-yellow-600'
                   }`}>
                     <ExclamationTriangleIcon className="w-6 h-6" />
                   </div>
                   <h3 className={`text-lg font-bold ${
-                    versionChangeInfo.severity === 'high' ? 'text-red-900' : 'text-yellow-900'
+                    versionChangeInfo.severity === 'high' 
+                      ? 'text-red-900 dark:text-red-300' 
+                      : 'text-yellow-900 dark:text-yellow-300'
                   }`}>
                     {versionChangeInfo.severity === 'high' ? 'High Impact Change' : 'Confirm Change'}
                   </h3>
@@ -491,22 +506,24 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
               </div>
               
               <div className="p-6 space-y-4">
-                <p className="text-gray-700 leading-relaxed">
+                <p className="text-gray-700 dark:text-gray-200 leading-relaxed">
                   {versionChangeInfo.message}
                 </p>
                 
                 {versionChangeInfo.backupMessage && (
-                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800 flex items-start gap-3">
+                  // UPDATED: Added dark mode classes for info box
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-300 flex items-start gap-3">
                     <ArchiveBoxIcon className="w-5 h-5 shrink-0 mt-0.5" />
                     <span>{versionChangeInfo.backupMessage}</span>
                   </div>
                 )}
               </div>
 
-              <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t border-gray-200">
+              {/* UPDATED: Added dark mode classes for footer */}
+              <div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 flex justify-end gap-3 border-t border-gray-200 dark:border-slate-700">
                 <button
                   onClick={() => { setShowVersionWarning(false); setVersionChangeInfo(null); }}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 font-medium"
                 >
                   Cancel
                 </button>

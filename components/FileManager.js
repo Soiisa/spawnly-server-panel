@@ -22,7 +22,7 @@ import {
 
 // File type icon helper
 const getFileIcon = (fileName, isDirectory) => {
-  if (isDirectory) return <FolderIcon className="w-6 h-6 text-indigo-400 fill-indigo-50" />;
+  if (isDirectory) return <FolderIcon className="w-6 h-6 text-indigo-400 fill-indigo-50 dark:fill-indigo-900/20" />;
   const ext = fileName.split('.').pop().toLowerCase();
   switch (ext) {
     case 'json':
@@ -32,15 +32,15 @@ const getFileIcon = (fileName, isDirectory) => {
     case 'toml':
     case 'conf':
     case 'ini':
-      return <CodeBracketIcon className="w-6 h-6 text-emerald-500" />;
+      return <CodeBracketIcon className="w-6 h-6 text-emerald-500 dark:text-emerald-400" />;
     case 'log':
     case 'txt':
     case 'md':
-      return <DocumentTextIcon className="w-6 h-6 text-slate-500" />;
+      return <DocumentTextIcon className="w-6 h-6 text-slate-500 dark:text-slate-400" />;
     case 'jar':
-      return <div className="w-6 h-6 flex items-center justify-center font-bold text-xs text-orange-600 border border-orange-200 rounded bg-orange-50">J</div>;
+      return <div className="w-6 h-6 flex items-center justify-center font-bold text-xs text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-600 rounded bg-orange-50 dark:bg-orange-900/20">J</div>;
     default:
-      return <DocumentIcon className="w-6 h-6 text-gray-400" />;
+      return <DocumentIcon className="w-6 h-6 text-gray-400 dark:text-gray-500" />;
   }
 };
 
@@ -287,23 +287,23 @@ export default function FileManager({ server, token, setActiveTab }) {
           >
             <motion.div 
               initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-              className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
+              className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
             >
               {/* Modal Header */}
-              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg border border-gray-200 shadow-sm">
+                  <div className="p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-600 shadow-sm">
                     {getFileIcon(editingFile.name, false)}
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">{editingFile.name}</h3>
-                    <p className="text-xs text-gray-500 font-mono">{currentPath}/{editingFile.name}</p>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{editingFile.name}</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-300 font-mono">{currentPath}/{editingFile.name}</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   <button 
                     onClick={() => { setEditingFile(null); setFileContent(''); }}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
@@ -333,26 +333,26 @@ export default function FileManager({ server, token, setActiveTab }) {
       </AnimatePresence>
 
       {/* Toolbar & Breadcrumbs */}
-      <div className="bg-white rounded-t-2xl border border-gray-200 p-4 border-b-0">
+      <div className="bg-white dark:bg-slate-800 rounded-t-2xl border border-gray-200 dark:border-slate-700 p-4 border-b-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
           
           {/* Breadcrumbs */}
           <div className="flex items-center gap-1 text-sm overflow-x-auto scrollbar-hide">
             <button 
               onClick={() => setCurrentPath('')}
-              className={`p-1.5 rounded-md transition-colors ${!currentPath ? 'text-indigo-600 bg-indigo-50 font-semibold' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+              className={`p-1.5 rounded-md transition-colors ${!currentPath ? 'text-indigo-600 bg-indigo-50 font-semibold' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
             >
               <HomeIcon className="w-5 h-5" />
             </button>
             {breadcrumbs.map((part, index) => (
               <div key={index} className="flex items-center">
-                <ChevronRightIcon className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                <ChevronRightIcon className="w-4 h-4 text-gray-300 dark:text-slate-500 flex-shrink-0" />
                 <button
                   onClick={() => setCurrentPath(breadcrumbs.slice(0, index + 1).join('/'))}
                   className={`px-2 py-1 rounded-md transition-colors whitespace-nowrap ${
                     index === breadcrumbs.length - 1 
                       ? 'text-indigo-600 bg-indigo-50 font-semibold' 
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700'
                   }`}
                 >
                   {part}
@@ -365,7 +365,7 @@ export default function FileManager({ server, token, setActiveTab }) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setFilterEnabled(!filterEnabled)}
-              className={`p-2 rounded-lg border transition-colors ${filterEnabled ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+              className={`p-2 rounded-lg border transition-colors ${filterEnabled ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/20 dark:border-indigo-600 dark:text-indigo-400' : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600 text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'}`}
               title="Toggle masked files"
             >
               <FunnelIcon className="w-5 h-5" />
@@ -374,7 +374,7 @@ export default function FileManager({ server, token, setActiveTab }) {
             <button
               onClick={() => fetchFiles(currentPath)}
               disabled={loading}
-              className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors disabled:opacity-50"
+              className="p-2 rounded-lg border border-gray-200 dark:border-slate-600 text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 hover:text-gray-900 dark:hover:text-gray-100 transition-colors disabled:opacity-50"
               title="Refresh"
             >
               <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -400,7 +400,7 @@ export default function FileManager({ server, token, setActiveTab }) {
 
         {/* Upload Progress Bar */}
         {uploadProgress > 0 && (
-          <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden mb-4">
+          <div className="h-1 w-full bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden mb-4">
             <motion.div 
               initial={{ width: 0 }} 
               animate={{ width: `${uploadProgress}%` }} 
@@ -419,25 +419,25 @@ export default function FileManager({ server, token, setActiveTab }) {
       </div>
 
       {/* File List Table */}
-      <div className="flex-1 bg-white border border-gray-200 border-t-0 rounded-b-2xl overflow-hidden shadow-sm">
+      <div className="flex-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 border-t-0 rounded-b-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+              <tr className="bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-700 text-xs uppercase text-gray-500 dark:text-gray-300 font-semibold tracking-wider">
                 <th className="px-6 py-4 w-1/2">Name</th>
                 <th className="px-6 py-4 w-1/6">Size</th>
                 <th className="px-6 py-4 w-1/6">Modified</th>
                 <th className="px-6 py-4 w-1/6 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
               {loading && files.length === 0 ? (
                 // Loading Skeleton
                 [...Array(5)].map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-3/4"></div></td>
-                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-1/2"></div></td>
-                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-1/2"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-slate-700 rounded w-3/4"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-slate-700 rounded w-1/2"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-slate-700 rounded w-1/2"></div></td>
                     <td className="px-6 py-4"></td>
                   </tr>
                 ))
@@ -445,10 +445,10 @@ export default function FileManager({ server, token, setActiveTab }) {
                 // Empty State
                 <tr>
                   <td colSpan="4" className="px-6 py-12 text-center">
-                    <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                    <div className="mx-auto w-12 h-12 bg-gray-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-3">
                       <FolderIcon className="w-6 h-6 text-gray-400" />
                     </div>
-                    <p className="text-gray-500 font-medium">This folder is empty</p>
+                    <p className="text-gray-500 dark:text-gray-400 font-medium">This folder is empty</p>
                   </td>
                 </tr>
               ) : (
@@ -456,7 +456,7 @@ export default function FileManager({ server, token, setActiveTab }) {
                 files.map((file) => (
                   <tr 
                     key={file.name} 
-                    className="group hover:bg-gray-50 transition-colors cursor-pointer"
+                    className="group hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer"
                     onClick={(e) => {
                       // Prevent navigation if clicking action buttons
                       if (e.target.closest('button')) return;
@@ -468,15 +468,15 @@ export default function FileManager({ server, token, setActiveTab }) {
                         <div className="flex-shrink-0 transition-transform group-hover:scale-110 duration-200">
                           {getFileIcon(file.name, file.isDirectory)}
                         </div>
-                        <span className="text-sm font-medium text-gray-900 group-hover:text-indigo-700 transition-colors">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-indigo-700 transition-colors">
                           {file.name}
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-3 text-sm text-gray-500 font-mono">
+                    <td className="px-6 py-3 text-sm text-gray-500 dark:text-gray-400 font-mono">
                       {file.isDirectory ? '—' : formatSize(file.size)}
                     </td>
-                    <td className="px-6 py-3 text-sm text-gray-500">
+                    <td className="px-6 py-3 text-sm text-gray-500 dark:text-gray-400">
                       {new Date(file.modified).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-3 text-right">
@@ -485,7 +485,7 @@ export default function FileManager({ server, token, setActiveTab }) {
                         {!file.isDirectory && !specialFiles.includes(file.name.toLowerCase()) && !maskedItems.includes(file.name.toLowerCase()) && (
                           <button
                             onClick={() => download(file)}
-                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                            className="p-1.5 text-gray-400 dark:text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 dark:hover:text-indigo-400 rounded-md transition-colors"
                             title="Download"
                           >
                             <ArrowDownTrayIcon className="w-4 h-4" />
@@ -495,7 +495,7 @@ export default function FileManager({ server, token, setActiveTab }) {
                         {isTextFile(file.name) && (
                           <button
                             onClick={() => openFileForEditing(file)}
-                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
+                            className="p-1.5 text-gray-400 dark:text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 rounded-md transition-colors"
                             title="Edit"
                           >
                             <PencilSquareIcon className="w-4 h-4" />
@@ -506,7 +506,7 @@ export default function FileManager({ server, token, setActiveTab }) {
                         {specialFiles.includes(file.name.toLowerCase()) && (
                           <button
                             onClick={() => setActiveTab('properties')}
-                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            className="p-1.5 text-gray-400 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 rounded-md transition-colors"
                             title="Open Properties Editor"
                           >
                             <CodeBracketIcon className="w-4 h-4" />
@@ -515,7 +515,7 @@ export default function FileManager({ server, token, setActiveTab }) {
 
                         <button
                           onClick={() => deleteFile(file)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          className="p-1.5 text-gray-400 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-md transition-colors"
                           title="Delete"
                         >
                           <TrashIcon className="w-4 h-4" />

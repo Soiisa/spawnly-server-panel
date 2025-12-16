@@ -31,21 +31,25 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 font-sans text-slate-900">
+    // UPDATED: Added dark mode classes for page container
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Navbar />
 
       <main className="flex-grow flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+            {/* UPDATED: Added dark mode class for text */}
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
               Reset Password
             </h2>
-            <p className="mt-2 text-sm text-gray-600">
+            {/* UPDATED: Added dark mode class for text */}
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
               Enter your email to receive a reset link
             </p>
           </div>
 
-          <div className="bg-white py-8 px-6 shadow-xl rounded-2xl border border-gray-100 sm:px-10">
+          {/* UPDATED: Added dark mode classes for card */}
+          <div className="bg-white dark:bg-slate-800 py-8 px-6 shadow-xl rounded-2xl border border-gray-100 dark:border-slate-700 sm:px-10">
             {message ? (
               <div className="text-center">
                 <div className="mb-4 text-green-600 bg-green-50 p-4 rounded-lg">
@@ -64,7 +68,8 @@ export default function ForgotPassword() {
                 )}
 
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                  {/* UPDATED: Added dark mode class for label */}
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Email address
                   </label>
                   <div className="mt-1 relative rounded-md shadow-sm">
@@ -79,7 +84,8 @@ export default function ForgotPassword() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="block w-full pl-10 pr-3 py-3 border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border shadow-sm"
+                      // UPDATED: Added dark mode classes for input
+                      className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border shadow-sm"
                       placeholder="you@example.com"
                     />
                   </div>
@@ -94,7 +100,8 @@ export default function ForgotPassword() {
                 </button>
 
                 <div className="text-center mt-4">
-                  <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-500">
+                  {/* UPDATED: Added dark mode class for link */}
+                  <Link href="/login" className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
                     Back to Login
                   </Link>
                 </div>

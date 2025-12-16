@@ -162,46 +162,55 @@ export default function CreditsPage() {
     // Session Row
     if (item.isSession) {
       return (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
+        // UPDATED: Added dark mode classes for container
+        <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
           <div 
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center justify-between p-4 cursor-pointer bg-white hover:bg-gray-50 transition-colors"
+            // UPDATED: Added dark mode classes for row background and hover
+            className="flex items-center justify-between p-4 cursor-pointer bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
           >
             <div className="flex items-center gap-4">
-              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+              {/* UPDATED: Added dark mode classes for icon background */}
+              <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg">
                 <ServerIcon className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="font-semibold text-gray-900">
+                {/* UPDATED: Added dark mode class for text */}
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100">
                   Session Runtime 
-                  <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                  {/* UPDATED: Added dark mode classes for badge */}
+                  <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">
                     {fmtSeconds(item.meta.totalSeconds)}
                   </span>
                 </h4>
-                <div className="text-sm text-gray-500 flex items-center gap-2">
+                {/* UPDATED: Added dark mode class for text */}
+                <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
                   <span>{formatDate(item.startDate)}</span>
                   <span>&rarr;</span>
                   <span>{formatDate(item.endDate)}</span>
                 </div>
                 {item.meta.serverId && (
-                  <p className="text-xs text-gray-400 mt-0.5 font-mono">ID: {item.meta.serverId.split('-')[0]}...</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono">ID: {item.meta.serverId.split('-')[0]}...</p>
                 )}
               </div>
             </div>
             
             <div className="flex items-center gap-4">
-              <span className="font-bold text-gray-900">
-                {item.amount.toFixed(4)} <span className="text-xs font-normal text-gray-500">credits</span>
+              {/* UPDATED: Added dark mode class for text */}
+              <span className="font-bold text-gray-900 dark:text-gray-100">
+                {item.amount.toFixed(4)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">credits</span>
               </span>
               {isOpen ? <ChevronUpIcon className="w-5 h-5 text-gray-400" /> : <ChevronDownIcon className="w-5 h-5 text-gray-400" />}
             </div>
           </div>
 
           {isOpen && (
-            <div className="bg-gray-50 border-t border-gray-100 px-4 py-3 space-y-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Detailed Charges</p>
+            // UPDATED: Added dark mode classes for details panel
+            <div className="bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 px-4 py-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Detailed Charges</p>
               {item.details.map((tx) => (
-                <div key={tx.id} className="flex justify-between text-sm text-gray-600 pl-4 border-l-2 border-indigo-200">
+                // UPDATED: Added dark mode classes for detail item
+                <div key={tx.id} className="flex justify-between text-sm text-gray-600 dark:text-gray-300 pl-4 border-l-2 border-indigo-200 dark:border-indigo-800">
                   <span>{formatDate(tx.created_at)}</span>
                   <span className="font-mono">{tx.amount.toFixed(4)}</span>
                 </div>
@@ -214,28 +223,32 @@ export default function CreditsPage() {
 
     // Single Transaction Row
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between hover:shadow-sm transition-shadow">
+      // UPDATED: Added dark mode classes
+      <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 flex items-center justify-between hover:shadow-sm transition-shadow">
         <div className="flex items-center gap-4">
-          <div className={`p-2 rounded-lg ${!isNegative ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-600'}`}>
+          <div className={`p-2 rounded-lg ${!isNegative ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400'}`}>
             {!isNegative ? <CurrencyDollarIcon className="w-6 h-6" /> : <ReceiptRefundIcon className="w-6 h-6" />}
           </div>
           <div>
-            <h4 className="font-semibold text-gray-900 capitalize">
+            {/* UPDATED: Added dark mode class for text */}
+            <h4 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">
               {item.type === 'usage' ? 'Manual Deduction' : item.type}
             </h4>
-            <p className="text-sm text-gray-500">{formatDate(item.date)}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{item.description}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(item.date)}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{item.description}</p>
           </div>
         </div>
-        <span className={`font-bold ${!isNegative ? 'text-green-600' : 'text-gray-900'}`}>
-          {item.amount > 0 ? '+' : ''}{item.amount.toFixed(2)} <span className="text-xs font-normal text-gray-500">credits</span>
+        {/* UPDATED: Added dark mode classes for amount text */}
+        <span className={`font-bold ${!isNegative ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}>
+          {item.amount > 0 ? '+' : ''}{item.amount.toFixed(2)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">credits</span>
         </span>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-slate-900">
+    // UPDATED: Added dark mode classes for page container
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={loadingData} onLogout={handleLogout} />
 
       <main className="flex-grow w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -243,8 +256,8 @@ export default function CreditsPage() {
         {/* Page Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Billing & Credits</h1>
-            <p className="text-gray-600 mt-1">Manage your balance and view usage history</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Billing & Credits</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your balance and view usage history</p>
           </div>
           <button
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -257,28 +270,33 @@ export default function CreditsPage() {
         </div>
 
         {/* Balance Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        {/* UPDATED: Added dark mode classes for card */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-            <CurrencyDollarIcon className="w-48 h-48 text-indigo-900" />
+            <CurrencyDollarIcon className="w-48 h-48 text-indigo-900 dark:text-indigo-400" />
           </div>
           
           <div className="relative z-10">
-            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Current Balance</p>
-            <p className="text-4xl font-bold text-indigo-900 mt-2">
+            {/* UPDATED: Added dark mode class for text */}
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Balance</p>
+            <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-400 mt-2">
               {loadingData ? "..." : credits.toFixed(2)} 
-              <span className="text-lg font-medium text-gray-500 ml-2">credits</span>
+              <span className="text-lg font-medium text-gray-500 dark:text-gray-400 ml-2">credits</span>
             </p>
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
               ~€{(credits * 0.01).toFixed(2)} value
             </p>
           </div>
 
-          <div className="relative z-10 bg-indigo-50 border border-indigo-100 rounded-xl p-4 max-w-sm">
+          {/* UPDATED: Added dark mode classes for info box */}
+          <div className="relative z-10 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl p-4 max-w-sm">
             <div className="flex items-start gap-3">
-              <ClockIcon className="w-5 h-5 text-indigo-600 mt-0.5" />
+              <ClockIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mt-0.5" />
               <div>
-                <h4 className="text-sm font-bold text-indigo-900">Real-time Billing</h4>
-                <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
+                {/* UPDATED: Added dark mode class for text */}
+                <h4 className="text-sm font-bold text-indigo-900 dark:text-indigo-300">Real-time Billing</h4>
+                {/* UPDATED: Added dark mode class for text */}
+                <p className="text-xs text-indigo-700 dark:text-indigo-400 mt-1 leading-relaxed">
                   Servers are billed per minute of runtime. Credits are deducted automatically while your server is running.
                 </p>
               </div>
@@ -288,7 +306,7 @@ export default function CreditsPage() {
 
         {/* Transactions List */}
         <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Transaction History</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Transaction History</h2>
           
           {loadingData ? (
             <div className="flex justify-center py-12">
@@ -299,9 +317,10 @@ export default function CreditsPage() {
               {error}
             </div>
           ) : transactions.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
-              <ReceiptRefundIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No transactions found.</p>
+            // UPDATED: Added dark mode classes for empty state
+            <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-2xl border border-dashed border-gray-300 dark:border-slate-700">
+              <ReceiptRefundIcon className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400">No transactions found.</p>
             </div>
           ) : (
             <div className="space-y-3">

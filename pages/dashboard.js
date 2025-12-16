@@ -276,21 +276,23 @@ export default function Dashboard() {
   // --- Render Helpers ---
 
   if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    // UPDATED: Added dark mode classes
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-        <p className="mt-4 text-gray-500 font-medium">Loading dashboard...</p>
+        <p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">Loading dashboard...</p>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
+    // UPDATED: Added dark mode class for text color
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={isLoadingServers} onLogout={handleLogout} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* Error Toast */}
+        {/* Error Toast (No changes needed) */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex justify-between items-center shadow-sm">
             <span className="flex items-center gap-2">
@@ -303,39 +305,39 @@ export default function Dashboard() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><ServerIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 font-medium">Total Servers</p>
-              <p className="text-2xl font-bold text-gray-900">{servers.length}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Total Servers</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.length}</p>
             </div>
           </div>
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-green-50 text-green-600 rounded-xl"><PlayIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 font-medium">Active Now</p>
-              <p className="text-2xl font-bold text-gray-900">{servers.filter(s => s.status === 'Running').length}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Active Now</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.filter(s => s.status === 'Running').length}</p>
             </div>
           </div>
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-purple-50 text-purple-600 rounded-xl"><CpuChipIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 font-medium">Total RAM</p>
-              <p className="text-2xl font-bold text-gray-900">{servers.reduce((a, b) => a + b.ram, 0)} GB</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Total RAM</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.reduce((a, b) => a + b.ram, 0)} GB</p>
             </div>
           </div>
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><CurrencyDollarIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 font-medium">Hourly Cost</p>
-              <p className="text-2xl font-bold text-gray-900">{servers.reduce((a, b) => a + b.cost_per_hour, 0).toFixed(2)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Hourly Cost</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.reduce((a, b) => a + b.cost_per_hour, 0).toFixed(2)}</p>
             </div>
           </div>
         </div>
 
         {/* Action Bar */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Your Servers</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Your Servers</h2>
           <button
             onClick={() => setShowModal(true)}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium shadow-sm transition-all hover:-translate-y-0.5"
@@ -349,31 +351,31 @@ export default function Dashboard() {
         {isLoadingServers && servers.length === 0 ? (
           <div className="py-20 flex justify-center"><div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent" /></div>
         ) : servers.length === 0 ? (
-          <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center">
-            <div className="mx-auto w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+          <div className="bg-white dark:bg-slate-800 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-2xl p-12 text-center">
+            <div className="mx-auto w-16 h-16 bg-gray-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
               <ServerIcon className="w-8 h-8 text-gray-400" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900">No servers found</h3>
-            <p className="text-gray-500 mt-1 mb-6">Get started by creating your first game server.</p>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No servers found</h3>
+            <p className="text-gray-500 dark:text-gray-400 mt-1 mb-6">Get started by creating your first game server.</p>
             <button onClick={() => setShowModal(true)} className="text-indigo-600 font-medium hover:underline">Create Server &rarr;</button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {servers.map((server) => (
-              <div key={server.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col group hover:border-indigo-200 transition-colors">
+              <div key={server.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col group hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors">
                 
                 {/* Card Header */}
-                <div className="p-6 border-b border-gray-100">
+                <div className="p-6 border-b border-gray-100 dark:border-slate-700">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                      <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center text-indigo-600">
                         {server.game === 'minecraft' ? <div className="font-bold">M</div> : <ServerIcon className="w-6 h-6" />}
                       </div>
                       <div>
-                        <h3 className="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => !server.id.startsWith('temp') && router.push(`/server/${server.id}`)}>
+                        <h3 className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => !server.id.startsWith('temp') && router.push(`/server/${server.id}`)}>
                           {server.name}
                         </h3>
-                        <p className="text-xs text-gray-500 capitalize">{server.type || 'Vanilla'} {server.version}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{server.type || 'Vanilla'} {server.version}</p>
                       </div>
                     </div>
                     <ServerStatusIndicator server={server} />
@@ -381,18 +383,18 @@ export default function Dashboard() {
                   
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-500 text-xs uppercase font-medium">Memory</p>
-                      <p className="font-semibold text-gray-900">{server.ram} GB</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">Memory</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{server.ram} GB</p>
                     </div>
                     <div>
-                      <p className="text-gray-500 text-xs uppercase font-medium">Address</p>
-                      <p className="font-mono text-gray-700 truncate" title={`${server.name}.spawnly.net`}>{server.name}.spawnly.net</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">Address</p>
+                      <p className="font-mono text-gray-700 dark:text-gray-300 truncate" title={`${server.name}.spawnly.net`}>{server.name}.spawnly.net</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Card Actions */}
-                <div className="p-4 bg-gray-50 flex items-center gap-2 mt-auto">
+                <div className="p-4 bg-gray-50 dark:bg-slate-700 flex items-center gap-2 mt-auto">
                   {server.status === "Stopped" ? (
                     <button 
                       onClick={() => handleStartServer(server)}
@@ -404,12 +406,13 @@ export default function Dashboard() {
                   ) : server.status === "Running" ? (
                     <button 
                       onClick={() => handleStopServer(server.id)}
-                      className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200 py-2 rounded-lg text-sm font-medium transition-colors"
+                      // UPDATED: Added dark mode classes for stop button
+                      className="flex-1 flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/20 dark:hover:border-red-600 py-2 rounded-lg text-sm font-medium transition-colors"
                     >
                       <StopIcon className="w-4 h-4" /> Stop
                     </button>
                   ) : (
-                    <button disabled className="flex-1 flex items-center justify-center gap-2 bg-gray-200 text-gray-500 py-2 rounded-lg text-sm font-medium cursor-not-allowed">
+                    <button disabled className="flex-1 flex items-center justify-center gap-2 bg-gray-200 dark:bg-slate-600 text-gray-500 py-2 rounded-lg text-sm font-medium cursor-not-allowed">
                       <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                       Processing
                     </button>
@@ -417,7 +420,8 @@ export default function Dashboard() {
 
                   <Link 
                     href={server.id.startsWith('temp') ? '#' : `/server/${server.id}`}
-                    className={`p-2 rounded-lg border border-gray-300 bg-white text-gray-600 hover:text-indigo-600 hover:border-indigo-300 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
+                    // UPDATED: Added dark mode classes for link buttons
+                    className={`p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
                     title="Console & Files"
                   >
                     <CommandLineIcon className="w-5 h-5" />
@@ -425,7 +429,8 @@ export default function Dashboard() {
                   
                   <Link 
                     href={server.id.startsWith('temp') ? '#' : `/server/${server.id}?tab=properties`}
-                    className={`p-2 rounded-lg border border-gray-300 bg-white text-gray-600 hover:text-indigo-600 hover:border-indigo-300 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
+                    // UPDATED: Added dark mode classes for link buttons
+                    className={`p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
                     title="Settings"
                   >
                     <AdjustmentsHorizontalIcon className="w-5 h-5" />
@@ -434,7 +439,8 @@ export default function Dashboard() {
                   <button
                     onClick={() => handleDeleteServer(server.id)}
                     disabled={!['Stopped', 'Running'].includes(server.status)}
-                    className="p-2 rounded-lg border border-gray-300 bg-white text-gray-400 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50"
+                    // UPDATED: Added dark mode classes for delete button
+                    className="p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-400 hover:text-red-600 hover:border-red-200 dark:hover:border-red-600 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
                     title="Delete Server"
                   >
                     <TrashIcon className="w-5 h-5" />

@@ -43,22 +43,31 @@ export default function MetricsViewer({ server }) {
   }, [server]);
 
   return (
-    <div className="bg-white rounded-lg shadow p-4">
+    // UPDATED: Added dark mode classes for container
+    <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <div className="font-bold">CPU Usage</div>
-          <div className="text-2xl">{Math.round(metrics.cpu)}%</div>
-          <div className="text-sm text-gray-500">Usage</div>
-          <div className="bg-gray-200 h-4 rounded">
+          {/* UPDATED: Added dark mode class for text */}
+          <div className="font-bold dark:text-gray-100">CPU Usage</div>
+          {/* UPDATED: Added dark mode class for text */}
+          <div className="text-2xl dark:text-gray-100">{Math.round(metrics.cpu)}%</div>
+          {/* UPDATED: Added dark mode class for text */}
+          <div className="text-sm text-gray-500 dark:text-gray-400">Usage</div>
+          {/* UPDATED: Added dark mode class for progress track */}
+          <div className="bg-gray-200 dark:bg-slate-700 h-4 rounded">
             <div className="bg-blue-500 h-4 rounded" style={{ width: `${Math.min(Math.round(metrics.cpu), 100)}%` }} />
           </div>
         </div>
         <div>
-          <div className="font-bold">RAM Usage</div>
-          <div className="text-2xl">{Math.round(metrics.ram)}%</div>
-          <div className="text-sm text-gray-500">Usage</div>
-          <div className="bg-gray-200 h-4 rounded">
+          {/* UPDATED: Added dark mode class for text */}
+          <div className="font-bold dark:text-gray-100">RAM Usage</div>
+          {/* UPDATED: Added dark mode class for text */}
+          <div className="text-2xl dark:text-gray-100">{Math.round(metrics.ram)}%</div>
+          {/* UPDATED: Added dark mode class for text */}
+          <div className="text-sm text-gray-500 dark:text-gray-400">Usage</div>
+          {/* UPDATED: Added dark mode class for progress track */}
+          <div className="bg-gray-200 dark:bg-slate-700 h-4 rounded">
             <div className="bg-green-500 h-4 rounded" style={{ width: `${Math.min(Math.round(metrics.ram), 100)}%` }} />
           </div>
         </div>

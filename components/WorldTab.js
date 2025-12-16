@@ -222,11 +222,12 @@ export default function WorldTab({ server, token }) {
       
       {/* Warning Banner */}
       {!isServerStopped && (
-        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg flex items-start gap-3">
-          <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+        // UPDATED: Added dark mode classes
+        <div className="bg-amber-50 dark:bg-amber-900/30 border-l-4 border-amber-400 dark:border-amber-600 p-4 rounded-r-lg flex items-start gap-3">
+          <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-medium text-amber-800">Server is Running</h3>
-            <p className="text-xs text-amber-700 mt-1">
+            <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200">Server is Running</h3>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
               You must stop the server to upload, download, or regenerate the world to prevent data corruption.
             </p>
           </div>
@@ -240,41 +241,47 @@ export default function WorldTab({ server, token }) {
         <button
           onClick={handleDownload}
           disabled={!isServerStopped || loadingAction}
+          // UPDATED: Added dark mode classes
           className={`group relative overflow-hidden p-6 rounded-2xl border transition-all text-left flex flex-col justify-between h-40
             ${!isServerStopped 
-              ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' 
-              : 'bg-white border-gray-200 hover:border-indigo-300 hover:shadow-md'
+              ? 'bg-gray-50 dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 opacity-60 cursor-not-allowed' 
+              : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-md'
             }`}
         >
           <div className="flex justify-between items-start">
-            <div className={`p-3 rounded-xl ${!isServerStopped ? 'bg-gray-200 text-gray-400' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'}`}>
+            {/* UPDATED: Added dark mode classes */}
+            <div className={`p-3 rounded-xl ${!isServerStopped ? 'bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-gray-500' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/50'}`}>
               <CloudArrowDownIcon className="w-6 h-6" />
             </div>
             {loadingAction === 'download' && <div className="animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full" />}
           </div>
           <div>
-            <h3 className="font-bold text-gray-900">Download World</h3>
-            <p className="text-sm text-gray-500 mt-1">Backup your current world as a .zip file</p>
+            {/* UPDATED: Added dark mode class for text */}
+            <h3 className="font-bold text-gray-900 dark:text-gray-100">Download World</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Backup your current world as a .zip file</p>
           </div>
         </button>
 
         {/* Upload Card */}
         <label
+          // UPDATED: Added dark mode classes
           className={`group relative overflow-hidden p-6 rounded-2xl border transition-all text-left flex flex-col justify-between h-40
             ${!isServerStopped 
-              ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' 
-              : 'bg-white border-gray-200 hover:border-emerald-300 hover:shadow-md cursor-pointer'
+              ? 'bg-gray-50 dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 opacity-60 cursor-not-allowed' 
+              : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-500 hover:shadow-md cursor-pointer'
             }`}
         >
           <div className="flex justify-between items-start">
-            <div className={`p-3 rounded-xl ${!isServerStopped ? 'bg-gray-200 text-gray-400' : 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100'}`}>
+            {/* UPDATED: Added dark mode classes */}
+            <div className={`p-3 rounded-xl ${!isServerStopped ? 'bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-gray-500' : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/50'}`}>
               <CloudArrowUpIcon className="w-6 h-6" />
             </div>
             {loadingAction === 'upload' && <div className="animate-spin w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full" />}
           </div>
           <div>
-            <h3 className="font-bold text-gray-900">Upload World</h3>
-            <p className="text-sm text-gray-500 mt-1">Restore a world from a .zip backup</p>
+            {/* UPDATED: Added dark mode class for text */}
+            <h3 className="font-bold text-gray-900 dark:text-gray-100">Upload World</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Restore a world from a .zip backup</p>
           </div>
           <input 
             type="file" 
@@ -289,20 +296,23 @@ export default function WorldTab({ server, token }) {
         <button
           onClick={() => setIsGenerateModalOpen(true)}
           disabled={!isServerStopped || loadingAction}
+          // UPDATED: Added dark mode classes
           className={`group relative overflow-hidden p-6 rounded-2xl border transition-all text-left flex flex-col justify-between h-40
             ${!isServerStopped 
-              ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' 
-              : 'bg-white border-gray-200 hover:border-purple-300 hover:shadow-md'
+              ? 'bg-gray-50 dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 opacity-60 cursor-not-allowed' 
+              : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-500 hover:shadow-md'
             }`}
         >
           <div className="flex justify-between items-start">
-            <div className={`p-3 rounded-xl ${!isServerStopped ? 'bg-gray-200 text-gray-400' : 'bg-purple-50 text-purple-600 group-hover:bg-purple-100'}`}>
+            {/* UPDATED: Added dark mode classes */}
+            <div className={`p-3 rounded-xl ${!isServerStopped ? 'bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-gray-500' : 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/50'}`}>
               <GlobeAltIcon className="w-6 h-6" />
             </div>
           </div>
           <div>
-            <h3 className="font-bold text-gray-900">Generate New</h3>
-            <p className="text-sm text-gray-500 mt-1">Create a fresh world with custom seeds</p>
+            {/* UPDATED: Added dark mode class for text */}
+            <h3 className="font-bold text-gray-900 dark:text-gray-100">Generate New</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Create a fresh world with custom seeds</p>
           </div>
         </button>
 
@@ -310,21 +320,24 @@ export default function WorldTab({ server, token }) {
         <button
           onClick={handleOpenOptions}
           disabled={!isServerStopped || loadingAction}
+          // UPDATED: Added dark mode classes
           className={`group relative overflow-hidden p-6 rounded-2xl border transition-all text-left flex flex-col justify-between h-40
             ${!isServerStopped 
-              ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed' 
-              : 'bg-white border-gray-200 hover:border-amber-300 hover:shadow-md'
+              ? 'bg-gray-50 dark:bg-slate-800/50 border-gray-200 dark:border-slate-700 opacity-60 cursor-not-allowed' 
+              : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-500 hover:shadow-md'
             }`}
         >
           <div className="flex justify-between items-start">
-            <div className={`p-3 rounded-xl ${!isServerStopped ? 'bg-gray-200 text-gray-400' : 'bg-amber-50 text-amber-600 group-hover:bg-amber-100'}`}>
+            {/* UPDATED: Added dark mode classes */}
+            <div className={`p-3 rounded-xl ${!isServerStopped ? 'bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-gray-500' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 group-hover:bg-amber-100 dark:group-hover:bg-amber-900/50'}`}>
               <AdjustmentsHorizontalIcon className="w-6 h-6" />
             </div>
             {loadingAction === 'options' && <div className="animate-spin w-5 h-5 border-2 border-amber-600 border-t-transparent rounded-full" />}
           </div>
           <div>
-            <h3 className="font-bold text-gray-900">Level Config</h3>
-            <p className="text-sm text-gray-500 mt-1">Edit level.dat, seeds, and game rules</p>
+            {/* UPDATED: Added dark mode class for text */}
+            <h3 className="font-bold text-gray-900 dark:text-gray-100">Level Config</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Edit level.dat, seeds, and game rules</p>
           </div>
         </button>
       </div>
@@ -350,59 +363,63 @@ export default function WorldTab({ server, token }) {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           >
+            {/* UPDATED: Added dark mode classes for modal */}
             <motion.div 
               initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+              className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
             >
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                <h2 className="text-lg font-bold text-gray-900">Generate World</h2>
-                <button onClick={() => setIsGenerateModalOpen(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-700">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Generate World</h2>
+                <button onClick={() => setIsGenerateModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><XMarkIcon className="w-6 h-6" /></button>
               </div>
               
               <div className="p-6 overflow-y-auto space-y-5">
-                <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm border border-red-100 flex gap-2">
+                {/* UPDATED: Added dark mode classes for warning */}
+                <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-3 rounded-lg text-sm border border-red-100 dark:border-red-800 flex gap-2">
                   <ExclamationTriangleIcon className="w-5 h-5 shrink-0" />
                   Warning: This will permanently delete the current world folder.
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Level Name</label>
-                  <input type="text" name="levelName" value={formData.levelName} onChange={handleInputChange} className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="world" />
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Level Name</label>
+                  {/* UPDATED: Added dark mode classes for input */}
+                  <input type="text" name="levelName" value={formData.levelName} onChange={handleInputChange} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="world" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Seed</label>
-                    <input type="text" name="seed" value={formData.seed} onChange={handleInputChange} className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="Leave empty for random" />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Seed</label>
+                    <input type="text" name="seed" value={formData.seed} onChange={handleInputChange} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="Leave empty for random" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">World Type</label>
-                    <select name="worldType" value={formData.worldType} onChange={handleInputChange} className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">World Type</label>
+                    <select name="worldType" value={formData.worldType} onChange={handleInputChange} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                       {WORLD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Datapacks (URLs)</label>
-                  <input type="text" name="datapacks" value={formData.datapacks} onChange={handleInputChange} className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="http://example.com/pack.zip" />
-                  <p className="text-xs text-gray-500 mt-1">Comma separated direct download links.</p>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Datapacks (URLs)</label>
+                  <input type="text" name="datapacks" value={formData.datapacks} onChange={handleInputChange} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="http://example.com/pack.zip" />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Comma separated direct download links.</p>
                 </div>
 
                 <div className="flex gap-6">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" name="generateStructures" checked={formData.generateStructures} onChange={handleInputChange} className="rounded text-indigo-600 focus:ring-indigo-500" />
-                    <span className="text-sm text-gray-700">Structures</span>
+                    <input type="checkbox" name="generateStructures" checked={formData.generateStructures} onChange={handleInputChange} className="rounded text-indigo-600 focus:ring-indigo-500 dark:bg-slate-700 dark:border-slate-500" />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Structures</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" name="hardcore" checked={formData.hardcore} onChange={handleInputChange} className="rounded text-indigo-600 focus:ring-indigo-500" />
-                    <span className="text-sm text-gray-700">Hardcore</span>
+                    <input type="checkbox" name="hardcore" checked={formData.hardcore} onChange={handleInputChange} className="rounded text-indigo-600 focus:ring-indigo-500 dark:bg-slate-700 dark:border-slate-500" />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Hardcore</span>
                   </label>
                 </div>
               </div>
 
-              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-                <button onClick={() => setIsGenerateModalOpen(false)} className="px-4 py-2 text-gray-700 font-medium hover:bg-gray-200 rounded-lg transition">Cancel</button>
+              {/* UPDATED: Added dark mode classes for footer */}
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3">
+                <button onClick={() => setIsGenerateModalOpen(false)} className="px-4 py-2 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition">Cancel</button>
                 <button onClick={handleGenerate} disabled={loadingAction === 'generate'} className="px-4 py-2 bg-red-600 text-white font-medium hover:bg-red-700 rounded-lg shadow-sm transition disabled:opacity-50 flex items-center gap-2">
                   {loadingAction === 'generate' && <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />}
                   Generate World
@@ -420,34 +437,36 @@ export default function WorldTab({ server, token }) {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           >
+            {/* UPDATED: Added dark mode classes for modal */}
             <motion.div 
               initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]"
+              className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]"
             >
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                <h2 className="text-lg font-bold text-gray-900">World Configuration (level.dat)</h2>
-                <button onClick={() => setIsOptionsOpen(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-6 h-6" /></button>
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-700">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">World Configuration (level.dat)</h2>
+                <button onClick={() => setIsOptionsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><XMarkIcon className="w-6 h-6" /></button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-8">
                 
                 {/* General Section */}
                 <section>
-                  <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2 border-b pb-2">
+                  {/* UPDATED: Added dark mode class for section header */}
+                  <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-gray-200 dark:border-slate-700 pb-2">
                     <DocumentTextIcon className="w-4 h-4" /> General
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Level Name</label>
-                      <input type="text" value={levelData.Data?.LevelName || ''} onChange={(e) => handleLevelDataChange('Data.LevelName', e.target.value)} className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm" />
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Level Name</label>
+                      <input type="text" value={levelData.Data?.LevelName || ''} onChange={(e) => handleLevelDataChange('Data.LevelName', e.target.value)} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Seed</label>
-                      <input type="text" value={(levelData.Data?.RandomSeed || '').toString()} onChange={(e) => handleLevelDataChange('Data.RandomSeed', e.target.value)} className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm font-mono" />
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Seed</label>
+                      <input type="text" value={(levelData.Data?.RandomSeed || '').toString()} onChange={(e) => handleLevelDataChange('Data.RandomSeed', e.target.value)} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm font-mono" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Difficulty</label>
-                      <select value={levelData.Data?.Difficulty || 0} onChange={(e) => handleLevelDataChange('Data.Difficulty', e.target.value)} className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm">
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Difficulty</label>
+                      <select value={levelData.Data?.Difficulty || 0} onChange={(e) => handleLevelDataChange('Data.Difficulty', e.target.value)} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm">
                         <option value={0}>Peaceful</option>
                         <option value={1}>Easy</option>
                         <option value={2}>Normal</option>
@@ -455,12 +474,12 @@ export default function WorldTab({ server, token }) {
                       </select>
                     </div>
                     <div className="flex items-end gap-4 pb-2">
-                      <label className="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" checked={!!levelData.Data?.hardcore} onChange={(e) => handleLevelDataChange('Data.hardcore', e.target.checked)} className="rounded text-indigo-600" />
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" checked={!!levelData.Data?.hardcore} onChange={(e) => handleLevelDataChange('Data.hardcore', e.target.checked)} className="rounded text-indigo-600 dark:bg-slate-700 dark:border-slate-500" />
                         Hardcore
                       </label>
-                      <label className="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" checked={!!levelData.Data?.allowCommands} onChange={(e) => handleLevelDataChange('Data.allowCommands', e.target.checked)} className="rounded text-indigo-600" />
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" checked={!!levelData.Data?.allowCommands} onChange={(e) => handleLevelDataChange('Data.allowCommands', e.target.checked)} className="rounded text-indigo-600 dark:bg-slate-700 dark:border-slate-500" />
                         Cheats
                       </label>
                     </div>
@@ -469,14 +488,14 @@ export default function WorldTab({ server, token }) {
 
                 {/* Spawn Section */}
                 <section>
-                  <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2 border-b pb-2">
+                  <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-gray-200 dark:border-slate-700 pb-2">
                     <MapPinIcon className="w-4 h-4" /> Spawn Point
                   </h3>
                   <div className="grid grid-cols-3 gap-4">
                     {['X', 'Y', 'Z'].map((axis) => (
                       <div key={axis}>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">{axis}</label>
-                        <input type="number" value={levelData.Data?.[`Spawn${axis}`] || 0} onChange={(e) => handleLevelDataChange(`Data.Spawn${axis}`, e.target.value)} className="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm text-center" />
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{axis}</label>
+                        <input type="number" value={levelData.Data?.[`Spawn${axis}`] || 0} onChange={(e) => handleLevelDataChange(`Data.Spawn${axis}`, e.target.value)} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm text-center" />
                       </div>
                     ))}
                   </div>
@@ -484,19 +503,19 @@ export default function WorldTab({ server, token }) {
 
                 {/* Game Rules Section */}
                 <section>
-                  <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2 border-b pb-2">
+                  <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-gray-200 dark:border-slate-700 pb-2">
                     <PuzzlePieceIcon className="w-4 h-4" /> Game Rules
                   </h3>
                   {levelData.Data?.GameRules ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
                       {Object.entries(levelData.Data.GameRules).map(([rule, val]) => (
-                        <label key={rule} className="flex items-center justify-between py-1 text-sm text-gray-700 border-b border-gray-50">
+                        <label key={rule} className="flex items-center justify-between py-1 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-50 dark:border-slate-700/50">
                           <span>{rule}</span>
                           <input 
                             type="checkbox" 
                             checked={val === 'true'} 
                             onChange={(e) => handleLevelDataChange(`Data.GameRules.${rule}`, e.target.checked)} 
-                            className="rounded text-indigo-600 focus:ring-indigo-500" 
+                            className="rounded text-indigo-600 dark:bg-slate-700 dark:border-slate-500 focus:ring-indigo-500" 
                           />
                         </label>
                       ))}
@@ -508,8 +527,8 @@ export default function WorldTab({ server, token }) {
 
               </div>
 
-              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-                <button onClick={() => setIsOptionsOpen(false)} className="px-4 py-2 text-gray-700 font-medium hover:bg-gray-200 rounded-lg transition">Cancel</button>
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3">
+                <button onClick={() => setIsOptionsOpen(false)} className="px-4 py-2 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition">Cancel</button>
                 <button onClick={handleSaveOptions} disabled={isLoading} className="px-4 py-2 bg-indigo-600 text-white font-medium hover:bg-indigo-700 rounded-lg shadow-sm transition disabled:opacity-50 flex items-center gap-2">
                   {isLoading && <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />}
                   Save Changes

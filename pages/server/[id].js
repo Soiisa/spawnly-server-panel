@@ -46,6 +46,22 @@ const getOnlinePlayersArray = (server) => {
   return server.players_online.split(', ').filter(Boolean);
 };
 
+// NEW: Helper for browser notifications
+const showStatusNotification = (serverName) => {
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'granted') {
+      new Notification(`${serverName} is READY!`, {
+        body: `Your server "${serverName}" has finished starting up and is now Running.`,
+        icon: '/logo.png', // Assuming a logo.png is in the public folder
+        vibrate: [200, 100, 200]
+      });
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+  }
+};
+
+
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
   const { id } = router.query;
@@ -80,6 +96,7 @@ export default function ServerDetailPage({ initialServer }) {
   const mountedRef = useRef(false);
   const pollRef = useRef(null);
   const countdownIntervalRef = useRef(null);
+  const prevStatusRef = useRef(initialServer?.status); // NEW: Ref for status tracking
 
   // --- Effects ---
 
@@ -205,6 +222,25 @@ export default function ServerDetailPage({ initialServer }) {
     }
     return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
   }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout]);
+
+  // NEW: Effect for Browser Notifications
+  useEffect(() => {
+    const prevStatus = prevStatusRef.current;
+    const currentStatus = server?.status;
+    const serverName = server?.name;
+
+    // Check for the transition: e.g., from 'Starting'/'Provisioning'/'Recreating' to 'Running'
+    const startingStatuses = ['Starting', 'Provisioning', 'Recreating'];
+    const isTransitioning = startingStatuses.includes(prevStatus) && currentStatus === 'Running';
+
+    if (isTransitioning) {
+      showStatusNotification(serverName);
+    }
+    
+    // Update the ref to the current status for the next render cycle
+    prevStatusRef.current = currentStatus;
+  }, [server?.status, server?.name]); 
+
 
   // --- Logic Helpers ---
 
@@ -392,15 +428,18 @@ export default function ServerDetailPage({ initialServer }) {
   // --- Render Helpers ---
 
   if (!user || loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    // UPDATED: Added dark mode class to main container
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-        <p className="mt-4 text-gray-500 font-medium">Loading Command Center...</p>
+        {/* UPDATED: Added dark mode class to text */}
+        <p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">Loading Command Center...</p>
       </div>
     </div>
   );
 
-  if (!server) return <div className="p-10 text-center">Server not found.</div>;
+  // UPDATED: Added dark mode class to text
+  if (!server) return <div className="p-10 text-center dark:text-gray-400">Server not found.</div>;
 
   const status = server.status || 'Unknown';
   const isRunning = status === 'Running';
@@ -431,7 +470,8 @@ export default function ServerDetailPage({ initialServer }) {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
+    // UPDATED: Added dark mode class to main container text
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={creditsLoading} onLogout={() => { supabase.auth.signOut(); router.push('/login'); }} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -451,18 +491,22 @@ export default function ServerDetailPage({ initialServer }) {
         </AnimatePresence>
 
         {/* --- Header Section --- */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
+        {/* UPDATED: Added dark mode classes for card background and border */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 mb-8">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             
             {/* Server Identity */}
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-1">
-                <h1 className="text-3xl font-bold text-gray-900">{server.name}</h1>
+                {/* UPDATED: Added dark mode class for text */}
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{server.name}</h1>
                 <ServerStatusIndicator server={server} />
               </div>
               
-              <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-medium capitalize">{server.game}</span>
+              {/* UPDATED: Added dark mode class for text */}
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-2">
+                {/* UPDATED: Added dark mode classes for badge background and text */}
+                <span className="bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded text-gray-700 dark:text-gray-300 font-medium capitalize">{server.game}</span>
                 <span>•</span>
                 <button 
                   onClick={handleCopyIp}
@@ -474,14 +518,16 @@ export default function ServerDetailPage({ initialServer }) {
               </div>
 
               {/* Editable MOTD Section */}
-              <div className="flex items-center gap-2 text-sm text-gray-500 h-8">
+              {/* UPDATED: Added dark mode class for text */}
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 h-8">
                 {isEditingMotd ? (
                   <div className="flex items-center gap-2 w-full max-w-md animate-in fade-in zoom-in duration-200">
                     <input 
                       type="text" 
                       value={motdText}
                       onChange={(e) => setMotdText(e.target.value)}
-                      className="flex-1 px-2 py-1 border border-indigo-300 rounded text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      // UPDATED: Added dark mode classes for input background, text, and border
+                      className="flex-1 px-2 py-1 border border-indigo-300 rounded text-gray-900 dark:bg-slate-700 dark:text-gray-100 dark:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                       placeholder="Enter Server MOTD..."
                       maxLength={64}
                     />
@@ -501,10 +547,12 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 group">
-                    <span className="italic text-gray-600">“{motdText || 'A Spawnly Server'}”</span>
+                    {/* UPDATED: Added dark mode class for italic text */}
+                    <span className="italic text-gray-600 dark:text-gray-400">“{motdText || 'A Spawnly Server'}”</span>
                     <button 
                       onClick={() => setIsEditingMotd(true)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-600"
+                      // UPDATED: Added dark mode class for button text
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 dark:text-gray-500 hover:text-indigo-600"
                       title="Edit MOTD"
                     >
                       <PencilSquareIcon className="w-4 h-4" />
@@ -551,7 +599,8 @@ export default function ServerDetailPage({ initialServer }) {
               )}
               
               {isBusy && (
-                <button disabled className="flex items-center gap-2 bg-gray-100 text-gray-400 px-5 py-2.5 rounded-xl font-semibold cursor-not-allowed">
+                // UPDATED: Added dark mode classes for disabled button background and text
+                <button disabled className="flex items-center gap-2 bg-gray-100 dark:bg-slate-700 text-gray-400 px-5 py-2.5 rounded-xl font-semibold cursor-not-allowed">
                   <div className="animate-spin w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full" />
                   Processing...
                 </button>
@@ -562,13 +611,17 @@ export default function ServerDetailPage({ initialServer }) {
 
         {/* --- Navigation Tabs --- */}
         <div className="mb-8 overflow-x-auto">
-          <div className="flex items-center gap-2 min-w-max border-b border-gray-200 pb-1">
+          {/* UPDATED: Added dark mode class for border */}
+          <div className="flex items-center gap-2 min-w-max border-b border-gray-200 dark:border-slate-700 pb-1">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`relative px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${
-                  activeTab === tab.id ? 'text-indigo-600 bg-indigo-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                  // UPDATED: Added dark mode classes for tab states
+                  activeTab === tab.id 
+                    ? 'text-indigo-600 bg-indigo-50' 
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800'
                 }`}
               >
                 {tab.label}
@@ -590,56 +643,70 @@ export default function ServerDetailPage({ initialServer }) {
             {activeTab === 'overview' && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 {/* 1. Connection Card */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col justify-between">
+                {/* UPDATED: Added dark mode classes for card background and border */}
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col justify-between">
                   <div>
-                    <h3 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
+                    {/* UPDATED: Added dark mode class for text */}
+                    <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
                       <SignalIcon className="w-4 h-4" /> Connection
                     </h3>
                     <div 
                       onClick={handleCopyIp}
-                      className="group cursor-pointer bg-gray-50 hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 rounded-xl p-4 text-center transition-all"
+                      // UPDATED: Added dark mode classes for inner box background and border
+                      className="group cursor-pointer bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 rounded-xl p-4 text-center transition-all"
                     >
-                      <p className="text-sm text-gray-500 mb-1">Server Address</p>
-                      <p className="text-xl font-mono font-bold text-gray-900 break-all">{server.name}.spawnly.net</p>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <p className="text-sm text-gray-500 dark:text-gray-300 mb-1">Server Address</p>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <p className="text-xl font-mono font-bold text-gray-900 dark:text-gray-100 break-all">{server.name}.spawnly.net</p>
                       <p className="text-xs text-indigo-600 mt-2 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
                         {copiedIp ? 'Copied to clipboard!' : 'Click to copy'}
                       </p>
                     </div>
                   </div>
-                  <div className="mt-6 pt-6 border-t border-gray-100">
+                  <div className="mt-6 pt-6 border-t border-gray-100 dark:border-slate-700">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm text-gray-600">Software</span>
-                      <span className="text-sm font-medium text-gray-900 capitalize">{server.type || 'Vanilla'}</span>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <span className="text-sm text-gray-600 dark:text-gray-300">Software</span>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 capitalize">{server.type || 'Vanilla'}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Version</span>
-                      <span className="text-sm font-medium text-gray-900">{server.version}</span>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <span className="text-sm text-gray-600 dark:text-gray-300">Version</span>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{server.version}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* 2. Resources & Metrics */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 md:col-span-2 flex flex-col">
-                  <h3 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
+                {/* UPDATED: Added dark mode classes for card background and border */}
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2 flex flex-col">
+                  {/* UPDATED: Added dark mode class for text */}
+                  <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
                     <CpuChipIcon className="w-4 h-4" /> Live Resources
                   </h3>
                   <div className="flex flex-col flex-1 gap-4">
                     {isRunning ? (
                       <>
                         <ServerMetrics server={server} />
-                        <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
+                        <div className="mt-auto pt-4 border-t border-gray-100 dark:border-slate-700 flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <UserGroupIcon className="w-5 h-5 text-gray-400" />
-                            <span className="text-sm font-medium text-gray-600">Active Players</span>
+                            {/* UPDATED: Added dark mode class for text */}
+                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Active Players</span>
                           </div>
                           <div className="text-right">
-                            <span className="text-2xl font-bold text-gray-900">{server.player_count || 0}</span>
+                            {/* UPDATED: Added dark mode class for text */}
+                            <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{server.player_count || 0}</span>
                             <span className="text-gray-400 text-sm font-medium ml-1">/ {server.max_players || 20}</span>
                           </div>
                         </div>
                       </>
                     ) : (
-                      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200 h-40">
+                      // UPDATED: Added dark mode classes for offline placeholder background and border
+                      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-slate-700 rounded-xl border border-dashed border-gray-200 dark:border-slate-600 h-40">
                         <ServerIcon className="w-8 h-8 mb-2 opacity-50" />
                         <p>Server is offline. Start it to view metrics.</p>
                       </div>
@@ -648,20 +715,24 @@ export default function ServerDetailPage({ initialServer }) {
                 </div>
 
                 {/* 3. Configuration & Limits */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                  <h3 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
+                {/* UPDATED: Added dark mode classes for card background and border */}
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
+                  {/* UPDATED: Added dark mode class for text */}
+                  <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
                     <ClockIcon className="w-4 h-4" /> Configuration
                   </h3>
                   
                   {/* Auto-Stop */}
                   <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Auto-Stop (Empty)</label>
+                    {/* UPDATED: Added dark mode class for label text */}
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Auto-Stop (Empty)</label>
                     <div className="flex items-center gap-2">
                       <select
                         value={server.auto_stop_timeout ?? 30}
                         onChange={handleAutoStopChange}
                         disabled={savingAutoStop}
-                        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-gray-50"
+                        // UPDATED: Added dark mode class for select background
+                        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-gray-50 dark:bg-slate-700"
                       >
                         <option value="0">Never</option>
                         <option value="5">5 minutes</option>
@@ -672,7 +743,7 @@ export default function ServerDetailPage({ initialServer }) {
                       {savingAutoStop && <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full" />}
                     </div>
                     {autoStopCountdown && (
-                      <div className="mt-2 p-2 bg-amber-50 text-amber-800 text-xs rounded-lg flex items-center gap-2 animate-pulse border border-amber-100">
+                      <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-xs rounded-lg flex items-center gap-2 animate-pulse border border-amber-100 dark:border-amber-900">
                         <ClockIcon className="w-3 h-3" /> Stopping in {autoStopCountdown}
                       </div>
                     )}
@@ -680,14 +751,16 @@ export default function ServerDetailPage({ initialServer }) {
 
                   {/* RAM Allocation */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">RAM Allocation</label>
+                    {/* UPDATED: Added dark mode class for label text */}
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">RAM Allocation</label>
                     {editingRam ? (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <input
                             type="range" min="2" max="32" step="1"
                             value={newRam} onChange={(e) => setNewRam(Number(e.target.value))}
-                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                            // UPDATED: Added dark mode class for track background
+                            className="w-full h-2 bg-gray-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                           />
                           <span className="text-sm font-bold w-12 text-right">{newRam}GB</span>
                         </div>
@@ -697,8 +770,9 @@ export default function ServerDetailPage({ initialServer }) {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-200">
-                        <span className="font-mono font-bold text-gray-800">{server.ram} GB</span>
+                      // UPDATED: Added dark mode classes for RAM display box background, border, and text
+                      <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-700 p-3 rounded-xl border border-gray-200 dark:border-slate-600">
+                        <span className="font-mono font-bold text-gray-800 dark:text-gray-100">{server.ram} GB</span>
                         {isStopped && (
                           <button 
                             onClick={() => { setNewRam(server.ram); setEditingRam(true); }} 
@@ -713,20 +787,26 @@ export default function ServerDetailPage({ initialServer }) {
                 </div>
 
                 {/* 4. Billing Info */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 md:col-span-2">
-                  <h3 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
+                {/* UPDATED: Added dark mode classes for card background and border */}
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2">
+                  {/* UPDATED: Added dark mode class for text */}
+                  <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
                     <CurrencyDollarIcon className="w-4 h-4" /> Billing Status
                   </h3>
                   <div className="flex items-center gap-8">
                     <div>
-                      <p className="text-sm text-gray-500">Hourly Cost</p>
-                      <p className="text-2xl font-bold text-gray-900">{server.cost_per_hour} <span className="text-sm font-normal text-gray-500">credits/hr</span></p>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Hourly Cost</p>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{server.cost_per_hour} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">credits/hr</span></p>
                     </div>
-                    <div className="h-10 w-px bg-gray-200"></div>
+                    <div className="h-10 w-px bg-gray-200 dark:bg-slate-700"></div>
                     <div>
-                      <p className="text-sm text-gray-500">Est. Runtime</p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {(credits / (server.cost_per_hour || 1)).toFixed(1)} <span className="text-sm font-normal text-gray-500">hours left</span>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Est. Runtime</p>
+                      {/* UPDATED: Added dark mode class for text */}
+                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                        {(credits / (server.cost_per_hour || 1)).toFixed(1)} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">hours left</span>
                       </p>
                     </div>
                   </div>
@@ -745,31 +825,39 @@ export default function ServerDetailPage({ initialServer }) {
               {activeTab === 'software' && <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} />}
               {activeTab === 'mods' && <ModsPluginsTab server={server} />}
               {activeTab === 'files' && (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                  {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} /> : <p className="text-center text-gray-500">Authenticating file access...</p>}
+                // UPDATED: Added dark mode classes for tab content wrapper
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
+                  {/* UPDATED: Added dark mode class for text */}
+                  {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating file access...</p>}
                 </div>
               )}
               {activeTab === 'backups' && (
                 <BackupsTab server={server} />
               )}
               {activeTab === 'console' && (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                // UPDATED: Added dark mode classes for tab content wrapper
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <ConsoleViewer server={server} />
                 </div>
               )}
               {activeTab === 'properties' && (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                // UPDATED: Added dark mode classes for tab content wrapper
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <ServerPropertiesEditor server={server} />
                 </div>
               )}
               {activeTab === 'players' && (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                  {fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500">Authenticating...</p>}
+                // UPDATED: Added dark mode classes for tab content wrapper
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
+                  {/* UPDATED: Added dark mode class for text */}
+                  {fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating...</p>}
                 </div>
               )}
               {activeTab === 'world' && (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                  {fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500">Authenticating...</p>}
+                // UPDATED: Added dark mode classes for tab content wrapper
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
+                  {/* UPDATED: Added dark mode class for text */}
+                  {fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating...</p>}
                 </div>
               )}
             </div>

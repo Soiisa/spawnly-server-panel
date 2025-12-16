@@ -140,17 +140,19 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
+      {/* UPDATED: Added dark mode classes for modal container */}
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-lg space-y-6"
+        className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 w-full max-w-lg space-y-6 dark:text-gray-100"
       >
         <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-900">Create New Server</h2>
+          {/* UPDATED: Added dark mode class for text */}
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Create New Server</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -160,7 +162,8 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
 
         <div className="space-y-6">
           <div className="block">
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+            {/* UPDATED: Added dark mode class for label */}
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Server Name
             </label>
             <input
@@ -169,25 +172,29 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
               value={name}
               onChange={handleNameChange}
               placeholder="my-awesome-server"
-              className={`block w-full rounded-lg border ${nameError ? 'border-red-300' : 'border-gray-300'} shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500`}
+              // UPDATED: Added dark mode classes for input
+              className={`block w-full rounded-lg border ${nameError ? 'border-red-300 dark:border-red-700' : 'border-gray-300 dark:border-slate-600'} dark:bg-slate-700 dark:text-white shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500`}
               required
             />
-            {nameError && <p className="mt-1 text-sm text-red-600">{nameError}</p>}
-            <p className="mt-1 text-xs text-gray-500">
+            {nameError && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{nameError}</p>}
+            {/* UPDATED: Added dark mode class for hint text */}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               3-20 characters, letters, numbers, and hyphens only. Must be unique.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="block">
-              <label htmlFor="game" className="block text-sm font-medium text-gray-700 mb-1">
+              {/* UPDATED: Added dark mode class for label */}
+              <label htmlFor="game" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Game
               </label>
               <select
                 id="game"
                 value={game}
                 onChange={(e) => setGame(e.target.value)}
-                className="block w-full rounded-lg border-gray-300 shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500"
+                // UPDATED: Added dark mode classes for select
+                className="block w-full rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="minecraft">Minecraft</option>
                 <option value="valheim">Valheim</option>
@@ -198,14 +205,16 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
             </div>
             
             <div className="block">
-              <label htmlFor="software" className="block text-sm font-medium text-gray-700 mb-1">
+              {/* UPDATED: Added dark mode class for label */}
+              <label htmlFor="software" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Software
               </label>
               <select
                 id="software"
                 value={software}
                 onChange={(e) => setSoftware(e.target.value)}
-                className="block w-full rounded-lg border-gray-300 shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500"
+                // UPDATED: Added dark mode classes for select
+                className="block w-full rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500"
                 disabled={softwareOptions.length === 0}
               >
                 {softwareOptions.map(option => (
@@ -218,8 +227,9 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
           </div>
           
           {softwareOptions.length > 0 && (
-            <div className="bg-indigo-50 p-4 rounded-lg">
-              <p className="text-sm text-indigo-800">
+            // UPDATED: Added dark mode classes for info box
+            <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-lg">
+              <p className="text-sm text-indigo-800 dark:text-indigo-200">
                 {softwareOptions.find(opt => opt.id === software)?.description}
               </p>
             </div>
@@ -227,10 +237,12 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
 
           <div className="block">
             <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-medium text-gray-700">
+              {/* UPDATED: Added dark mode class for label */}
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 RAM Allocation
               </label>
-              <span className="text-sm font-medium text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">
+              {/* UPDATED: Added dark mode classes for badge */}
+              <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded-full">
                 {ram} GB
               </span>
             </div>
@@ -241,34 +253,43 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
               step="1"
               value={ram}
               onChange={(e) => setRam(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              // UPDATED: Added dark mode class for range input
+              className="w-full h-2 bg-gray-200 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-600"
             />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
+            {/* UPDATED: Added dark mode class for range labels */}
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
               <span>2 GB</span>
               <span>32 GB</span>
             </div>
           </div>
 
-          <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+          {/* UPDATED: Added dark mode classes for cost summary */}
+          <div className="bg-gray-50 dark:bg-slate-700 rounded-lg p-4 space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-700">Estimated Cost</span>
-              <span className="text-lg font-bold text-indigo-700">
+              {/* UPDATED: Added dark mode class for text */}
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Estimated Cost</span>
+              {/* UPDATED: Added dark mode class for text */}
+              <span className="text-lg font-bold text-indigo-700 dark:text-indigo-300">
                 {costPerHour} credits/hr
               </span>
             </div>
-            <p className="text-xs text-gray-500">
+            {/* UPDATED: Added dark mode class for text */}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Based on {pricePerGB.toFixed(2)} credits per GB per hour
             </p>
             
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-700">Your Credits</span>
-              <span className={`text-sm font-medium ${creditsNum >= costPerHour ? "text-green-600" : "text-red-600"}`}>
+              {/* UPDATED: Added dark mode class for text */}
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Your Credits</span>
+              {/* UPDATED: Added dark mode classes for credit text */}
+              <span className={`text-sm font-medium ${creditsNum >= costPerHour ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                 {creditsNum.toFixed(2)} credits
               </span>
             </div>
             
             {creditsNum < costPerHour && (
-              <p className="text-red-500 text-sm">
+              // UPDATED: Added dark mode class for text
+              <p className="text-red-500 dark:text-red-400 text-sm">
                 You need at least {costPerHour} credits for this server
               </p>
             )}
@@ -279,17 +300,19 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
           <button
             type="button"
             onClick={onClose}
-            className="bg-white border border-gray-300 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-50 transition font-medium"
+            // UPDATED: Added dark mode classes for cancel button
+            className="bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-200 py-3 px-6 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 transition font-medium"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={loading || !canCreate}
+            // UPDATED: Added dark mode classes for submit button
             className={`${
               canCreate 
                 ? "bg-indigo-600 hover:bg-indigo-700" 
-                : "bg-gray-300 cursor-not-allowed"
+                : "bg-gray-300 dark:bg-slate-600 cursor-not-allowed"
             } text-white py-3 px-6 rounded-lg transition font-medium flex items-center justify-center`}
           >
             {loading ? (
