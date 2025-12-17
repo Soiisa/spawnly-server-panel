@@ -46,27 +46,27 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 font-sans text-slate-900">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
       <Navbar />
 
       <main className="flex-grow flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
               Create an account
             </h2>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
               Start your server in seconds
             </p>
           </div>
 
-          <div className="bg-white py-8 px-6 shadow-xl rounded-2xl border border-gray-100 sm:px-10">
+          <div className="bg-white dark:bg-slate-800 py-8 px-6 shadow-xl rounded-2xl border border-gray-100 dark:border-slate-700 sm:px-10">
             <form className="space-y-6" onSubmit={handleRegister}>
               {message && (
                 <div className={`p-3 rounded-lg text-sm text-center border ${
                   message.includes("Success") 
-                    ? "bg-green-50 border-green-100 text-green-700" 
-                    : "bg-red-50 border-red-100 text-red-600"
+                    ? "bg-green-50 dark:bg-green-900/30 border-green-100 dark:border-green-900/50 text-green-700 dark:text-green-300" 
+                    : "bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-900/50 text-red-600 dark:text-red-300"
                 }`}>
                   {message}
                 </div>
@@ -75,7 +75,7 @@ export default function Register() {
               <button
                 type="button"
                 onClick={handleGoogleRegister}
-                className="w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-teal-500 transition-all"
+                className="w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-gray-300 dark:border-slate-600 rounded-lg shadow-sm bg-white dark:bg-slate-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-teal-500 transition-all"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24">
                   <path
@@ -100,22 +100,22 @@ export default function Register() {
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
+                  <div className="w-full border-t border-gray-200 dark:border-slate-600" />
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">
+                  <span className="px-2 bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400">
                     Or register with email
                   </span>
                 </div>
               </div>
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Email address
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <EnvelopeIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    <EnvelopeIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" aria-hidden="true" />
                   </div>
                   <input
                     id="email"
@@ -125,19 +125,19 @@ export default function Register() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-3 border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm border shadow-sm"
+                    className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-teal-500 focus:border-teal-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
                     placeholder="you@example.com"
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Password
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <LockClosedIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    <LockClosedIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" aria-hidden="true" />
                   </div>
                   <input
                     id="password"
@@ -148,11 +148,23 @@ export default function Register() {
                     minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-3 border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm border shadow-sm"
+                    className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-teal-500 focus:border-teal-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
                     placeholder="Minimum 6 characters"
                   />
                 </div>
               </div>
+
+              {/* Legal Disclaimer */}
+              <p className="text-xs text-center text-gray-500 dark:text-gray-400 px-4">
+                By creating an account, you agree to our{' '}
+                <Link href="/terms" className="text-teal-600 dark:text-teal-400 hover:underline">
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link href="/privacy" className="text-teal-600 dark:text-teal-400 hover:underline">
+                  Privacy Policy
+                </Link>.
+              </p>
 
               <button
                 type="submit"
@@ -166,10 +178,10 @@ export default function Register() {
             <div className="mt-6">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
+                  <div className="w-full border-t border-gray-200 dark:border-slate-600" />
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">
+                  <span className="px-2 bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400">
                     Already have an account?
                   </span>
                 </div>
@@ -178,7 +190,7 @@ export default function Register() {
               <div className="mt-6">
                 <Link
                   href="/login"
-                  className="w-full flex justify-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-all"
+                  className="w-full flex justify-center py-3 px-4 border border-gray-300 dark:border-slate-600 rounded-lg shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none transition-all"
                 >
                   Sign in
                 </Link>

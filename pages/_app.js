@@ -1,6 +1,7 @@
 // pages/_app.js
 import { useState, useEffect, createContext, useContext } from 'react';
 import '../styles/globals.css';
+import CookieBanner from '../components/CookieBanner'; // <--- 1. Import the component
 
 // 1. Create Context
 export const DarkModeContext = createContext();
@@ -62,6 +63,7 @@ export default function App({ Component, pageProps }) {
   return (
     <DarkModeProvider>
       <Component {...pageProps} />
+      <CookieBanner /> {/* <--- 2. Add the banner here */}
     </DarkModeProvider>
   );
 }

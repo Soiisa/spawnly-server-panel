@@ -31,50 +31,45 @@ export default function ForgotPassword() {
   };
 
   return (
-    // UPDATED: Added dark mode classes for page container
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
       <Navbar />
 
       <main className="flex-grow flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
-            {/* UPDATED: Added dark mode class for text */}
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
               Reset Password
             </h2>
-            {/* UPDATED: Added dark mode class for text */}
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
               Enter your email to receive a reset link
             </p>
           </div>
 
-          {/* UPDATED: Added dark mode classes for card */}
           <div className="bg-white dark:bg-slate-800 py-8 px-6 shadow-xl rounded-2xl border border-gray-100 dark:border-slate-700 sm:px-10">
             {message ? (
               <div className="text-center">
-                <div className="mb-4 text-green-600 bg-green-50 p-4 rounded-lg">
+                <div className="mb-4 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 p-4 rounded-lg">
                   {message}
                 </div>
-                <Link href="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">
+                <Link href="/login" className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-medium">
                   Return to Login
                 </Link>
               </div>
             ) : (
               <form className="space-y-6" onSubmit={handleReset}>
                 {error && (
-                  <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600 text-center">
+                  <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-900/50 text-sm text-red-600 dark:text-red-300 text-center">
                     {error}
                   </div>
                 )}
 
                 <div>
-                  {/* UPDATED: Added dark mode class for label */}
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Email address
                   </label>
                   <div className="mt-1 relative rounded-md shadow-sm">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <EnvelopeIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                      <EnvelopeIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" aria-hidden="true" />
                     </div>
                     <input
                       id="email"
@@ -84,8 +79,7 @@ export default function ForgotPassword() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      // UPDATED: Added dark mode classes for input
-                      className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border shadow-sm"
+                      className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
                       placeholder="you@example.com"
                     />
                   </div>
@@ -100,7 +94,6 @@ export default function ForgotPassword() {
                 </button>
 
                 <div className="text-center mt-4">
-                  {/* UPDATED: Added dark mode class for link */}
                   <Link href="/login" className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
                     Back to Login
                   </Link>

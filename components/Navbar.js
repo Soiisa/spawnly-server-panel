@@ -15,7 +15,7 @@ export default function Navbar() {
           
           {/* Logo Section */}
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="relative h-8 w-8">
+            <div className="relative h-12 w-12">
               {/* REPLACE '/logo.png' WITH YOUR ACTUAL FILE NAME */}
               <Image 
                 src="/logo.png" 
