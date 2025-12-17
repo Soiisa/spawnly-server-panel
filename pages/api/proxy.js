@@ -7,7 +7,11 @@ const ALLOWED_HOSTS = [
   'piston-meta.mojang.com',
   'api.papermc.io',
   'api.purpurmc.org',
-  'meta.fabricmc.net'
+  'meta.fabricmc.net',
+  'files.minecraftforge.net',    // Added for Forge
+  'maven.neoforged.net',       // Added for NeoForge
+  'mohistmc.com',              // Added for Mohist
+  'api.magmafoundation.org'    // Added for Magma
 ];
 
 export default async function handler(req, res) {

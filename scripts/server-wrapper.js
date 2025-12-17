@@ -11,7 +11,7 @@ const cors = require('cors');
 const PORT = 3006;
 const SERVER_ID = process.env.SERVER_ID;
 const NEXTJS_API_URL = process.env.NEXTJS_API_URL;
-const RCON_PASSWORD = process.env.RCON_PASSWORD; // Required for log auth
+const RCON_PASSWORD = process.env.RCON_PASSWORD; 
 const HEAP_GB = process.env.HEAP_GB || '2';
 const USE_RUN_SH = fs.existsSync(path.join(process.cwd(), 'run.sh'));
 
@@ -28,8 +28,6 @@ let logBuffer = [];
 const appendLog = (data) => {
   const line = data.toString().trim();
   if (!line) return;
-  
-  // Print to system journal
   console.log(line); 
 
   logBuffer.push(line);
@@ -38,77 +36,63 @@ const appendLog = (data) => {
   }
 };
 
-const sendUpdate = async () => {
-  if (logBuffer.length === 0) return;
+const sendUpdate = async (statusOverride = null) => {
+  if (logBuffer.length === 0 && !statusOverride) return;
   
   const logsToSend = logBuffer.join('\n');
-  logBuffer = []; // Clear buffer
+  logBuffer = []; 
   
   try {
     const resp = await fetch(NEXTJS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${RCON_PASSWORD}` // --- FIXED: Added Auth ---
+        'Authorization': `Bearer ${RCON_PASSWORD}`
       },
       body: JSON.stringify({
         serverId: SERVER_ID,
-        console_log: logsToSend, // --- FIXED: Changed 'log' to 'console_log' ---
+        console_log: logsToSend,
+        status: statusOverride, // Signal crash status if needed
       }),
     });
     
     if (!resp.ok) {
-        console.error(`[Wrapper] Log sync failed (${resp.status}):`, await resp.text());
+        console.error(`[Wrapper] Sync failed (${resp.status}):`, await resp.text());
     }
   } catch (err) {
-    console.error('[Wrapper] Log sync error:', err.message);
+    console.error('[Wrapper] Sync error:', err.message);
   }
 };
 
-// Start Log Syncer
-setInterval(sendUpdate, UPDATE_INTERVAL);
+setInterval(() => sendUpdate(), UPDATE_INTERVAL);
 
 // --- Process Spawning ---
 let mcProcess;
-
 console.log(`[Wrapper] Starting server... Mode: ${USE_RUN_SH ? 'run.sh' : 'Direct Java'}`);
 
 if (USE_RUN_SH) {
-  // Fix permissions just in case
   try { fs.chmodSync('./run.sh', '755'); } catch (e) {}
-  
-  mcProcess = spawn('./run.sh', [], {
-    cwd: process.cwd(),
-    stdio: ['pipe', 'pipe', 'pipe'] // Pipe STDIN, STDOUT, STDERR
-  });
+  mcProcess = spawn('./run.sh', [], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
 } else {
-  const args = [
-    `-Xmx${HEAP_GB}G`,
-    `-Xms${Math.min(1, HEAP_GB)}G`,
-    '-jar', 'server.jar', 
-    'nogui'
-  ];
-  mcProcess = spawn('java', args, {
-    cwd: process.cwd(),
-    stdio: ['pipe', 'pipe', 'pipe']
-  });
+  const args = [`-Xmx${HEAP_GB}G`, `-Xms${Math.min(1, HEAP_GB)}G`, '-jar', 'server.jar', 'nogui'];
+  mcProcess = spawn('java', args, { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
 }
 
-// Capture Output
 mcProcess.stdout.on('data', appendLog);
 mcProcess.stderr.on('data', appendLog);
 
-mcProcess.on('close', (code) => {
+mcProcess.on('close', async (code) => {
   console.log(`[Wrapper] Minecraft process exited with code ${code}`);
-  sendUpdate().finally(() => process.exit(code || 0));
+  // If exit code is not 0 or null, signal a crash to the API
+  const finalStatus = (code !== 0 && code !== null) ? 'Crashed' : 'Stopped';
+  await sendUpdate(finalStatus).finally(() => process.exit(code || 0));
 });
 
-// --- Command API (Replaces RCON) ---
+// --- Command API ---
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Helper to read password from properties file
 const getRconPasswordFromFile = async () => {
   try {
     const props = await fs.promises.readFile(path.join(process.cwd(), 'server.properties'), 'utf8');
@@ -120,10 +104,8 @@ const getRconPasswordFromFile = async () => {
 const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-  
   const token = authHeader.substring(7);
   const correctPass = await getRconPasswordFromFile();
-  
   if (!correctPass || token !== correctPass) return res.status(403).json({ error: 'Invalid token' });
   next();
 };
@@ -131,13 +113,8 @@ const authenticate = async (req, res, next) => {
 app.post('/api/command', authenticate, (req, res) => {
   const { command } = req.body;
   if (!command) return res.status(400).json({ error: 'Missing command' });
-  
-  if (!mcProcess || mcProcess.killed) {
-    return res.status(503).json({ error: 'Server is not running' });
-  }
-
+  if (!mcProcess || mcProcess.killed) return res.status(503).json({ error: 'Server is not running' });
   try {
-    // Write to STDIN
     mcProcess.stdin.write(command + '\n');
     res.json({ success: true });
   } catch (err) {
@@ -145,12 +122,9 @@ app.post('/api/command', authenticate, (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[Wrapper] Command API listening on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`[Wrapper] Command API listening on port ${PORT}`));
 
-// Handle graceful shutdown
 process.on('SIGTERM', () => {
   if (mcProcess) mcProcess.kill();
-  sendUpdate().finally(() => process.exit(0));
+  sendUpdate('Stopped').finally(() => process.exit(0));
 });

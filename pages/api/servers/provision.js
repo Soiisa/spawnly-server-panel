@@ -405,15 +405,23 @@ write_files:
       ENDPOINT_OPT="${endpointCliOption}"
       AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
       AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+
       if [ -z "$BUCKET" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
         echo "[mc-sync] Missing S3 configuration, skipping sync."
         exit 0
       fi
+
       echo "[mc-sync] Starting sync from $SRC to s3://$BUCKET/$SERVER_PATH ..."
       sudo -u minecraft bash -lc "aws s3 sync \"$SRC\" \"s3://$BUCKET/$SERVER_PATH/\" $ENDPOINT_OPT --exact-timestamps --delete --exclude 'node_modules/*'"
+
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 0 ]; then
-        echo "[mc-sync] Sync complete."
+        echo "[mc-sync] Sync complete. Notifying API for teardown..."
+        # Signal the API that sync is done so the VM can be deleted
+        curl -X POST -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${RCON_PASSWORD}" \
+            -d "{\"serverId\": \"${SERVER_ID}\", \"sync_complete\": true}" \
+            "${NEXTJS_API_URL}" || true
       else
         echo "[mc-sync] Sync failed with exit code $EXIT_CODE"
         exit $EXIT_CODE
@@ -659,8 +667,7 @@ write_files:
       ExecStart=/usr/bin/node /opt/minecraft/server-wrapper.js
       ExecStopPost=/usr/local/bin/mc-sync.sh
       
-      Restart=always
-      RestartSec=10
+      Restart=no
       User=minecraft
       StandardOutput=journal
       StandardError=journal
