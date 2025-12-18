@@ -39,7 +39,6 @@ const parseMavenXml = (text) => {
 
 export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   // --- State ---
-  // Determine initial tab based on existing server type
   const isModpack = server?.type?.startsWith('modpack');
   const [activeTab, setActiveTab] = useState(isModpack ? 'modpacks' : 'types');
   
@@ -99,7 +98,11 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      throw new Error(`Failed to fetch versions: ${response.status} ${errText}`);
+      // Handle the 403 specifically to warn user about API key
+      if (response.status === 403) {
+          throw new Error("Access Denied (403). Check server logs and CURSEFORGE_API_KEY.");
+      }
+      throw new Error(`Failed to fetch: ${response.status} ${errText}`);
     }
     
     const text = await response.text();
@@ -229,7 +232,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             const quiltRes = await fetch('https://meta.quiltmc.org/v3/versions/game');
             versions = (await quiltRes.json()).map(v => v.version);
             break;
-          // Fallbacks for others can be added
         }
 
         const sorted = sortVersions(versions);
@@ -272,9 +274,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
     try {
         if (modpackProvider === 'curseforge') {
-            // Encode the search term!
+            // FIX: Added sortField=2 (Popularity) and sortOrder=desc to ensure relevance
             const term = encodeURIComponent(modpackSearch);
-            const res = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&searchFilter=${term}&pageSize=20`);
+            const res = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&searchFilter=${term}&pageSize=20&sortField=2&sortOrder=desc`);
             setModpackList(res.data || []);
         } else if (modpackProvider === 'modrinth') {
             const term = encodeURIComponent(modpackSearch);
