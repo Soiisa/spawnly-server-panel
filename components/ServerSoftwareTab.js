@@ -15,7 +15,9 @@ import {
   CpuChipIcon as ChipIcon,
   GlobeAltIcon,
   CloudArrowDownIcon,
-  PuzzlePieceIcon
+  PuzzlePieceIcon,
+  ArrowDownTrayIcon,
+  ArrowRightCircleIcon
 } from '@heroicons/react/24/outline';
 
 // XML Parser for Maven metadata (Forge/NeoForge)
@@ -98,7 +100,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      // Handle the 403 specifically to warn user about API key
       if (response.status === 403) {
           throw new Error("Access Denied (403). Check server logs and CURSEFORGE_API_KEY.");
       }
@@ -137,7 +138,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const checkVersionChangeImpact = (newType, newVersion, isModpackSwitch) => {
     if (!server?.id) return { severity: 'none', message: 'New server configuration.', requiresRecreation: false };
 
-    // Standard check
     if (serverType !== server?.type && !isModpackSwitch) {
       return {
         severity: 'high',
@@ -148,7 +148,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       };
     } 
     
-    // Modpack check (Always destructive)
     if (isModpackSwitch || activeTab === 'modpacks') {
        return {
         severity: 'high',
@@ -183,6 +182,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       
       try {
         let versions = [];
+        // (Standard version fetching logic remains the same as previous)
         switch (serverType) {
           case 'vanilla':
           case 'spigot': 
@@ -263,8 +263,14 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   // --- Modpack Logic ---
 
+  // Trigger search/fetch on tab switch or provider change
+  useEffect(() => {
+    if (activeTab === 'modpacks' && modpackProvider !== 'custom') {
+      searchModpacks();
+    }
+  }, [activeTab, modpackProvider]);
+
   const searchModpacks = async () => {
-    if (!modpackSearch) return;
     setLoadingVersions(true);
     setModpackList([]);
     setSelectedModpack(null);
@@ -274,23 +280,34 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
     try {
         if (modpackProvider === 'curseforge') {
-            // FIX: Added sortField=2 (Popularity) and sortOrder=desc to ensure relevance
-            const term = encodeURIComponent(modpackSearch);
-            const res = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&searchFilter=${term}&pageSize=20&sortField=2&sortOrder=desc`);
+            // Added sortField=2 (Popularity) and sortOrder=desc
+            const term = modpackSearch ? encodeURIComponent(modpackSearch) : '';
+            const queryUrl = modpackSearch 
+                ? `https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&searchFilter=${term}&pageSize=20&sortField=2&sortOrder=desc`
+                : `https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&pageSize=20&sortField=2&sortOrder=desc`;
+            
+            const res = await fetchWithLocalProxy(queryUrl);
             setModpackList(res.data || []);
         } else if (modpackProvider === 'modrinth') {
-            const term = encodeURIComponent(modpackSearch);
-            const res = await fetchWithLocalProxy(`https://api.modrinth.com/v2/search?query=${term}&facets=[["project_type:modpack"]]`);
+            const term = modpackSearch ? encodeURIComponent(modpackSearch) : '';
+            const queryUrl = term 
+               ? `https://api.modrinth.com/v2/search?query=${term}&facets=[["project_type:modpack"]]`
+               : `https://api.modrinth.com/v2/search?facets=[["project_type:modpack"]]`; // Modrinth default search is popularity
+            const res = await fetchWithLocalProxy(queryUrl);
             setModpackList(res.hits || []);
         } else if (modpackProvider === 'ftb') {
-            const term = encodeURIComponent(modpackSearch);
-            const res = await fetchWithLocalProxy(`https://api.feed-the-beast.com/v1/modpacks/public/modpack/search/20?term=${term}`);
+            const term = modpackSearch ? encodeURIComponent(modpackSearch) : '';
+            const queryUrl = term
+               ? `https://api.feed-the-beast.com/v1/modpacks/public/modpack/search/20?term=${term}`
+               : `https://api.feed-the-beast.com/v1/modpacks/public/modpack/popular/20`; // FTB has a popular endpoint
+            
+            const res = await fetchWithLocalProxy(queryUrl);
             if (res && res.packs) setModpackList(res.packs);
             else if (Array.isArray(res)) setModpackList(res);
             else setModpackList([]);
         }
     } catch (err) {
-        setError("Failed to search modpacks: " + err.message);
+        setError("Failed to fetch modpacks: " + err.message);
     } finally {
         setLoadingVersions(false);
     }
@@ -303,16 +320,65 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     setLoadingVersions(true);
 
     try {
+        let files = [];
+
         if (modpackProvider === 'curseforge') {
             const res = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/${pack.id}/files?pageSize=50`);
-            setModpackFiles(res.data || []);
+            
+            if (res && res.data) {
+                files = res.data.map(f => {
+                    // Extract MC Version
+                    const mcVer = f.gameVersions?.find(v => v.match(/^\d+\.\d+(\.\d+)?$/)) || 'Unknown';
+                    // Extract Loader
+                    const loaders = ['Forge', 'Fabric', 'NeoForge', 'Quilt'];
+                    const loader = f.gameVersions?.find(v => loaders.includes(v)) || 'Forge'; // Default to Forge if ambiguous
+
+                    return {
+                        id: f.id,
+                        name: f.displayName,
+                        mcVersion: mcVer,
+                        loader: loader,
+                        downloadUrl: f.downloadUrl,
+                        releaseType: f.releaseType, // 1=Release, 2=Beta, 3=Alpha
+                        fileDate: f.fileDate
+                    };
+                });
+            }
         } else if (modpackProvider === 'modrinth') {
             const res = await fetchWithLocalProxy(`https://api.modrinth.com/v2/project/${pack.project_id}/version`);
-            setModpackFiles(res || []);
+            
+            if (Array.isArray(res)) {
+                files = res.map(v => ({
+                    id: v.id,
+                    name: v.name,
+                    mcVersion: v.game_versions?.[0] || 'Unknown',
+                    loader: v.loaders?.[0] ? v.loaders[0].charAt(0).toUpperCase() + v.loaders[0].slice(1) : 'Unknown',
+                    downloadUrl: v.files?.find(f => f.primary)?.url || v.files?.[0]?.url,
+                    releaseType: v.version_type === 'release' ? 1 : v.version_type === 'beta' ? 2 : 3,
+                    fileDate: v.date_published
+                }));
+            }
         } else if (modpackProvider === 'ftb') {
             const res = await fetchWithLocalProxy(`https://api.feed-the-beast.com/v1/modpacks/public/modpack/${pack.id}`);
-            if (res.versions) setModpackFiles(res.versions.reverse());
+            
+            if (res.versions) {
+                files = res.versions.reverse().map(v => {
+                    const mcTarget = v.targets?.find(t => t.name === 'minecraft');
+                    const loaderTarget = v.targets?.find(t => t.name !== 'minecraft' && t.name !== 'java');
+                    
+                    return {
+                        id: v.id,
+                        name: v.name,
+                        mcVersion: mcTarget?.version || 'Unknown',
+                        loader: loaderTarget ? (loaderTarget.name.charAt(0).toUpperCase() + loaderTarget.name.slice(1)) : 'Forge', // FTB defaults to Forge usually
+                        downloadUrl: null, // FTB handled via ID in backend
+                        releaseType: v.type === 'Release' ? 1 : 2, // Approximate
+                        fileDate: v.updated
+                    };
+                });
+            }
         }
+        setModpackFiles(files);
     } catch (err) {
         setError("Failed to load modpack versions");
     } finally {
@@ -320,10 +386,18 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     }
   };
 
+  const getReleaseBadge = (type) => {
+    switch (type) {
+        case 1: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-600 uppercase tracking-wide">Release</span>;
+        case 2: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-600 uppercase tracking-wide">Beta</span>;
+        case 3: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-600 uppercase tracking-wide">Alpha</span>;
+        default: return null;
+    }
+  };
+
   // --- Save Logic ---
 
   const handleSaveClick = () => {
-    // 1. Standard Save
     if (activeTab === 'types') {
         const impact = checkVersionChangeImpact(serverType, version, false);
         if (impact.severity === 'none' && serverType === server?.type && version === server?.version) return;
@@ -342,55 +416,42 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         return;
     }
 
-    // 2. Modpack Save
     let payloadType = `modpack-${modpackProvider}`;
     let payloadVersion = '';
 
     if (modpackProvider === 'custom') {
-        // Validation
         if (!customZipUrl || !customZipUrl.startsWith('http')) {
             setError("Please enter a valid HTTP/HTTPS URL for the zip file.");
             return;
         }
-        // Format: URL::MC_VERSION (Approximate MC version based on Java selection)
-        // This helps the backend choose the right Java Runtime
         let mcVerMeta = '1.20.1';
         if (customJavaVer === '8') mcVerMeta = '1.12.2';
         if (customJavaVer === '11') mcVerMeta = '1.16.5';
         if (customJavaVer === '17') mcVerMeta = '1.18.2';
         payloadVersion = `${customZipUrl}::${mcVerMeta}`;
 
-    } else if (modpackProvider === 'ftb') {
-        // Format: PACK_ID|VERSION_ID::MC_VERSION
+    } else {
+        // Find the selected version object to extract metadata
         const verObj = modpackFiles.find(f => f.id === modpackVersionId);
         if (!verObj) return;
-        const mcVer = verObj?.targets?.find(t => t.name === 'minecraft')?.version || '1.20.1';
-        payloadVersion = `${selectedModpack.id}|${modpackVersionId}::${mcVer}`;
 
-    } else if (modpackProvider === 'curseforge') {
-        // Need Download URL
-        const fileObj = modpackFiles.find(f => f.id === modpackVersionId);
-        if (!fileObj) return;
-        // Use generic 1.20.1 if not found, it only affects Java version choice
-        const mcVer = fileObj?.gameVersions?.find(v => v.includes('.')) || '1.20.1';
-        // Some CurseForge files don't expose downloadUrl in search, might need extra fetch but usually 'downloadUrl' is there
-        const dlUrl = fileObj.downloadUrl;
-        if (!dlUrl) {
-            setError("This specific file does not have a direct download URL accessible via API.");
-            return;
-        }
-        payloadVersion = `${dlUrl}::${mcVer}`;
+        const mcVer = verObj.mcVersion !== 'Unknown' ? verObj.mcVersion : '1.20.1';
 
-    } else if (modpackProvider === 'modrinth') {
-        const verObj = modpackFiles.find(v => v.id === modpackVersionId);
-        if (!verObj) return;
-        const primaryFile = verObj?.files?.find(f => f.primary) || verObj?.files?.[0];
-        if (!primaryFile) {
-             setError("No file found for this version.");
-             return;
+        if (modpackProvider === 'ftb') {
+            payloadVersion = `${selectedModpack.id}|${modpackVersionId}::${mcVer}`;
+        } else if (modpackProvider === 'curseforge') {
+            if (!verObj.downloadUrl) {
+                setError("This specific file does not have a direct download URL accessible via API.");
+                return;
+            }
+            payloadVersion = `${verObj.downloadUrl}::${mcVer}`;
+        } else if (modpackProvider === 'modrinth') {
+            if (!verObj.downloadUrl) {
+                 setError("No file found for this version.");
+                 return;
+            }
+            payloadVersion = `${verObj.downloadUrl}::${mcVer}`;
         }
-        const mcVer = verObj?.game_versions?.[0] || '1.20.1';
-        payloadVersion = `${primaryFile.url}::${mcVer}`;
     }
 
     const impact = checkVersionChangeImpact(payloadType, payloadVersion, true);
@@ -399,8 +460,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         payload: {
             type: payloadType,
             version: payloadVersion,
-            needs_file_deletion: true, // Always delete files for modpacks
-            needs_recreation: true     // Always recreate VPS for clean environment
+            needs_file_deletion: true,
+            needs_recreation: true
         }
     });
     setShowVersionWarning(true);
@@ -447,7 +508,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
       {activeTab === 'types' && (
         <>
-            {/* 1. Software Selection */}
+            {/* Standard Software Grid (Unchanged) */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
                 <ChipIcon className="w-5 h-5 text-gray-500" /> Software Platform
@@ -482,7 +543,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 </div>
             </div>
 
-            {/* 2. Version Selection */}
+            {/* Standard Version Selector (Unchanged) */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -587,25 +648,43 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                         <button onClick={searchModpacks} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Search</button>
                     </div>
 
-                    {/* Results List */}
+                    {/* Modpack Results Grid (Styled like ModsPluginsTab) */}
                     {modpackList.length > 0 && !selectedModpack && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto custom-scrollbar">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar p-1">
                             {modpackList.map(pack => (
-                                <div key={pack.id || pack.project_id} onClick={() => selectModpack(pack)}
-                                     className="flex items-start gap-4 p-4 border rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700 dark:border-slate-600 transition-colors">
-                                    {pack.icon_url || pack.logo?.url || pack.art?.square ? (
-                                        <img src={pack.icon_url || pack.logo?.url || pack.art?.square} className="w-14 h-14 rounded-lg object-cover bg-gray-200" />
-                                    ) : <div className="w-14 h-14 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-500 font-bold text-xl">{pack.name?.[0] || '?'}</div>}
-                                    <div className="flex-1 overflow-hidden">
-                                        <h4 className="font-bold text-gray-900 dark:text-white truncate">{pack.name || pack.title}</h4>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{pack.summary || pack.description}</p>
+                                <div key={pack.id || pack.project_id} 
+                                     className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-indigo-300 hover:shadow-md transition-all flex flex-col h-full">
+                                    <div className="flex gap-4 mb-3">
+                                        {pack.icon_url || pack.logo?.url || pack.art?.square ? (
+                                            <img src={pack.icon_url || pack.logo?.url || pack.art?.square} className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-slate-700 object-cover" />
+                                        ) : (
+                                            <div className="w-12 h-12 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 font-bold text-xl">
+                                                {pack.name?.[0] || '?'}
+                                            </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-bold text-gray-900 dark:text-gray-100 truncate" title={pack.name || pack.title}>{pack.name || pack.title}</h4>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
+                                                <ArrowDownTrayIcon className="w-3 h-3" />
+                                                {(pack.downloads || pack.downloadCount || 0).toLocaleString()}
+                                            </p>
+                                        </div>
                                     </div>
+                                    <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mb-4 flex-1">
+                                        {pack.summary || pack.description || "No description provided."}
+                                    </p>
+                                    <button 
+                                        onClick={() => selectModpack(pack)} 
+                                        className="w-full py-2 bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 font-medium rounded-lg text-sm border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors"
+                                    >
+                                        Select Pack
+                                    </button>
                                 </div>
                             ))}
                         </div>
                     )}
 
-                    {/* File/Version Selection */}
+                    {/* File/Version Selection (Styled List with Version Info) */}
                     {selectedModpack && (
                         <div className="space-y-4 animate-fadeIn">
                             <div className="flex items-center justify-between bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl border border-gray-200 dark:border-slate-700">
@@ -628,22 +707,41 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                             ) : (
                                 <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
                                     {modpackFiles.map(file => {
-                                        const fileId = file.id; 
-                                        const fileName = file.displayName || file.name || (file.version_number ? `Version ${file.version_number}` : 'Unknown');
-                                        const isServer = (fileName.toLowerCase().includes('server') || file.name?.toLowerCase().includes('server'));
-                                        
                                         return (
-                                            <div key={fileId} onClick={() => setModpackVersionId(fileId)}
-                                                 className={`p-3 border rounded-lg cursor-pointer flex justify-between items-center transition-colors ${modpackVersionId === fileId ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700'}`}>
-                                                <div>
-                                                    <p className={`text-sm font-medium ${modpackVersionId === fileId ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-900 dark:text-white'}`}>{fileName}</p>
-                                                    {isServer && <span className="inline-block mt-1 text-[10px] uppercase font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full">Server Pack</span>}
+                                            <div key={file.id} onClick={() => setModpackVersionId(file.id)}
+                                                 className={`p-3 border rounded-lg cursor-pointer flex justify-between items-center transition-all ${modpackVersionId === file.id ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700'}`}>
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className={`text-sm font-medium truncate ${modpackVersionId === file.id ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-900 dark:text-white'}`}>{file.name}</p>
+                                                            {getReleaseBadge(file.releaseType)}
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                            Released: {new Date(file.fileDate).toLocaleDateString()}
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                                {modpackVersionId === fileId && <CheckCircleIcon className="w-6 h-6 text-indigo-600"/>}
+                                                
+                                                {/* RIGHT SIDE: Minecraft Version & Loader Info */}
+                                                <div className="flex items-center gap-4 text-right">
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-600 px-2 py-0.5 rounded">
+                                                            {file.mcVersion}
+                                                        </span>
+                                                        <span className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 uppercase tracking-wide">
+                                                            {file.loader}
+                                                        </span>
+                                                    </div>
+                                                    {modpackVersionId === file.id ? (
+                                                        <CheckCircleIcon className="w-6 h-6 text-indigo-600"/>
+                                                    ) : (
+                                                        <ArrowRightCircleIcon className="w-5 h-5 text-gray-300 dark:text-gray-600" />
+                                                    )}
+                                                </div>
                                             </div>
                                         )
                                     })}
-                                    {modpackFiles.length === 0 && <p className="text-center text-gray-500 py-4">No files found for this modpack.</p>}
+                                    {modpackFiles.length === 0 && <p className="text-center text-gray-500 py-4">No server files found for this modpack.</p>}
                                 </div>
                             )}
                         </div>
