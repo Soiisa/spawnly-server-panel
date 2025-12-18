@@ -371,7 +371,6 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   }
   
   // Auto-detect Java package
-  // Works for both Standard (version=1.20.1) and Modpacks (effectiveVersion=1.20.1)
   let javaPackage = 'openjdk-21-jre-headless'; 
   if (effectiveVersion.startsWith('1.8') || effectiveVersion.startsWith('1.12')) javaPackage = 'openjdk-8-jre-headless';
   else if (effectiveVersion.startsWith('1.16')) javaPackage = 'openjdk-11-jre-headless';
@@ -456,9 +455,10 @@ write_files:
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 0 ]; then
         echo "[mc-sync] Sync complete. Notifying API for teardown..."
+        # FIX: Safer JSON quoting to avoid "Invalid JSON" error
         curl -X POST -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${escapedRconPassword}" \
-            -d "{\"serverId\": \"${serverId}\", \"sync_complete\": true}" \
+            -d '{"serverId": "${serverId}", "sync_complete": true}' \
             "${appBaseUrl.replace(/\/+$/, '')}/api/servers/update-status" || true
       else
         echo "[mc-sync] Sync failed with exit code $EXIT_CODE"
@@ -501,7 +501,6 @@ write_files:
       }
       
       echo "[mc-sync-from-s3] Starting sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
-      # Use --delete to ensure S3 state matches local state, but exclude node_modules
       sudo -u minecraft bash -lc "aws s3 sync \"s3://$BUCKET/$SERVER_PATH/\" \"$DEST\" $ENDPOINT_OPT --exact-timestamps --exclude 'node_modules/*'"
   - path: /etc/systemd/system/mc-sync.service
     permissions: '0644'
@@ -565,25 +564,36 @@ write_files:
       # Function to find and setup start script (Universal)
       setup_generic_start_script() {
           # Attempt to find standard startup scripts often included in modpacks
-          START_SCRIPT=$(find . -maxdepth 2 -name "start.sh" -o -name "run.sh" -o -name "ServerStart.sh" | head -n 1)
+          # Scan up to 3 levels deep because some zips wrap in "Overrides/v1.0/..."
+          START_SCRIPT=$(find . -maxdepth 3 -name "start.sh" -o -name "run.sh" -o -name "ServerStart.sh" | head -n 1)
           
           if [ -n "$START_SCRIPT" ]; then
               echo "[Startup] Found start script: $START_SCRIPT"
+              
+              # FIX: Don't just copy it, execute it properly from its dir or fix paths
+              # Moving logic handles the path issue mostly, but let's be safe.
+              
               chmod +x "$START_SCRIPT"
-              # Ensure consistent naming for the service
+              
               if [ "$START_SCRIPT" != "./run.sh" ]; then
-                  cp "$START_SCRIPT" run.sh
+                  # If we found it in root but named differently
+                  if [ "$(dirname "$START_SCRIPT")" == "." ]; then
+                      mv "$START_SCRIPT" run.sh
+                  else
+                      # It's in a subdirectory? We should have moved it already (see below)
+                      # But just in case:
+                      cp "$START_SCRIPT" run.sh
+                  fi
                   chmod +x run.sh
               fi
           else
               echo "[Startup] No start script found. Searching for Forge Installer..."
               # Try to find a forge installer jar if no shell script exists
-              INSTALLER=$(find . -maxdepth 1 -name "*installer*.jar" | head -n 1)
+              INSTALLER=$(find . -maxdepth 2 -name "*installer*.jar" | head -n 1)
               if [ -n "$INSTALLER" ]; then
                   echo "[Startup] Running installer: $INSTALLER"
                   sudo -u minecraft java -jar "$INSTALLER" --installServer
                   
-                  # After install, run.sh often appears (1.17+) or we create one
                   if [ -f "run.sh" ]; then
                       chmod +x run.sh
                   else
@@ -600,13 +610,11 @@ write_files:
       }
 
       # Main Install Logic
-      # Only run install if server.jar is missing OR file deletion was requested (clean install)
       if [ ! -f "server.properties" ] || [ "${needsFileDeletion}" = "true" ]; then
           
           # 1. FTB Modpack
           if [ "$SOFTWARE" = "modpack-ftb" ]; then
               echo "[Startup] Downloading FTB Installer..."
-              # Using the official FTB installer binary for Linux
               sudo -u minecraft curl -L -o serverinstaller https://dist.creeper.host/FTB2/server-installer/serverinstaller_linux
               sudo -u minecraft chmod +x serverinstaller
               echo "[Startup] Running FTB Installer for Pack $FTB_PACK_ID Version $FTB_VER_ID..."
@@ -619,6 +627,21 @@ write_files:
               sudo -u minecraft wget -O modpack.zip "$DOWNLOAD_URL"
               sudo -u minecraft unzip -o modpack.zip
               rm modpack.zip
+              
+              # --- NEW: DETECT SUBFOLDER & MOVE ---
+              # Many modpacks extract into "ModpackName-1.0/"
+              # We need to move files up to /opt/minecraft so "run.sh" is in the root
+              COUNT=$(ls -1 | wc -l)
+              if [ "$COUNT" -eq 1 ]; then
+                  DIR_NAME=$(ls -1)
+                  if [ -d "$DIR_NAME" ]; then
+                      echo "[Startup] Detected subfolder '$DIR_NAME', moving contents to root..."
+                      mv "$DIR_NAME"/* . 2>/dev/null || true
+                      mv "$DIR_NAME"/.* . 2>/dev/null || true
+                      rmdir "$DIR_NAME"
+                  fi
+              fi
+              
               setup_generic_start_script
               
           # 3. Standard Forge/NeoForge (Installer JAR)
@@ -628,7 +651,6 @@ write_files:
              sudo -u minecraft java -jar server-installer.jar --installServer
              rm -f server-installer.jar
              
-             # Handle run.sh creation if installer didn't make one
              if [ -f "run.sh" ]; then
                  chmod +x run.sh
              else
