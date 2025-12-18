@@ -18,14 +18,19 @@ async function pointToSleeper(subdomain) {
   if (!subdomain) return;
   const url = `https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
   const cleanSub = subdomain.replace(DOMAIN_SUFFIX, '');
-  const search = await fetch(`${url}?name=${encodeURIComponent(cleanSub + DOMAIN_SUFFIX)}`, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}` } });
-  const { result } = await search.json();
-  for (const rec of result) { await fetch(`${url}/${rec.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}` } }); }
-  await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'A', name: `${cleanSub}${DOMAIN_SUFFIX}`, content: SLEEPER_PROXY_IP, ttl: 60, proxied: false })
-  });
+  
+  try {
+    const search = await fetch(`${url}?name=${encodeURIComponent(cleanSub + DOMAIN_SUFFIX)}`, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}` } });
+    const { result } = await search.json();
+    for (const rec of result) { await fetch(`${url}/${rec.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}` } }); }
+    await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'A', name: `${cleanSub}${DOMAIN_SUFFIX}`, content: SLEEPER_PROXY_IP, ttl: 60, proxied: false })
+    });
+  } catch (e) {
+    console.error(`[DNS] Failed to point to sleeper: ${e.message}`);
+  }
 }
 
 async function billFinalTime(server, now) {
@@ -33,7 +38,7 @@ async function billFinalTime(server, now) {
   let baseTime = server.last_billed_at ? new Date(server.last_billed_at) : (server.running_since ? new Date(server.running_since) : null);
   if (!baseTime) return;
   const elapsedSeconds = Math.floor((now - baseTime) / 1000) + (server.runtime_accumulated_seconds || 0);
-  if (elapsedSeconds < 60) return;
+  if (elapsedSeconds < 60) return; // Don't bill for less than a minute
   const hours = elapsedSeconds / 3600;
   const cost = hours * (server.cost_per_hour || 0);
   
@@ -65,18 +70,42 @@ export default async function handler(req, res) {
 
     // --- AUTOMATED TEARDOWN (TRIGGERED BY MC-SYNC.SH) ---
     if (sync_complete) {
-      console.log(`[Auto-Stop] Finalizing teardown for ${serverId}`);
+      console.log(`[Auto-Stop] Sync complete signal received for ${serverId}`);
+
+      // --- NEW: Development Mode Check ---
+      if (server.development_mode) {
+          console.log(`[Auto-Stop] Development Mode ACTIVE. Skipping infrastructure teardown.`);
+          
+          // Update status to 'Maintenance' so UI shows it's not normal, 
+          // but KEEP the Hetzner ID and IP so SSH remains active.
+          await supabaseAdmin.from('servers').update({
+            status: 'Maintenance', 
+            // Do NOT clear hetzner_id or ipv4
+            last_heartbeat_at: now.toISOString()
+          }).eq('id', serverId);
+
+          return res.status(200).json({ success: true, message: "Development mode active: Server preserved." });
+      }
+      // -----------------------------------
+
       await billFinalTime(server, now);
       await pointToSleeper(server.subdomain);
+      
       if (server.hetzner_id) {
-        await fetch(`https://api.hetzner.cloud/v1/servers/${server.hetzner_id}`, {
-          method: 'DELETE', headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
-        });
+        try {
+            await fetch(`https://api.hetzner.cloud/v1/servers/${server.hetzner_id}`, {
+            method: 'DELETE', headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
+            });
+        } catch (e) {
+            console.error(`[Hetzner] Failed to delete server: ${e.message}`);
+        }
       }
+      
       await supabaseAdmin.from('servers').update({
         status: 'Stopped', hetzner_id: null, ipv4: null, running_since: null,
         last_billed_at: null, runtime_accumulated_seconds: 0, current_session_id: null, last_empty_at: null
       }).eq('id', serverId);
+      
       return res.status(200).json({ success: true });
     }
 
@@ -90,7 +119,7 @@ export default async function handler(req, res) {
     };
 
     // Auto-stop logic (if empty for too long)
-    if (status === 'Running') {
+    if (status === 'Running' && !server.development_mode) { // Disable auto-stop in dev mode too
       if (Number(player_count) > 0) updates.last_empty_at = null;
       else if (!server.last_empty_at) updates.last_empty_at = now.toISOString();
     } else updates.last_empty_at = null;
