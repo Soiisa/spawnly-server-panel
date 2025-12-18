@@ -459,14 +459,14 @@ export default function ServerDetailPage({ initialServer }) {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: SignalIcon },
+    { id: 'properties', label: 'Properties', icon: ServerIcon },
+    { id: 'console', label: 'Console', icon: ClockIcon },
+    { id: 'players', label: 'Players', icon: UserGroupIcon },
     { id: 'software', label: 'Software', icon: CpuChipIcon },
     ...(showMods ? [{ id: 'mods', label: modLabel, icon: PuzzlePieceIcon }] : []),
+    { id: 'world', label: 'World', icon: ServerIcon },
     { id: 'files', label: 'Files', icon: ClipboardDocumentIcon },
     { id: 'backups', label: 'Backups', icon: ArchiveBoxIcon }, // Added Backups Tab
-    { id: 'console', label: 'Console', icon: ClockIcon },
-    { id: 'properties', label: 'Properties', icon: ServerIcon },
-    { id: 'players', label: 'Players', icon: UserGroupIcon },
-    { id: 'world', label: 'World', icon: ServerIcon },
   ];
 
   return (
@@ -822,43 +822,41 @@ export default function ServerDetailPage({ initialServer }) {
 
             {/* Other Tabs */}
             <div className={activeTab === 'overview' ? 'hidden' : 'block animate-in fade-in duration-300'}>
-              {activeTab === 'software' && <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} />}
-              {activeTab === 'mods' && <ModsPluginsTab server={server} />}
-              {activeTab === 'files' && (
-                // UPDATED: Added dark mode classes for tab content wrapper
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {/* UPDATED: Added dark mode class for text */}
-                  {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating file access...</p>}
-                </div>
-              )}
-              {activeTab === 'backups' && (
-                <BackupsTab server={server} />
-              )}
-              {activeTab === 'console' && (
-                // UPDATED: Added dark mode classes for tab content wrapper
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  <ConsoleViewer server={server} />
-                </div>
-              )}
               {activeTab === 'properties' && (
-                // UPDATED: Added dark mode classes for tab content wrapper
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <ServerPropertiesEditor server={server} />
                 </div>
               )}
-              {activeTab === 'players' && (
-                // UPDATED: Added dark mode classes for tab content wrapper
+
+              {activeTab === 'console' && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {/* UPDATED: Added dark mode class for text */}
+                  <ConsoleViewer server={server} />
+                </div>
+              )}
+
+              {activeTab === 'players' && (
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating...</p>}
                 </div>
               )}
+
+              {activeTab === 'software' && <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} />}
+              {activeTab === 'mods' && <ModsPluginsTab server={server} />}
+
               {activeTab === 'world' && (
-                // UPDATED: Added dark mode classes for tab content wrapper
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {/* UPDATED: Added dark mode class for text */}
                   {fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating...</p>}
                 </div>
+              )}
+
+              {activeTab === 'files' && (
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
+                  {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating file access...</p>}
+                </div>
+              )}
+
+              {activeTab === 'backups' && (
+                <BackupsTab server={server} />
               )}
             </div>
 
