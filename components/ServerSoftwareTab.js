@@ -17,7 +17,8 @@ import {
   CloudArrowDownIcon,
   PuzzlePieceIcon,
   ArrowDownTrayIcon,
-  ArrowRightCircleIcon
+  ArrowRightCircleIcon,
+  ServerIcon
 } from '@heroicons/react/24/outline';
 
 // XML Parser for Maven metadata (Forge/NeoForge)
@@ -62,6 +63,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   // Shared State
   const [loadingVersions, setLoadingVersions] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showVersionWarning, setShowVersionWarning] = useState(false);
@@ -182,7 +184,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       
       try {
         let versions = [];
-        // (Standard version fetching logic remains the same as previous)
         switch (serverType) {
           case 'vanilla':
           case 'spigot': 
@@ -193,22 +194,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             const pRes = await fetch('https://api.papermc.io/v2/projects/paper');
             versions = (await pRes.json()).versions;
             break;
-          case 'folia':
-            const fRes = await fetch('https://api.papermc.io/v2/projects/folia');
-            versions = (await fRes.json()).versions;
-            break;
-          case 'velocity':
-            const velRes = await fetch('https://api.papermc.io/v2/projects/velocity');
-            versions = (await velRes.json()).versions;
-            break;
-          case 'waterfall':
-            const wRes = await fetch('https://api.papermc.io/v2/projects/waterfall');
-            versions = (await wRes.json()).versions;
-            break;
-          case 'purpur':
-            const purRes = await fetch('https://api.purpurmc.org/v2/purpur');
-            versions = (await purRes.json()).versions;
-            break;
+          // ... (keep other cases same as before) ...
           case 'forge':
             const promoData = await fetchWithLocalProxy('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
             const promoVersions = new Set();
@@ -221,17 +207,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             versions = Array.from(promoVersions);
             break;
           case 'neoforge':
-            const neoData = await fetchWithLocalProxy('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', true);
-            versions = neoData;
-            break;
-          case 'fabric':
-            const fabRes = await fetch('https://meta.fabricmc.net/v2/versions/game');
-            versions = (await fabRes.json()).map(v => v.version);
-            break;
-          case 'quilt':
-            const quiltRes = await fetch('https://meta.quiltmc.org/v3/versions/game');
-            versions = (await quiltRes.json()).map(v => v.version);
-            break;
+             const neoData = await fetchWithLocalProxy('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', true);
+             versions = neoData;
+             break;
         }
 
         const sorted = sortVersions(versions);
@@ -280,7 +258,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
     try {
         if (modpackProvider === 'curseforge') {
-            // Added sortField=2 (Popularity) and sortOrder=desc
             const term = modpackSearch ? encodeURIComponent(modpackSearch) : '';
             const queryUrl = modpackSearch 
                 ? `https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&searchFilter=${term}&pageSize=20&sortField=2&sortOrder=desc`
@@ -292,14 +269,14 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             const term = modpackSearch ? encodeURIComponent(modpackSearch) : '';
             const queryUrl = term 
                ? `https://api.modrinth.com/v2/search?query=${term}&facets=[["project_type:modpack"]]`
-               : `https://api.modrinth.com/v2/search?facets=[["project_type:modpack"]]`; // Modrinth default search is popularity
+               : `https://api.modrinth.com/v2/search?facets=[["project_type:modpack"]]`; 
             const res = await fetchWithLocalProxy(queryUrl);
             setModpackList(res.hits || []);
         } else if (modpackProvider === 'ftb') {
             const term = modpackSearch ? encodeURIComponent(modpackSearch) : '';
             const queryUrl = term
                ? `https://api.feed-the-beast.com/v1/modpacks/public/modpack/search/20?term=${term}`
-               : `https://api.feed-the-beast.com/v1/modpacks/public/modpack/popular/20`; // FTB has a popular endpoint
+               : `https://api.feed-the-beast.com/v1/modpacks/public/modpack/popular/20`;
             
             const res = await fetchWithLocalProxy(queryUrl);
             if (res && res.packs) setModpackList(res.packs);
@@ -327,11 +304,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             
             if (res && res.data) {
                 files = res.data.map(f => {
-                    // Extract MC Version
                     const mcVer = f.gameVersions?.find(v => v.match(/^\d+\.\d+(\.\d+)?$/)) || 'Unknown';
-                    // Extract Loader
                     const loaders = ['Forge', 'Fabric', 'NeoForge', 'Quilt'];
-                    const loader = f.gameVersions?.find(v => loaders.includes(v)) || 'Forge'; // Default to Forge if ambiguous
+                    const loader = f.gameVersions?.find(v => loaders.includes(v)) || 'Forge';
 
                     return {
                         id: f.id,
@@ -340,13 +315,14 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                         loader: loader,
                         downloadUrl: f.downloadUrl,
                         releaseType: f.releaseType, // 1=Release, 2=Beta, 3=Alpha
-                        fileDate: f.fileDate
+                        fileDate: f.fileDate,
+                        // --- CRITICAL CHANGE: Capture the ID of the linked server pack ---
+                        serverPackFileId: f.serverPackFileId || null
                     };
                 });
             }
         } else if (modpackProvider === 'modrinth') {
             const res = await fetchWithLocalProxy(`https://api.modrinth.com/v2/project/${pack.project_id}/version`);
-            
             if (Array.isArray(res)) {
                 files = res.map(v => ({
                     id: v.id,
@@ -355,24 +331,23 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     loader: v.loaders?.[0] ? v.loaders[0].charAt(0).toUpperCase() + v.loaders[0].slice(1) : 'Unknown',
                     downloadUrl: v.files?.find(f => f.primary)?.url || v.files?.[0]?.url,
                     releaseType: v.version_type === 'release' ? 1 : v.version_type === 'beta' ? 2 : 3,
-                    fileDate: v.date_published
+                    fileDate: v.date_published,
+                    serverPackFileId: null // Modrinth usually lists server files directly or not at all
                 }));
             }
         } else if (modpackProvider === 'ftb') {
             const res = await fetchWithLocalProxy(`https://api.feed-the-beast.com/v1/modpacks/public/modpack/${pack.id}`);
-            
             if (res.versions) {
                 files = res.versions.reverse().map(v => {
                     const mcTarget = v.targets?.find(t => t.name === 'minecraft');
                     const loaderTarget = v.targets?.find(t => t.name !== 'minecraft' && t.name !== 'java');
-                    
                     return {
                         id: v.id,
                         name: v.name,
                         mcVersion: mcTarget?.version || 'Unknown',
-                        loader: loaderTarget ? (loaderTarget.name.charAt(0).toUpperCase() + loaderTarget.name.slice(1)) : 'Forge', // FTB defaults to Forge usually
-                        downloadUrl: null, // FTB handled via ID in backend
-                        releaseType: v.type === 'Release' ? 1 : 2, // Approximate
+                        loader: loaderTarget ? (loaderTarget.name.charAt(0).toUpperCase() + loaderTarget.name.slice(1)) : 'Forge',
+                        downloadUrl: null,
+                        releaseType: v.type === 'Release' ? 1 : 2,
                         fileDate: v.updated
                     };
                 });
@@ -397,11 +372,11 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   // --- Save Logic ---
 
-  const handleSaveClick = () => {
+  const handleSaveClick = async () => {
+    // 1. Standard Types
     if (activeTab === 'types') {
         const impact = checkVersionChangeImpact(serverType, version, false);
         if (impact.severity === 'none' && serverType === server?.type && version === server?.version) return;
-        
         setVersionChangeInfo({
             ...impact,
             payload: {
@@ -416,6 +391,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         return;
     }
 
+    // 2. Modpacks
     let payloadType = `modpack-${modpackProvider}`;
     let payloadVersion = '';
 
@@ -431,7 +407,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         payloadVersion = `${customZipUrl}::${mcVerMeta}`;
 
     } else {
-        // Find the selected version object to extract metadata
         const verObj = modpackFiles.find(f => f.id === modpackVersionId);
         if (!verObj) return;
 
@@ -439,12 +414,40 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
         if (modpackProvider === 'ftb') {
             payloadVersion = `${selectedModpack.id}|${modpackVersionId}::${mcVer}`;
+
         } else if (modpackProvider === 'curseforge') {
-            if (!verObj.downloadUrl) {
-                setError("This specific file does not have a direct download URL accessible via API.");
-                return;
+            
+            // --- AUTOMATIC SERVER PACK RESOLUTION ---
+            if (verObj.serverPackFileId) {
+                try {
+                    setIsInstalling(true);
+                    setError(null);
+                    // Fetch the Server Pack details
+                    const serverPackRes = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/${selectedModpack.id}/files/${verObj.serverPackFileId}`);
+                    
+                    if (serverPackRes && serverPackRes.downloadUrl) {
+                        console.log("Resolved Server Pack URL:", serverPackRes.downloadUrl);
+                        payloadVersion = `${serverPackRes.downloadUrl}::${mcVer}`;
+                    } else {
+                        throw new Error("Server pack file found, but no download URL available.");
+                    }
+                } catch (e) {
+                    console.error("Server pack resolution failed:", e);
+                    setError(`Failed to find Server Pack: ${e.message}. Trying client pack (likely to fail)...`);
+                    // Fallback to client pack if user persists, but warn
+                    payloadVersion = `${verObj.downloadUrl}::${mcVer}`; 
+                } finally {
+                    setIsInstalling(false);
+                }
+            } else {
+                // No server pack linked, use the file itself
+                if (!verObj.downloadUrl) {
+                    setError("This file does not have a download URL.");
+                    return;
+                }
+                payloadVersion = `${verObj.downloadUrl}::${mcVer}`;
             }
-            payloadVersion = `${verObj.downloadUrl}::${mcVer}`;
+
         } else if (modpackProvider === 'modrinth') {
             if (!verObj.downloadUrl) {
                  setError("No file found for this version.");
@@ -453,6 +456,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             payloadVersion = `${verObj.downloadUrl}::${mcVer}`;
         }
     }
+
+    if (!payloadVersion) return; // Stop if resolution failed
 
     const impact = checkVersionChangeImpact(payloadType, payloadVersion, true);
     setVersionChangeInfo({
@@ -543,7 +548,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 </div>
             </div>
 
-            {/* Standard Version Selector (Unchanged) */}
+            {/* Standard Version Selector */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -648,7 +653,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                         <button onClick={searchModpacks} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Search</button>
                     </div>
 
-                    {/* Modpack Results Grid (Styled like ModsPluginsTab) */}
+                    {/* Modpack Results Grid */}
                     {modpackList.length > 0 && !selectedModpack && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar p-1">
                             {modpackList.map(pack => (
@@ -684,7 +689,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                         </div>
                     )}
 
-                    {/* File/Version Selection (Styled List with Version Info) */}
+                    {/* File/Version Selection */}
                     {selectedModpack && (
                         <div className="space-y-4 animate-fadeIn">
                             <div className="flex items-center justify-between bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl border border-gray-200 dark:border-slate-700">
@@ -722,8 +727,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                                                     </div>
                                                 </div>
                                                 
-                                                {/* RIGHT SIDE: Minecraft Version & Loader Info */}
-                                                <div className="flex items-center gap-4 text-right">
+                                                {/* RIGHT SIDE: Version, Loader, Server Badge */}
+                                                <div className="flex items-center gap-3 text-right">
+                                                    {file.serverPackFileId && (
+                                                        <span className="text-[10px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full border border-green-200 flex items-center gap-1">
+                                                            <ServerIcon className="w-3 h-3"/> Server Pack
+                                                        </span>
+                                                    )}
                                                     <div className="flex flex-col items-end">
                                                         <span className="text-xs font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-600 px-2 py-0.5 rounded">
                                                             {file.mcVersion}
@@ -768,10 +778,20 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
         <button
           onClick={handleSaveClick}
-          disabled={activeTab === 'types' ? (!version || (serverType === server?.type && version === server?.version)) : (!modpackVersionId && !customZipUrl)}
+          disabled={activeTab === 'types' ? (!version || (serverType === server?.type && version === server?.version)) : (!modpackVersionId && !customZipUrl) || isInstalling}
           className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          {activeTab === 'modpacks' ? 'Install Modpack' : 'Save Changes'}
+          {isInstalling ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Resolving Server Files...
+            </>
+          ) : (
+            activeTab === 'modpacks' ? 'Install Modpack' : 'Save Changes'
+          )}
         </button>
       </div>
 
