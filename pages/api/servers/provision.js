@@ -24,10 +24,10 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 // RAM to Server Type Mapping (Cost Optimized)
 const ramToServerType = (ramGb) => {
-  if (ramGb <= 4) return 'cpx22';
-  if (ramGb <= 8) return 'cpx32';
-  if (ramGb <= 16) return 'cpx42';
-  return 'cpx62';
+  if (ramGb <= 4) return 'cx23';
+  if (ramGb <= 8) return 'cx33';
+  if (ramGb <= 16) return 'cx43';
+  return 'cx53';
 };
 
 const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
@@ -551,7 +551,7 @@ write_files:
       
       # Optimized JVM Arguments (Aikar's Flags)
       AIKAR_FLAGS="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
-
+      
       echo "[Startup] Initializing for software: $SOFTWARE"
       
       id -u minecraft >/dev/null 2>&1 || useradd -m -s /bin/bash minecraft || true
@@ -724,6 +724,7 @@ write_files:
       StandardOutput=journal
       StandardError=journal
       TimeoutStopSec=3000
+      TimeoutStartSec=3600
 
       [Install]
       WantedBy=multi-user.target
