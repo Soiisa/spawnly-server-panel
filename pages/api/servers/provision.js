@@ -626,6 +626,12 @@ write_files:
                   fi
               fi
               
+              # --- FIX: DELETE user_jvm_args.txt to prevent RAM override ---
+              if [ -f "user_jvm_args.txt" ]; then
+                  echo "[Startup] Deleting user_jvm_args.txt to prevent RAM override..."
+                  rm user_jvm_args.txt
+              fi
+
               setup_generic_start_script
               
           elif [ "$SOFTWARE" = "forge" ] || [ "$SOFTWARE" = "neoforge" ]; then
