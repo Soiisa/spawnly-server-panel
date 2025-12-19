@@ -385,8 +385,8 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const S3_ENDPOINT = (s3Config.S3_ENDPOINT || '').replace(/'/g, "'\"'\"'");
   
   // s5cmd endpoint argument logic
-  const s5cmdEndpointOpt = s3Config.S3_ENDPOINT ? `--endpoint-url '${s3Config.S3_ENDPOINT}'` : '';
-  const endpointCliOption = s3Config.S3_ENDPOINT ? `--endpoint-url '${s3Config.S3_ENDPOINT}'` : '';
+  const s5cmdEndpointOpt = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
+  const endpointCliOption = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
 
   const userData = `#cloud-config
 users:
