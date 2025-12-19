@@ -340,7 +340,9 @@ const deleteS3Files = async (serverId, s3Config) => {
 // --- Cloud-Init Builder ---
 
 const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '', pendingRestoreKey = null) => {
-  const heapGb = Math.max(1, Math.floor(Number(ramGb) * 0.8));
+  const ramNum = Number(ramGb);
+  const overhead = ramNum >= 12 ? 2 : 1;
+  const heapGb = Math.max(1, ramNum - overhead);
   
   // Logic to determine Effective Version and Download Meta
   let effectiveVersion = version;
