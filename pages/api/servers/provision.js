@@ -340,6 +340,7 @@ const deleteS3Files = async (serverId, s3Config) => {
 // --- Cloud-Init Builder ---
 
 const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '', pendingRestoreKey = null) => {
+  // OPTIMIZED MEMORY: Leave 1GB for OS on <12GB servers, 2GB on >=12GB servers.
   const ramNum = Number(ramGb);
   const overhead = ramNum >= 12 ? 2 : 1;
   const heapGb = Math.max(1, ramNum - overhead);
@@ -382,6 +383,9 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const AWS_ACCESS_KEY_ID = (s3Config.AWS_ACCESS_KEY_ID || '').replace(/'/g, "'\"'\"'");
   const AWS_SECRET_ACCESS_KEY = (s3Config.AWS_SECRET_ACCESS_KEY || '').replace(/'/g, "'\"'\"'");
   const S3_ENDPOINT = (s3Config.S3_ENDPOINT || '').replace(/'/g, "'\"'\"'");
+  
+  // s5cmd endpoint argument logic
+  const s5cmdEndpointOpt = s3Config.S3_ENDPOINT ? `--endpoint-url '${s3Config.S3_ENDPOINT}'` : '';
   const endpointCliOption = s3Config.S3_ENDPOINT ? `--endpoint-url '${s3Config.S3_ENDPOINT}'` : '';
 
   const userData = `#cloud-config
@@ -444,20 +448,28 @@ write_files:
       SRC="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
       SERVER_PATH="servers/${serverId}"
-      ENDPOINT_OPT="${endpointCliOption}"
       AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
       AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+      S5_ENDPOINT_OPT="${s5cmdEndpointOpt}"
+      
       if [ -z "$BUCKET" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
         echo "[mc-sync] Missing S3 configuration, skipping sync."
         exit 0
       fi
-      echo "[mc-sync] Starting sync from $SRC to s3://$BUCKET/$SERVER_PATH ..."
-      # Exclude zip files and serverinstaller to keep bucket clean
-      sudo -u minecraft bash -lc "aws s3 sync \"$SRC\" \"s3://$BUCKET/$SERVER_PATH/\" $ENDPOINT_OPT --exact-timestamps --delete --exclude 'node_modules/*' --exclude 'serverinstaller' --exclude '*.zip'"
+      
+      echo "[mc-sync] Starting high-speed sync from $SRC to s3://$BUCKET/$SERVER_PATH ..."
+      
+      # Use s5cmd for high performance
+      # Sync contents of SRC to the destination folder
+      sudo -u minecraft s5cmd $S5_ENDPOINT_OPT sync --delete \
+          --exclude 'node_modules/*' \
+          --exclude 'serverinstaller' \
+          --exclude '*.zip' \
+          "$SRC/" "s3://$BUCKET/$SERVER_PATH/"
+      
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 0 ]; then
         echo "[mc-sync] Sync complete. Notifying API for teardown..."
-        # FIX: Safer JSON quoting to avoid "Invalid JSON" error
         curl -X POST -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${escapedRconPassword}" \
             -d '{"serverId": "${serverId}", "sync_complete": true}' \
@@ -474,15 +486,17 @@ write_files:
       DEST="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
       SERVER_PATH="servers/${serverId}"
-      ENDPOINT_OPT="${endpointCliOption}"
       AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
       AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
       REQUESTED_VERSION='${escapedVersion}'
       RESTORE_KEY="${escapedRestoreKey}"
+      S5_ENDPOINT_OPT="${s5cmdEndpointOpt}"
+      ENDPOINT_OPT="${endpointCliOption}"
 
       if [ -n "$RESTORE_KEY" ]; then
          echo "[mc-sync-from-s3] PENDING RESTORE FOUND. Restoring from $RESTORE_KEY..."
-         sudo -u minecraft bash -lc "aws s3 cp \"s3://$BUCKET/$RESTORE_KEY\" \"$DEST/restore.zip\" $ENDPOINT_OPT"
+         # Use standard AWS CLI or s5cmd cp for single file download
+         sudo -u minecraft s5cmd $S5_ENDPOINT_OPT cp "s3://$BUCKET/$RESTORE_KEY" "$DEST/restore.zip"
          if [ -f "$DEST/restore.zip" ]; then
              cd $DEST
              sudo -u minecraft unzip -o restore.zip
@@ -496,14 +510,13 @@ write_files:
         echo "[mc-sync-from-s3] File deletion requested, skipping S3 sync."
         exit 0
       fi
-
-      check_server_version() {
-        if [ ! -f "/opt/minecraft/server.jar" ]; then echo "none"; return; fi
-        java -jar /opt/minecraft/server.jar --version 2>/dev/null | grep -oP '\\d+\\.\\d+\\.\\d+' || echo "unknown"
-      }
       
-      echo "[mc-sync-from-s3] Starting sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
-      sudo -u minecraft bash -lc "aws s3 sync \"s3://$BUCKET/$SERVER_PATH/\" \"$DEST\" $ENDPOINT_OPT --exact-timestamps --exclude 'node_modules/*'"
+      echo "[mc-sync-from-s3] Starting high-speed sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
+      
+      # s5cmd sync requires wildcard for folder contents source -> dest
+      sudo -u minecraft s5cmd $S5_ENDPOINT_OPT sync \
+          --exclude 'node_modules/*' \
+          "s3://$BUCKET/$SERVER_PATH/*" "$DEST/"
   - path: /etc/systemd/system/mc-sync.service
     permissions: '0644'
     content: |
@@ -832,6 +845,10 @@ runcmd:
   - apt-get update || true
   - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
   - apt-get install -y nodejs awscli || true
+  - wget -O /tmp/s5cmd.tar.gz https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz
+  - tar -xzf /tmp/s5cmd.tar.gz -C /usr/local/bin/ s5cmd
+  - chmod +x /usr/local/bin/s5cmd
+  - rm /tmp/s5cmd.tar.gz
   - cd /opt/minecraft || true
   - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors dotenv minecraft-query body-parser || true
   - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
