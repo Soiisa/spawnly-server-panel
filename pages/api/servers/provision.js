@@ -549,6 +549,9 @@ write_files:
       RCON_PASSWORD='${escapedRconPassword}'
       SERVER_ID='${serverId}'
       
+      # Optimized JVM Arguments (Aikar's Flags)
+      AIKAR_FLAGS="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
+
       echo "[Startup] Initializing for software: $SOFTWARE"
       
       id -u minecraft >/dev/null 2>&1 || useradd -m -s /bin/bash minecraft || true
@@ -590,7 +593,7 @@ write_files:
                       FORGE_JAR=$(find . -name "forge-*-universal.jar" -o -name "forge-*.jar" | grep -v installer | head -n 1)
                       if [ -n "$FORGE_JAR" ]; then
                           echo "#!/bin/bash" > run.sh
-                          echo "java -Xms${heapGb}G -Xmx${heapGb}G -jar $FORGE_JAR nogui" >> run.sh
+                          echo "java -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar $FORGE_JAR nogui" >> run.sh
                           chmod +x run.sh
                       fi
                   fi
@@ -647,7 +650,7 @@ write_files:
                  if [ -n "$FORGE_JAR" ]; then 
                      mv "$FORGE_JAR" server.jar
                      echo "#!/bin/bash" > run.sh
-                     echo "java -Xms${heapGb}G -Xmx${heapGb}G -jar server.jar nogui" >> run.sh
+                     echo "java -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
                      chmod +x run.sh
                  fi
              fi
@@ -656,7 +659,7 @@ write_files:
               echo "[Startup] Downloading Server JAR..."
               sudo -u minecraft wget -O server.jar "$DOWNLOAD_URL"
               echo "#!/bin/bash" > run.sh
-              echo "java -Xms${heapGb}G -Xmx${heapGb}G -jar server.jar nogui" >> run.sh
+              echo "java -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
               chmod +x run.sh
           fi
           
