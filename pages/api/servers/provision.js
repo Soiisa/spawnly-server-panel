@@ -563,32 +563,22 @@ write_files:
 
       # Function to find and setup start script (Universal)
       setup_generic_start_script() {
-          # Attempt to find standard startup scripts often included in modpacks
-          # Scan up to 3 levels deep because some zips wrap in "Overrides/v1.0/..."
           START_SCRIPT=$(find . -maxdepth 3 -name "start.sh" -o -name "run.sh" -o -name "ServerStart.sh" | head -n 1)
           
           if [ -n "$START_SCRIPT" ]; then
               echo "[Startup] Found start script: $START_SCRIPT"
-              
-              # FIX: Don't just copy it, execute it properly from its dir or fix paths
-              # Moving logic handles the path issue mostly, but let's be safe.
-              
               chmod +x "$START_SCRIPT"
               
               if [ "$START_SCRIPT" != "./run.sh" ]; then
-                  # If we found it in root but named differently
                   if [ "$(dirname "$START_SCRIPT")" == "." ]; then
                       mv "$START_SCRIPT" run.sh
                   else
-                      # It's in a subdirectory? We should have moved it already (see below)
-                      # But just in case:
                       cp "$START_SCRIPT" run.sh
                   fi
                   chmod +x run.sh
               fi
           else
               echo "[Startup] No start script found. Searching for Forge Installer..."
-              # Try to find a forge installer jar if no shell script exists
               INSTALLER=$(find . -maxdepth 2 -name "*installer*.jar" | head -n 1)
               if [ -n "$INSTALLER" ]; then
                   echo "[Startup] Running installer: $INSTALLER"
@@ -597,7 +587,6 @@ write_files:
                   if [ -f "run.sh" ]; then
                       chmod +x run.sh
                   else
-                      # Old forge: find universal jar
                       FORGE_JAR=$(find . -name "forge-*-universal.jar" -o -name "forge-*.jar" | grep -v installer | head -n 1)
                       if [ -n "$FORGE_JAR" ]; then
                           echo "#!/bin/bash" > run.sh
@@ -612,7 +601,6 @@ write_files:
       # Main Install Logic
       if [ ! -f "server.properties" ] || [ "${needsFileDeletion}" = "true" ]; then
           
-          # 1. FTB Modpack
           if [ "$SOFTWARE" = "modpack-ftb" ]; then
               echo "[Startup] Downloading FTB Installer..."
               sudo -u minecraft curl -L -o serverinstaller https://dist.creeper.host/FTB2/server-installer/serverinstaller_linux
@@ -621,16 +609,12 @@ write_files:
               sudo -u minecraft ./serverinstaller -auto -pack $FTB_PACK_ID -version $FTB_VER_ID
               setup_generic_start_script
 
-          # 2. Zip Modpack (CurseForge, Modrinth, Custom)
           elif [[ "$SOFTWARE" == "modpack-"* ]] || [[ "$DOWNLOAD_URL" == *.zip ]]; then
               echo "[Startup] Downloading Modpack Zip..."
               sudo -u minecraft wget -O modpack.zip "$DOWNLOAD_URL"
               sudo -u minecraft unzip -o modpack.zip
               rm modpack.zip
               
-              # --- NEW: DETECT SUBFOLDER & MOVE ---
-              # Many modpacks extract into "ModpackName-1.0/"
-              # We need to move files up to /opt/minecraft so "run.sh" is in the root
               COUNT=$(ls -1 | wc -l)
               if [ "$COUNT" -eq 1 ]; then
                   DIR_NAME=$(ls -1)
@@ -644,7 +628,6 @@ write_files:
               
               setup_generic_start_script
               
-          # 3. Standard Forge/NeoForge (Installer JAR)
           elif [ "$SOFTWARE" = "forge" ] || [ "$SOFTWARE" = "neoforge" ]; then
              echo "[Startup] Downloading Forge/NeoForge Installer..."
              sudo -u minecraft wget -O server-installer.jar "$DOWNLOAD_URL"
@@ -663,7 +646,6 @@ write_files:
                  fi
              fi
 
-          # 4. Standard JAR (Vanilla, Paper, Spigot, etc.)
           else
               echo "[Startup] Downloading Server JAR..."
               sudo -u minecraft wget -O server.jar "$DOWNLOAD_URL"
@@ -676,27 +658,31 @@ write_files:
           echo "eula=true" > eula.txt
           chown minecraft:minecraft eula.txt
           
-          # Create Server Properties
-          cat > server.properties << EOL
-          enable-rcon=true
-          rcon.port=25575
-          rcon.password=${rconPassword}
-          broadcast-rcon-to-ops=true
-          server-port=25565
-          enable-query=true
-          query.port=25565
-          online-mode=false
-          max-players=20
-          difficulty=easy
-          gamemode=survival
-          spawn-protection=16
-          view-distance=10
-          simulation-distance=10
-          motd=A Spawnly Server
-          pvp=true
-          generate-structures=true
-          max-world-size=29999984
-          EOL
+          # FIX: Replaced Heredoc with Echo to prevent indentation errors
+          # Use >> to append to existing file if present (e.g. from Modpack), otherwise create new.
+          
+          # Ensure a newline exists if file is present
+          if [ -f server.properties ]; then echo "" >> server.properties; fi
+          
+          echo "enable-rcon=true" >> server.properties
+          echo "rcon.port=25575" >> server.properties
+          echo "rcon.password=${rconPassword}" >> server.properties
+          echo "broadcast-rcon-to-ops=true" >> server.properties
+          echo "server-port=25565" >> server.properties
+          echo "enable-query=true" >> server.properties
+          echo "query.port=25565" >> server.properties
+          echo "online-mode=false" >> server.properties
+          echo "max-players=20" >> server.properties
+          echo "difficulty=easy" >> server.properties
+          echo "gamemode=survival" >> server.properties
+          echo "spawn-protection=16" >> server.properties
+          echo "view-distance=10" >> server.properties
+          echo "simulation-distance=10" >> server.properties
+          echo "motd=A Spawnly Server" >> server.properties
+          echo "pvp=true" >> server.properties
+          echo "generate-structures=true" >> server.properties
+          echo "max-world-size=29999984" >> server.properties
+
           chown minecraft:minecraft server.properties
       fi
 
