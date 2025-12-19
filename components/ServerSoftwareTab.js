@@ -194,7 +194,22 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             const pRes = await fetch('https://api.papermc.io/v2/projects/paper');
             versions = (await pRes.json()).versions;
             break;
-          // ... (keep other cases same as before) ...
+          case 'folia':
+            const fRes = await fetch('https://api.papermc.io/v2/projects/folia');
+            versions = (await fRes.json()).versions;
+            break;
+          case 'velocity':
+            const velRes = await fetch('https://api.papermc.io/v2/projects/velocity');
+            versions = (await velRes.json()).versions;
+            break;
+          case 'waterfall':
+            const wRes = await fetch('https://api.papermc.io/v2/projects/waterfall');
+            versions = (await wRes.json()).versions;
+            break;
+          case 'purpur':
+            const purRes = await fetch('https://api.purpurmc.org/v2/purpur');
+            versions = (await purRes.json()).versions;
+            break;
           case 'forge':
             const promoData = await fetchWithLocalProxy('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
             const promoVersions = new Set();
@@ -210,6 +225,14 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
              const neoData = await fetchWithLocalProxy('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', true);
              versions = neoData;
              break;
+          case 'fabric':
+            const fabRes = await fetch('https://meta.fabricmc.net/v2/versions/game');
+            versions = (await fabRes.json()).map(v => v.version);
+            break;
+          case 'quilt':
+            const quiltRes = await fetch('https://meta.quiltmc.org/v3/versions/game');
+            versions = (await quiltRes.json()).map(v => v.version);
+            break;
         }
 
         const sorted = sortVersions(versions);
@@ -241,7 +264,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   // --- Modpack Logic ---
 
-  // Trigger search/fetch on tab switch or provider change
   useEffect(() => {
     if (activeTab === 'modpacks' && modpackProvider !== 'custom') {
       searchModpacks();
@@ -316,7 +338,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                         downloadUrl: f.downloadUrl,
                         releaseType: f.releaseType, // 1=Release, 2=Beta, 3=Alpha
                         fileDate: f.fileDate,
-                        // --- CRITICAL CHANGE: Capture the ID of the linked server pack ---
                         serverPackFileId: f.serverPackFileId || null
                     };
                 });
@@ -332,7 +353,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     downloadUrl: v.files?.find(f => f.primary)?.url || v.files?.[0]?.url,
                     releaseType: v.version_type === 'release' ? 1 : v.version_type === 'beta' ? 2 : 3,
                     fileDate: v.date_published,
-                    serverPackFileId: null // Modrinth usually lists server files directly or not at all
+                    serverPackFileId: null 
                 }));
             }
         } else if (modpackProvider === 'ftb') {
@@ -373,7 +394,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   // --- Save Logic ---
 
   const handleSaveClick = async () => {
-    // 1. Standard Types
     if (activeTab === 'types') {
         const impact = checkVersionChangeImpact(serverType, version, false);
         if (impact.severity === 'none' && serverType === server?.type && version === server?.version) return;
@@ -391,7 +411,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         return;
     }
 
-    // 2. Modpacks
     let payloadType = `modpack-${modpackProvider}`;
     let payloadVersion = '';
 
@@ -425,22 +444,24 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     // Fetch the Server Pack details
                     const serverPackRes = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/${selectedModpack.id}/files/${verObj.serverPackFileId}`);
                     
-                    if (serverPackRes && serverPackRes.downloadUrl) {
-                        console.log("Resolved Server Pack URL:", serverPackRes.downloadUrl);
-                        payloadVersion = `${serverPackRes.downloadUrl}::${mcVer}`;
+                    // FIX: UNWRAP 'data' if present
+                    const packData = serverPackRes.data || serverPackRes;
+
+                    if (packData && packData.downloadUrl) {
+                        console.log("Resolved Server Pack URL:", packData.downloadUrl);
+                        payloadVersion = `${packData.downloadUrl}::${mcVer}`;
                     } else {
-                        throw new Error("Server pack file found, but no download URL available.");
+                        throw new Error("Server pack file found, but no download URL available in response.");
                     }
                 } catch (e) {
                     console.error("Server pack resolution failed:", e);
-                    setError(`Failed to find Server Pack: ${e.message}. Trying client pack (likely to fail)...`);
-                    // Fallback to client pack if user persists, but warn
-                    payloadVersion = `${verObj.downloadUrl}::${mcVer}`; 
+                    setError(`Failed to resolve Server Pack: ${e.message}.`);
+                    setIsInstalling(false);
+                    return; // Stop here, don't fallback silently to broken client pack
                 } finally {
                     setIsInstalling(false);
                 }
             } else {
-                // No server pack linked, use the file itself
                 if (!verObj.downloadUrl) {
                     setError("This file does not have a download URL.");
                     return;
@@ -457,7 +478,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         }
     }
 
-    if (!payloadVersion) return; // Stop if resolution failed
+    if (!payloadVersion) return;
 
     const impact = checkVersionChangeImpact(payloadType, payloadVersion, true);
     setVersionChangeInfo({
@@ -727,7 +748,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                                                     </div>
                                                 </div>
                                                 
-                                                {/* RIGHT SIDE: Version, Loader, Server Badge */}
+                                                {/* RIGHT SIDE: Minecraft Version, Loader, Server Badge */}
                                                 <div className="flex items-center gap-3 text-right">
                                                     {file.serverPackFileId && (
                                                         <span className="text-[10px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full border border-green-200 flex items-center gap-1">
