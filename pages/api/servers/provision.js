@@ -360,22 +360,17 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
       if (parts.length >= 2) {
           const major = parts[0]; // 1
           const minor = parts[1]; // 20, 16, 8, etc.
-          
-          if (minor >= 20 && (parts[2] || 0) >= 5) {
+          const patch = parts[2] || 0;
+
+          // FIX: Correct logic for 1.21 and 1.20.5+
+          if (minor > 20 || (minor === 20 && patch >= 5)) {
              // 1.20.5+ needs Java 21
              javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
           } else if (minor >= 17) {
              // 1.17 to 1.20.4 needs Java 17
              javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
-          } else if (minor >= 16) {
-             // 1.16 usually supports 11, sometimes 8. 
-             // Using Java 17 is safer as it can often run 1.16, but ideally:
-             // If you installed OpenJDK 11 in snapshot, use it. If not, Java 8 or 17.
-             // Let's assume Java 17 for 1.16+ to be safe on modern mods, or Java 8 if vanilla.
-             // Safest bet for older modpacks is Java 8.
-             javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java'; 
           } else {
-             // 1.12, 1.8, etc -> Java 8
+             // 1.16 and below needs Java 8 (safe default for modpacks) or 11/17 for vanilla
              javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
           }
       }
@@ -407,8 +402,6 @@ users:
     ssh_authorized_keys:
       - ${process.env.HETZNER_DEFAULT_SSH_PUBLIC_KEY || ''}
 
-# Packages removed - baked into snapshot
-
 write_files:
   - path: /home/minecraft/.aws/credentials
     permissions: '0640'
@@ -437,7 +430,8 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -eo pipefail
+      set -eo pipefail # FIX: Removed -u to prevent crash on empty vars
+      
       SRC="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
       SERVER_PATH="servers/${serverId}"
@@ -455,13 +449,15 @@ write_files:
       
       echo "[mc-sync] Starting high-speed sync from $SRC to s3://$BUCKET/$SERVER_PATH ..."
       
-      # Use s5cmd full path
+      # FIX: cd to source so excludes work correctly relative to root
+      cd "$SRC"
+      
       sudo -u minecraft /usr/local/bin/s5cmd $S5_ENDPOINT_OPT sync --delete \
           --exclude 'node_modules/*' \
           --exclude 'serverinstaller' \
           --exclude 'logs/*' \
           --exclude '*.zip' \
-          "$SRC/" "s3://$BUCKET/$SERVER_PATH/"
+          . "s3://$BUCKET/$SERVER_PATH/"
       
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 0 ]; then
@@ -962,7 +958,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const payload = {
       name: serverRow.name,
       server_type: serverType,
-      image: '342669034', // CUSTOM SNAPSHOT ID
+      image: '342669034', // CUSTOM SNAPSHOT NAME
       user_data: sanitizedUserData,
       ssh_keys: sshKeysToUse,
       location: 'nbg1',
