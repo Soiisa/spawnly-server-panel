@@ -839,22 +839,20 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 runcmd:
-  # Directories and permissions are already in the snapshot
   - chown -R minecraft:minecraft /opt/minecraft /home/minecraft
-  
-  # Fetch latest scripts from S3 (these might change more often than the environment)
+  # Only download the JS scripts which might change frequently
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption}
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js ${endpointCliOption}
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js ${endpointCliOption}
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js ${endpointCliOption}
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js ${endpointCliOption}
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js ${endpointCliOption}
-  
-  # Final setup and service start
+  - chmod 0755 /opt/minecraft/*.js
+  # Start services
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
   - systemctl daemon-reload
-  - systemctl enable mc-sync.service mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
+  - systemctl enable mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
   - systemctl start mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
-  - echo "[FINAL DEBUG] Snapshot-based boot finished at $(date)"
 `;
 
   return userData;
