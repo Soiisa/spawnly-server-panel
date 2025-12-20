@@ -148,21 +148,17 @@ const getSpigotDownloadUrl = async (version) => {
   return `https://cdn.getbukkit.org/spigot/spigot-${version}.jar`;
 };
 
-// --- NEW: Helper to extract metadata from version string ---
-// Returns { url, packId, versionId, mcVersion }
+// --- Helper to extract metadata from version string ---
 const parseModpackMetadata = (software, versionString) => {
     let result = { url: null, packId: null, versionId: null, mcVersion: '1.20.1' };
     
     if (software === 'modpack-ftb') {
-        // Format: PACK_ID|VERSION_ID::MC_VERSION
         const [ids, meta] = versionString.split('::');
         const [pid, vid] = ids.split('|');
         result.packId = pid;
         result.versionId = vid;
         result.mcVersion = meta || '1.20.1';
     } else if (software.startsWith('modpack-')) {
-        // curseforge, modrinth, custom
-        // Format: URL::MC_VERSION
         const [url, meta] = versionString.split('::');
         result.url = url;
         result.mcVersion = meta || '1.20.1';
@@ -172,11 +168,10 @@ const parseModpackMetadata = (software, versionString) => {
 
 const getSoftwareDownloadUrl = async (software, version) => {
   try {
-    // Handling Modpacks: URL is often packed into the version string or handled by installer
     if (software.startsWith('modpack-')) {
-        if (software === 'modpack-ftb') return null; // FTB uses installer with IDs, no single URL
+        if (software === 'modpack-ftb') return null; 
         const parts = version.split('::');
-        return parts[0]; // URL is the first part
+        return parts[0]; 
     }
 
     switch (software) {
@@ -340,7 +335,6 @@ const deleteS3Files = async (serverId, s3Config) => {
 // --- Cloud-Init Builder ---
 
 const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '', pendingRestoreKey = null) => {
-  // OPTIMIZED MEMORY: Leave 1GB for OS on <12GB servers, 2GB on >=12GB servers.
   const ramNum = Number(ramGb);
   const overhead = ramNum >= 12 ? 2 : 1;
   const heapGb = Math.max(1, ramNum - overhead);
@@ -349,10 +343,42 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   let effectiveVersion = version;
   let modpackMeta = { url: downloadUrl };
 
-  // If modpack, extract real MC version from the metadata (format: URL::1.20.1)
   if (software.startsWith('modpack-')) {
       modpackMeta = parseModpackMetadata(software, version);
       effectiveVersion = modpackMeta.mcVersion;
+  }
+
+  // --- Java Version Selection Logic ---
+  // Default to 21 for modern, but fallback for older versions
+  let javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'; 
+  
+  if (effectiveVersion) {
+      // Clean string to just version numbers (e.g. 1.8.8, 1.20.1)
+      const vClean = effectiveVersion.replace(/[^0-9.]/g, '');
+      const parts = vClean.split('.').map(Number);
+      
+      if (parts.length >= 2) {
+          const major = parts[0]; // 1
+          const minor = parts[1]; // 20, 16, 8, etc.
+          
+          if (minor >= 20 && (parts[2] || 0) >= 5) {
+             // 1.20.5+ needs Java 21
+             javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
+          } else if (minor >= 17) {
+             // 1.17 to 1.20.4 needs Java 17
+             javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
+          } else if (minor >= 16) {
+             // 1.16 usually supports 11, sometimes 8. 
+             // Using Java 17 is safer as it can often run 1.16, but ideally:
+             // If you installed OpenJDK 11 in snapshot, use it. If not, Java 8 or 17.
+             // Let's assume Java 17 for 1.16+ to be safe on modern mods, or Java 8 if vanilla.
+             // Safest bet for older modpacks is Java 8.
+             javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java'; 
+          } else {
+             // 1.12, 1.8, etc -> Java 8
+             javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
+          }
+      }
   }
 
   const escapedDl = escapeForSingleQuotes(modpackMeta.url || downloadUrl || '');
@@ -362,29 +388,12 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const escapedVersion = escapeForSingleQuotes(effectiveVersion);
   const escapedRestoreKey = escapeForSingleQuotes(pendingRestoreKey || '');
 
-  const isForge = software === 'forge';
-  const isNeoForge = software === 'neoforge';
-  
-  // Logic mostly relevant for standard Forge (not modpacks which use their own installers)
-  let isModernForge = false;
-  if (isForge) {
-    const mcVer = effectiveVersion.split('-')[0];
-    const parts = mcVer.split('.');
-    if (parts.length >= 2 && parseInt(parts[1]) >= 17) isModernForge = true;
-  }
-  
-  // Auto-detect Java package
-  let javaPackage = 'openjdk-21-jre-headless'; 
-  if (effectiveVersion.startsWith('1.8') || effectiveVersion.startsWith('1.12')) javaPackage = 'openjdk-8-jre-headless';
-  else if (effectiveVersion.startsWith('1.16')) javaPackage = 'openjdk-11-jre-headless';
-  else if (effectiveVersion.startsWith('1.17')) javaPackage = 'openjdk-17-jre-headless';
-
+  // S3 Config Strings
   const S3_BUCKET = (s3Config.S3_BUCKET || '').replace(/'/g, "'\"'\"'");
   const AWS_ACCESS_KEY_ID = (s3Config.AWS_ACCESS_KEY_ID || '').replace(/'/g, "'\"'\"'");
   const AWS_SECRET_ACCESS_KEY = (s3Config.AWS_SECRET_ACCESS_KEY || '').replace(/'/g, "'\"'\"'");
   const S3_ENDPOINT = (s3Config.S3_ENDPOINT || '').replace(/'/g, "'\"'\"'");
   
-  // s5cmd endpoint argument logic
   const s5cmdEndpointOpt = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
   const endpointCliOption = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
 
@@ -396,7 +405,9 @@ users:
     shell: /bin/bash
     lock_passwd: true
     ssh_authorized_keys:
-      - ${process.env.HETZNER_DEFAULT_SSH_PUBLIC_KEY || 'DEBUG: NO SSH KEY FOUND'}
+      - ${process.env.HETZNER_DEFAULT_SSH_PUBLIC_KEY || ''}
+
+# Packages removed - baked into snapshot
 
 write_files:
   - path: /home/minecraft/.aws/credentials
@@ -426,11 +437,16 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -euo pipefail
+      set -eo pipefail
       SRC="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
       SERVER_PATH="servers/${serverId}"
       S5_ENDPOINT_OPT="${s5cmdEndpointOpt}"
+      
+      # Explicitly set vars so script works even if environment is lost
+      export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+      export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+      export AWS_REGION="${s3Config.AWS_REGION || 'eu-central-1'}"
       
       if [ -z "$BUCKET" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
         echo "[mc-sync] Missing S3 configuration, skipping sync."
@@ -439,7 +455,7 @@ write_files:
       
       echo "[mc-sync] Starting high-speed sync from $SRC to s3://$BUCKET/$SERVER_PATH ..."
       
-      # FIX: Use full path to s5cmd
+      # Use s5cmd full path
       sudo -u minecraft /usr/local/bin/s5cmd $S5_ENDPOINT_OPT sync --delete \
           --exclude 'node_modules/*' \
           --exclude 'serverinstaller' \
@@ -462,21 +478,20 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -euo pipefail
+      set -eo pipefail
       DEST="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
       SERVER_PATH="servers/${serverId}"
-      AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
-      AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
       REQUESTED_VERSION='${escapedVersion}'
       RESTORE_KEY="${escapedRestoreKey}"
       S5_ENDPOINT_OPT="${s5cmdEndpointOpt}"
-      ENDPOINT_OPT="${endpointCliOption}"
+      
+      export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+      export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
 
       if [ -n "$RESTORE_KEY" ]; then
          echo "[mc-sync-from-s3] PENDING RESTORE FOUND. Restoring from $RESTORE_KEY..."
-         # Use standard AWS CLI or s5cmd cp for single file download
-         sudo -u minecraft s5cmd $S5_ENDPOINT_OPT cp "s3://$BUCKET/$RESTORE_KEY" "$DEST/restore.zip"
+         sudo -u minecraft /usr/local/bin/s5cmd $S5_ENDPOINT_OPT cp "s3://$BUCKET/$RESTORE_KEY" "$DEST/restore.zip"
          if [ -f "$DEST/restore.zip" ]; then
              cd $DEST
              sudo -u minecraft unzip -o restore.zip
@@ -493,8 +508,7 @@ write_files:
       
       echo "[mc-sync-from-s3] Starting high-speed sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
       
-      # s5cmd sync requires wildcard for folder contents source -> dest
-      sudo -u minecraft s5cmd $S5_ENDPOINT_OPT sync \
+      sudo -u minecraft /usr/local/bin/s5cmd $S5_ENDPOINT_OPT sync \
           --exclude 'node_modules/*' \
           "s3://$BUCKET/$SERVER_PATH/*" "$DEST/"
   - path: /etc/systemd/system/mc-sync.service
@@ -508,6 +522,8 @@ write_files:
 
       [Service]
       Type=oneshot
+      Environment="AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+      Environment="AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
       ExecStart=/usr/local/bin/mc-sync.sh
       RemainAfterExit=yes
       TimeoutStartSec=300
@@ -543,13 +559,14 @@ write_files:
       HEAP_GB=${heapGb}
       RCON_PASSWORD='${escapedRconPassword}'
       SERVER_ID='${serverId}'
+      JAVA_BIN='${javaBin}'
       
       # Optimized JVM Arguments (Aikar's Flags)
       AIKAR_FLAGS="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
       
       echo "[Startup] Initializing for software: $SOFTWARE"
       
-      id -u minecraft >/dev/null 2>&1 || useradd -m -s /bin/bash minecraft || true
+      # Ensure dirs
       mkdir -p /opt/minecraft
       chown -R minecraft:minecraft /opt/minecraft || true
       cd /opt/minecraft
@@ -575,7 +592,7 @@ write_files:
               INSTALLER=$(find . -maxdepth 2 -name "*installer*.jar" | head -n 1)
               if [ -n "$INSTALLER" ]; then
                   echo "[Startup] Running installer: $INSTALLER"
-                  sudo -u minecraft java -jar "$INSTALLER" --installServer
+                  sudo -u minecraft $JAVA_BIN -jar "$INSTALLER" --installServer
                   
                   if [ -f "run.sh" ]; then
                       chmod +x run.sh
@@ -583,7 +600,7 @@ write_files:
                       FORGE_JAR=$(find . -name "forge-*-universal.jar" -o -name "forge-*.jar" | grep -v installer | head -n 1)
                       if [ -n "$FORGE_JAR" ]; then
                           echo "#!/bin/bash" > run.sh
-                          echo "java -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar $FORGE_JAR nogui" >> run.sh
+                          echo "$JAVA_BIN -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar $FORGE_JAR nogui" >> run.sh
                           chmod +x run.sh
                       fi
                   fi
@@ -619,9 +636,7 @@ write_files:
                   fi
               fi
               
-              # --- FIX: DELETE user_jvm_args.txt to prevent RAM override ---
               if [ -f "user_jvm_args.txt" ]; then
-                  echo "[Startup] Deleting user_jvm_args.txt to prevent RAM override..."
                   rm user_jvm_args.txt
               fi
 
@@ -630,7 +645,7 @@ write_files:
           elif [ "$SOFTWARE" = "forge" ] || [ "$SOFTWARE" = "neoforge" ]; then
              echo "[Startup] Downloading Forge/NeoForge Installer..."
              sudo -u minecraft wget -O server-installer.jar "$DOWNLOAD_URL"
-             sudo -u minecraft java -jar server-installer.jar --installServer
+             sudo -u minecraft $JAVA_BIN -jar server-installer.jar --installServer
              rm -f server-installer.jar
              
              if [ -f "run.sh" ]; then
@@ -640,7 +655,7 @@ write_files:
                  if [ -n "$FORGE_JAR" ]; then 
                      mv "$FORGE_JAR" server.jar
                      echo "#!/bin/bash" > run.sh
-                     echo "java -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
+                     echo "$JAVA_BIN -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
                      chmod +x run.sh
                  fi
              fi
@@ -649,7 +664,7 @@ write_files:
               echo "[Startup] Downloading Server JAR..."
               sudo -u minecraft wget -O server.jar "$DOWNLOAD_URL"
               echo "#!/bin/bash" > run.sh
-              echo "java -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
+              echo "$JAVA_BIN -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
               chmod +x run.sh
           fi
           
@@ -657,10 +672,6 @@ write_files:
           echo "eula=true" > eula.txt
           chown minecraft:minecraft eula.txt
           
-          # FIX: Replaced Heredoc with Echo to prevent indentation errors
-          # Use >> to append to existing file if present (e.g. from Modpack), otherwise create new.
-          
-          # Ensure a newline exists if file is present
           if [ -f server.properties ]; then echo "" >> server.properties; fi
           
           echo "enable-rcon=true" >> server.properties
@@ -681,7 +692,6 @@ write_files:
           echo "pvp=true" >> server.properties
           echo "generate-structures=true" >> server.properties
           echo "max-world-size=29999984" >> server.properties
-          echo "max-tick-time=-1" >> server.properties
 
           chown minecraft:minecraft server.properties
       fi
@@ -705,6 +715,8 @@ write_files:
       Environment=NEXTJS_API_URL=${appBaseUrl.replace(/\/+$/, '')}/api/servers/log
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=HEAP_GB=${heapGb}
+      Environment="AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+      Environment="AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
       
       ExecStartPre=/usr/local/bin/mc-sync-from-s3.sh
       ExecStart=/usr/bin/node /opt/minecraft/server-wrapper.js
@@ -814,27 +826,42 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 runcmd:
+  # 1. Permission fix for existing folder
   - chown -R minecraft:minecraft /opt/minecraft /home/minecraft
   
-  # 1. Use s5cmd (which we know works) to download the control scripts
+  # 2. Download scripts using s5cmd (faster & pre-installed)
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js
+  - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js
   
-  # 2. Fix permissions for the downloaded scripts
   - chmod 0755 /opt/minecraft/*.js
   - chown minecraft:minecraft /opt/minecraft/*.js
 
-  # 3. Start the Minecraft logic
+  # 3. Start Minecraft initialization logic
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
 
-  # 4. Reload and Start services
+  # 4. Enable/Start Services
   - systemctl daemon-reload
-  - systemctl enable mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
-  - systemctl start mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
+  - systemctl enable mc-sync.service
+  - systemctl enable mc-sync.timer
+  - systemctl start mc-sync.timer
+  - systemctl enable minecraft
+  - systemctl start minecraft
+  - systemctl enable mc-status-reporter
+  - systemctl start mc-status-reporter
+  - systemctl enable mc-properties-api
+  - systemctl start mc-properties-api
+  - systemctl enable mc-metrics
+  - systemctl start mc-metrics
+  - systemctl enable mc-file-api
+  - systemctl start mc-file-api
+  
+  - echo "[FINAL DEBUG] Snapshot boot finished at $(date)"
 `;
+
   return userData;
 };
 
@@ -844,12 +871,11 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const serverType = ramToServerType(Number(serverRow.ram || 4));
     const software = serverRow.type || 'vanilla';
     const needsFileDeletion = serverRow.needs_file_deletion;
-    const pendingRestoreKey = serverRow.pending_backup_restore; // Retrieve pending restore
+    const pendingRestoreKey = serverRow.pending_backup_restore; 
     const subdomain = serverRow.subdomain.toLowerCase() || '';
 
     // --- 1. ZOMBIE CLEANUP ---
     try {
-        console.log(`[Provision] Checking for existing servers with name: ${serverRow.name}`);
         const existingRes = await fetch(`${HETZNER_API_BASE}/servers?name=${serverRow.name}`, {
             headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
         });
@@ -857,9 +883,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         if (existingRes.ok) {
             const existingJson = await existingRes.json();
             if (existingJson.servers && existingJson.servers.length > 0) {
-                console.log(`[Provision] Found ${existingJson.servers.length} existing server(s). Cleaning up...`);
                 for (const s of existingJson.servers) {
-                    console.log(`[Provision] Deleting zombie server: ${s.id} (${s.name})`);
                     await fetch(`${HETZNER_API_BASE}/servers/${s.id}`, {
                         method: 'DELETE',
                         headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
@@ -869,7 +893,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
             }
         }
     } catch (cleanupErr) {
-        console.warn(`[Provision] Zombie cleanup check failed, attempting creation anyway: ${cleanupErr.message}`);
+        console.warn(`[Provision] Zombie cleanup warning: ${cleanupErr.message}`);
     }
 
     // --- 2. S3 Cleanup ---
@@ -883,27 +907,19 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     if (needsFileDeletion) {
       try {
-        console.log('needs_file_deletion is true, deleting S3 files...');
         await deleteS3Files(serverRow.id, s3Config);
       } catch (e) {
-        console.error('Failed to delete S3 files:', e.message, e.stack);
-        return res.status(500).json({ 
-          error: 'Failed to delete S3 files', 
-          detail: e.message,
-          stack: process.env.NODE_ENV === 'development' ? e.stack : undefined 
-        });
+        console.error('Failed to delete S3 files:', e.message);
+        return res.status(500).json({ error: 'Failed to delete S3 files', detail: e.message });
       }
     }
 
     // --- 3. Get Download URL ---
     let downloadUrl = null;
     try {
-      console.log('Fetching download URL for', software, version);
       downloadUrl = await getSoftwareDownloadUrl(software, version);
-      console.log('Download URL resolved:', downloadUrl);
     } catch (e) {
-      console.error('Failed to resolve download URL:', e.message, e.stack);
-      return res.status(400).json({ error: 'Failed to resolve download URL', detail: e.message, stack: e.stack });
+      return res.status(400).json({ error: 'Failed to resolve download URL', detail: e.message });
     }
 
     const rconPassword = serverRow.rcon_password || generateRconPassword();
@@ -922,7 +938,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     );
 
     const sanitizedUserData = sanitizeYaml(userData);
-    console.log('Sanitized user_data length:', sanitizedUserData.length);
 
     // --- 4. SSH Key Resolution ---
     let sshKeysToUse = Array.isArray(ssh_keys) && ssh_keys.length > 0 ? ssh_keys : [];
@@ -931,34 +946,23 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         const keysRes = await fetch(`${HETZNER_API_BASE}/ssh_keys`, {
           headers: { Authorization: `Bearer ${HETZNER_TOKEN}` },
         });
-        
         if (keysRes.ok) {
           const keysJson = await keysRes.json();
           const projectKeys = keysJson.ssh_keys || [];
-          const match = projectKeys.find((k) =>
-            String(k.id) === String(DEFAULT_SSH_KEY) ||
-            k.name === DEFAULT_SSH_KEY ||
-            k.fingerprint === DEFAULT_SSH_KEY
-          );
-          
-          if (match) {
-            sshKeysToUse = [match.id];
-          } else {
-            sshKeysToUse = [DEFAULT_SSH_KEY];
-          }
-        } else {
-          sshKeysToUse = [DEFAULT_SSH_KEY];
+          const match = projectKeys.find((k) => k.name === DEFAULT_SSH_KEY);
+          if (match) sshKeysToUse = [match.id];
         }
       } catch (e) {
-        sshKeysToUse = [DEFAULT_SSH_KEY];
+        // ignore
       }
     }
 
     // --- 5. Create Server ---
+    // Using Snapshot Image
     const payload = {
       name: serverRow.name,
       server_type: serverType,
-      image: '342656678',
+      image: '342656678', // CUSTOM SNAPSHOT NAME
       user_data: sanitizedUserData,
       ssh_keys: sshKeysToUse,
       location: 'nbg1',
@@ -975,12 +979,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     if (!createRes.ok) {
       const errText = await createRes.text().catch(() => 'no-body');
-      console.error('Hetzner create error:', createRes.status, errText);
-      return res.status(502).json({ 
-        error: 'Hetzner create failed', 
-        detail: errText,
-        status: createRes.status
-      });
+      return res.status(502).json({ error: 'Hetzner create failed', detail: errText });
     }
 
     const createJson = await createRes.json();
@@ -1005,9 +1004,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
           const sJson = await sRes.json();
           finalServer = sJson.server || finalServer;
         }
-      } catch (e) {
-        console.warn('Failed to fetch final server info:', e.message);
-      }
+      } catch (e) {}
     }
 
     const ipv4 = finalServer?.public_net?.ipv4?.ip || null;
@@ -1020,12 +1017,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       try {
         await deleteCloudflareRecords(serverRow.subdomain);
         const aRecordIds = await createARecord(serverRow.subdomain, ipv4);
-        let srvRecordId;
-        try {
-          srvRecordId = await createSRVRecord(serverRow.subdomain, ipv4);
-        } catch (srvError) {
-          console.error('SRV record creation failed:', srvError.message);
-        }
+        let srvRecordId = await createSRVRecord(serverRow.subdomain, ipv4);
 
         subdomainResult = `${serverRow.subdomain}.spawnly.net`;
         await supabaseAdmin
@@ -1036,16 +1028,10 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
           })
           .eq('id', serverRow.id);
       } catch (dnsErr) {
-        console.error('Cloudflare DNS setup failed:', dnsErr.message);
-        return res.status(502).json({ 
-          error: 'DNS setup failed', 
-          detail: dnsErr.message,
-          hetznerServer: finalServer
-        });
+        console.error('DNS Setup error:', dnsErr.message);
       }
     }
 
-    // Generate a new session ID for billing
     const currentSessionId = uuidv4();
 
     const { data: updatedRow, error: updateErr } = await supabaseAdmin
@@ -1065,10 +1051,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       .single();
 
     if (updateErr) {
-      return res.status(500).json({ 
-        error: 'Failed to update server status in Supabase', 
-        detail: updateErr.message
-      });
+      return res.status(500).json({ error: 'Failed to update database', detail: updateErr.message });
     }
 
     return res.status(200).json({
@@ -1078,29 +1061,18 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       message: 'Server provisioned successfully',
     });
   } catch (err) {
-    console.error('Provision error:', err.message, err.stack);
-    return res.status(500).json({ 
-      error: 'Server provisioning failed', 
-      detail: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    console.error('Provision error:', err.message);
+    return res.status(500).json({ error: 'Server provisioning failed', detail: err.message });
   }
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { serverId, version, ssh_keys = [] } = req.body;
+  if (!serverId) return res.status(400).json({ error: 'serverId is required' });
 
-  if (!serverId) {
-    return res.status(400).json({ error: 'serverId is required' });
-  }
-
-  // --- SECURITY FIX: Dual Authentication (User OR Sleeper) ---
   let isAuthorized = false;
-
   const sleeperHeader = req.headers['x-sleeper-secret'];
   if (SLEEPER_SECRET && sleeperHeader === SLEEPER_SECRET) {
       isAuthorized = true;
@@ -1109,25 +1081,18 @@ export default async function handler(req, res) {
       if (authHeader && authHeader.startsWith('Bearer ')) {
           const token = authHeader.split(' ')[1];
           const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-          
           if (user && !authError) {
               const { data: serverCheck } = await supabaseAdmin
                   .from('servers')
                   .select('user_id')
                   .eq('id', serverId)
                   .single();
-              
-              if (serverCheck && serverCheck.user_id === user.id) {
-                  isAuthorized = true;
-              }
+              if (serverCheck && serverCheck.user_id === user.id) isAuthorized = true;
           }
       }
   }
 
-  if (!isAuthorized) {
-      return res.status(401).json({ error: 'Unauthorized' });
-  }
-  // ------------------------------------------------
+  if (!isAuthorized) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
     const { data: serverRow, error } = await supabaseAdmin
@@ -1136,21 +1101,11 @@ export default async function handler(req, res) {
       .eq('id', serverId)
       .single();
 
-    if (error || !serverRow) {
-      return res.status(404).json({ error: 'Server not found', detail: error?.message });
-    }
-
-    if (!serverRow.subdomain) {
-      return res.status(400).json({ error: 'No subdomain specified' });
-    }
+    if (error || !serverRow) return res.status(404).json({ error: 'Server not found' });
+    if (!serverRow.subdomain) return res.status(400).json({ error: 'No subdomain specified' });
 
     return await provisionServer(serverRow, version, ssh_keys, res);
   } catch (err) {
-    console.error('Handler error:', err.message, err.stack);
-    return res.status(500).json({ 
-      error: 'Failed to fetch server data', 
-      detail: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    return res.status(500).json({ error: 'Failed to fetch server data', detail: err.message });
   }
 }
