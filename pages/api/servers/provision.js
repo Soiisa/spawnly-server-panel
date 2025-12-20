@@ -24,9 +24,9 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 // RAM to Server Type Mapping (Cost Optimized)
 const ramToServerType = (ramGb) => {
-  if (ramGb <= 4) return 'cx23';
-  if (ramGb <= 8) return 'cx33';
-  if (ramGb <= 16) return 'cx43';
+  if (ramGb <= 3) return 'cx23';
+  if (ramGb <= 7) return 'cx33';
+  if (ramGb <= 15) return 'cx43';
   return 'cx53';
 };
 
