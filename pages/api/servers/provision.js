@@ -398,24 +398,6 @@ users:
     ssh_authorized_keys:
       - ${process.env.HETZNER_DEFAULT_SSH_PUBLIC_KEY || 'DEBUG: NO SSH KEY FOUND'}
 
-packages:
-  - ${javaPackage}
-  - wget
-  - curl
-  - screen
-  - ufw
-  - git
-  - apt-transport-https
-  - ca-certificates
-  - unzip
-  - zip
-  - python3
-  - python3-pip
-  - groff
-  - less
-  - awscli
-  - dnsutils
-
 write_files:
   - path: /home/minecraft/.aws/credentials
     permissions: '0640'
@@ -839,20 +821,25 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 runcmd:
+  # Ensure permissions are correct for the baked-in folder
   - chown -R minecraft:minecraft /opt/minecraft /home/minecraft
-  # Only download the JS scripts which might change frequently
+  
+  # 1. Download only the latest control scripts from S3
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption}
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js ${endpointCliOption}
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js ${endpointCliOption}
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js ${endpointCliOption}
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js ${endpointCliOption}
   - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js ${endpointCliOption}
   - chmod 0755 /opt/minecraft/*.js
-  # Start services
+
+  # 2. Run the startup logic (Server JAR download, eula, etc.)
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
+
+  # 3. Reload and Start services (which are defined in the write_files section of provision.js)
   - systemctl daemon-reload
   - systemctl enable mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
   - systemctl start mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
+  - echo "[FINAL DEBUG] Snapshot boot finished at $(date)"
 `;
 
   return userData;
@@ -978,7 +965,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const payload = {
       name: serverRow.name,
       server_type: serverType,
-      image: '342624303',
+      image: '342656678',
       user_data: sanitizedUserData,
       ssh_keys: sshKeysToUse,
       location: 'nbg1',
