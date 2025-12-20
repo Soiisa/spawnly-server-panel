@@ -556,11 +556,6 @@ write_files:
       chown -R minecraft:minecraft /opt/minecraft || true
       cd /opt/minecraft
 
-      if ! command -v aws >/dev/null 2>&1; then
-        pip3 install awscli --upgrade --user || true
-        export PATH=$PATH:/root/.local/bin:/home/minecraft/.local/bin
-      fi
-
       # Function to find and setup start script (Universal)
       setup_generic_start_script() {
           START_SCRIPT=$(find . -maxdepth 3 -name "start.sh" -o -name "run.sh" -o -name "ServerStart.sh" | head -n 1)
@@ -821,27 +816,27 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 runcmd:
-  # Ensure permissions are correct for the baked-in folder
   - chown -R minecraft:minecraft /opt/minecraft /home/minecraft
   
-  # 1. Download only the latest control scripts from S3
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption}
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js ${endpointCliOption}
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js ${endpointCliOption}
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js ${endpointCliOption}
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js ${endpointCliOption}
+  # 1. Use s5cmd (which we know works) to download the control scripts
+  - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js
+  - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js
+  - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js
+  - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js
+  - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js
+  
+  # 2. Fix permissions for the downloaded scripts
   - chmod 0755 /opt/minecraft/*.js
+  - chown minecraft:minecraft /opt/minecraft/*.js
 
-  # 2. Run the startup logic (Server JAR download, eula, etc.)
+  # 3. Start the Minecraft logic
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
 
-  # 3. Reload and Start services (which are defined in the write_files section of provision.js)
+  # 4. Reload and Start services
   - systemctl daemon-reload
   - systemctl enable mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
   - systemctl start mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
-  - echo "[FINAL DEBUG] Snapshot boot finished at $(date)"
 `;
-
   return userData;
 };
 
