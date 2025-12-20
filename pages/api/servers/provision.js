@@ -430,8 +430,6 @@ write_files:
       SRC="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
       SERVER_PATH="servers/${serverId}"
-      AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
-      AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
       S5_ENDPOINT_OPT="${s5cmdEndpointOpt}"
       
       if [ -z "$BUCKET" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
@@ -441,11 +439,11 @@ write_files:
       
       echo "[mc-sync] Starting high-speed sync from $SRC to s3://$BUCKET/$SERVER_PATH ..."
       
-      # Use s5cmd for high performance
-      # Sync contents of SRC to the destination folder
-      sudo -u minecraft s5cmd $S5_ENDPOINT_OPT sync --delete \
+      # FIX: Use full path to s5cmd
+      sudo -u minecraft /usr/local/bin/s5cmd $S5_ENDPOINT_OPT sync --delete \
           --exclude 'node_modules/*' \
           --exclude 'serverinstaller' \
+          --exclude 'logs/*' \
           --exclude '*.zip' \
           "$SRC/" "s3://$BUCKET/$SERVER_PATH/"
       
