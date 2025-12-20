@@ -504,7 +504,7 @@ write_files:
       
       echo "[mc-sync-from-s3] Starting high-speed sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
       
-      sudo -u minecraft /usr/local/bin/s5cmd $S5_ENDPOINT_OPT sync \
+      sudo -u minecraft /usr/local/bin/s5cmd --concurrency 30 $S5_ENDPOINT_OPT sync \
           --exclude 'node_modules/*' \
           "s3://$BUCKET/$SERVER_PATH/*" "$DEST/"
   - path: /etc/systemd/system/mc-sync.service
