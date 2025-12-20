@@ -962,7 +962,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const payload = {
       name: serverRow.name,
       server_type: serverType,
-      image: '342656678', // CUSTOM SNAPSHOT NAME
+      image: '342669034', // CUSTOM SNAPSHOT ID
       user_data: sanitizedUserData,
       ssh_keys: sshKeysToUse,
       location: 'nbg1',
