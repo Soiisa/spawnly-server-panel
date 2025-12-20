@@ -706,6 +706,7 @@ write_files:
           echo "pvp=true" >> server.properties
           echo "generate-structures=true" >> server.properties
           echo "max-world-size=29999984" >> server.properties
+          echo "max-tick-time=-1" >> server.properties
 
           chown minecraft:minecraft server.properties
       fi
@@ -838,58 +839,22 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 runcmd:
-  - mkdir -p /opt/minecraft
-  - chown -R minecraft:minecraft /opt/minecraft
-  - mkdir -p /home/minecraft/.aws
-  - chown -R minecraft:minecraft /home/minecraft
-  - apt-get update || true
-  - curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || true
-  - apt-get install -y nodejs awscli || true
-  - wget -O /tmp/s5cmd.tar.gz https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz
-  - tar -xzf /tmp/s5cmd.tar.gz -C /usr/local/bin/ s5cmd
-  - chmod +x /usr/local/bin/s5cmd
-  - rm /tmp/s5cmd.tar.gz
-  - cd /opt/minecraft || true
-  - sudo -u minecraft npm install --no-audit --no-fund ws express multer archiver cors dotenv minecraft-query body-parser || true
-  - chown -R minecraft:minecraft /opt/minecraft/node_modules || true
+  # Directories and permissions are already in the snapshot
+  - chown -R minecraft:minecraft /opt/minecraft /home/minecraft
+  
+  # Fetch latest scripts from S3 (these might change more often than the environment)
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption}
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js ${endpointCliOption}
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js ${endpointCliOption}
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js ${endpointCliOption}
+  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js ${endpointCliOption}
+  
+  # Final setup and service start
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
-  - wget -O /usr/local/bin/mcrcon.tar.gz https://github.com/Tiiffi/mcrcon/releases/download/v0.7.2/mcrcon-0.7.2-linux-x86-64.tar.gz || true
-  - tar -xzf /usr/local/bin/mcrcon.tar.gz -C /usr/local/bin/ || true
-  - chmod +x /usr/local/bin/mcrcon || true
-  - rm /usr/local/bin/mcrcon.tar.gz || true
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js ${endpointCliOption} || echo "[ERROR] Failed to download status-reporter.js"
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js ${endpointCliOption} || echo "[ERROR] Failed to download server-wrapper.js"
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js ${endpointCliOption} || echo "[ERROR] Failed to download console-server.js"
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/properties-api.js /opt/minecraft/properties-api.js ${endpointCliOption} || echo "[ERROR] Failed to download properties-api.js"
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/metrics-server.js /opt/minecraft/metrics-server.js ${endpointCliOption} || echo "[ERROR] Failed to download metrics-server.js"
-  - sudo -u minecraft aws s3 cp s3://${S3_BUCKET}/scripts/file-api.js /opt/minecraft/file-api.js ${endpointCliOption} || echo "[ERROR] Failed to download file-api.js"
-  - chown -R minecraft:minecraft /opt/minecraft/*.js || true
-  - chmod 0755 /opt/minecraft/*.js || true
   - systemctl daemon-reload
-  - systemctl enable mc-sync.service || true
-  - systemctl enable mc-sync.timer || true
-  - systemctl start mc-sync.timer || true
-  - systemctl enable minecraft || true
-  - systemctl start minecraft || true
-  - systemctl enable mc-status-reporter || true
-  - systemctl start mc-status-reporter || true
-  - systemctl enable mc-properties-api || true
-  - systemctl start mc-properties-api || true
-  - systemctl enable mc-metrics || true
-  - systemctl start mc-metrics || true
-  - systemctl enable mc-file-api || true
-  - systemctl start mc-file-api || true
-  - echo "[DEBUG] Setting up firewall"
-  - ufw allow 25565
-  - ufw allow 25575
-  - ufw allow 3003/tcp comment 'Properties API'
-  - ufw allow 3004/tcp comment 'Metrics API'
-  - ufw allow 3005/tcp comment 'File API'
-  - ufw allow 3006/tcp comment 'Wrapper Command API'
-  - ufw allow 3007/tcp comment 'Status Reporter WS'
-  - ufw allow 22
-  - ufw --force enable
-  - echo "[FINAL DEBUG] Cloud-init finished at $(date)"
+  - systemctl enable mc-sync.service mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
+  - systemctl start mc-sync.timer minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
+  - echo "[FINAL DEBUG] Snapshot-based boot finished at $(date)"
 `;
 
   return userData;
@@ -1015,7 +980,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const payload = {
       name: serverRow.name,
       server_type: serverType,
-      image: 'ubuntu-22.04',
+      image: 'spawnly-template-v1',
       user_data: sanitizedUserData,
       ssh_keys: sshKeysToUse,
       location: 'nbg1',
