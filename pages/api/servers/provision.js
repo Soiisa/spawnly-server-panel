@@ -940,28 +940,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const pendingRestoreKey = serverRow.pending_backup_restore; 
     const subdomain = serverRow.subdomain.toLowerCase() || '';
 
-    // --- 1. ZOMBIE CLEANUP ---
-    try {
-        const existingRes = await fetch(`${HETZNER_API_BASE}/servers?name=${serverRow.name}`, {
-            headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
-        });
-        
-        if (existingRes.ok) {
-            const existingJson = await existingRes.json();
-            if (existingJson.servers && existingJson.servers.length > 0) {
-                for (const s of existingJson.servers) {
-                    await fetch(`${HETZNER_API_BASE}/servers/${s.id}`, {
-                        method: 'DELETE',
-                        headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
-                    });
-                }
-                await new Promise(r => setTimeout(r, 2000));
-            }
-        }
-    } catch (cleanupErr) {
-        console.warn(`[Provision] Zombie cleanup warning: ${cleanupErr.message}`);
-    }
-
     // --- 2. S3 Cleanup ---
     const s3Config = {
       S3_BUCKET: process.env.S3_BUCKET,
