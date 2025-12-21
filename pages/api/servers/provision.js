@@ -448,7 +448,8 @@ write_files:
       SYNC_EXCLUDES=""
       
       # Determine World Name to avoid zipping it
-      WORLD_NAME=$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\r')
+      # FIX: Escape backslash for carriage return to prevent breaking YAML structure
+      WORLD_NAME=$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\\r')
       [ -z "$WORLD_NAME" ] && WORLD_NAME="world"
 
       # === DYNAMIC ZIPPING LOGIC (Mainly for Modpacks) ===
@@ -484,7 +485,6 @@ write_files:
           if [ -n "$DIRS_TO_ZIP" ]; then
             echo "[mc-sync] Compressing heavy folders..."
             # -r recursive, -1 fast compression, -q quiet
-            # We assume 'zip' is installed in the snapshot
             zip -r -1 -q packed-data.zip $DIRS_TO_ZIP || true
             
             # Immediately upload the zip
@@ -504,7 +504,6 @@ write_files:
       
       # 2. Sync everything else (excluding what we just zipped)
       # Note: $SYNC_EXCLUDES is unquoted so the string expands into multiple arguments
-      # Added --numworkers 10 to prevent IOPS exhaustion
       sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
           --exclude 'node_modules/*' \
           --exclude 'serverinstaller' \
