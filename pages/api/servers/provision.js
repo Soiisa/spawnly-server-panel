@@ -1028,7 +1028,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const payload = {
       name: serverRow.name,
       server_type: serverType,
-      image: '342669261', // CUSTOM SNAPSHOT NAME
+      image: 'spawnly-v3-noble', // CUSTOM SNAPSHOT NAME
       user_data: sanitizedUserData,
       ssh_keys: sshKeysToUse,
       location: 'nbg1',
