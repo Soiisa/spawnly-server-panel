@@ -348,6 +348,9 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
       effectiveVersion = modpackMeta.mcVersion;
   }
 
+  // Determine if this is a modpack for zipping logic
+  const isModpack = software.startsWith('modpack-');
+
   // --- Java Version Selection Logic ---
   // Default to 21 for modern, but fallback for older versions
   let javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'; 
@@ -362,7 +365,6 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
           const minor = parts[1]; // 20, 16, 8, etc.
           const patch = parts[2] || 0;
 
-          // FIX: Correct logic for 1.21 and 1.20.5+
           if (minor > 20 || (minor === 20 && patch >= 5)) {
              // 1.20.5+ needs Java 21
              javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
@@ -370,7 +372,7 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
              // 1.17 to 1.20.4 needs Java 17
              javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
           } else {
-             // 1.16 and below needs Java 8 (safe default for modpacks) or 11/17 for vanilla
+             // 1.16 and below needs Java 8
              javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
           }
       }
@@ -430,14 +432,14 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -eo pipefail # FIX: Removed -u to prevent crash on empty vars
+      set -eo pipefail
       
       SRC="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
       SERVER_PATH="servers/${serverId}"
       S5_ENDPOINT_OPT="${s5cmdEndpointOpt}"
+      IS_MODPACK="${isModpack}"
       
-      # Explicitly set vars so script works even if environment is lost
       export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
       export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
       export AWS_REGION="${s3Config.AWS_REGION || 'eu-central-1'}"
@@ -447,17 +449,75 @@ write_files:
         exit 0
       fi
       
-      echo "[mc-sync] Starting high-speed sync from $SRC to s3://$BUCKET/$SERVER_PATH ..."
-      
-      # FIX: cd to source so excludes work correctly relative to root
+      echo "[mc-sync] Processing..."
       cd "$SRC"
       
-      sudo -u minecraft /usr/local/bin/s5cmd --numworkers 5 $S5_ENDPOINT_OPT sync --delete \
-          --exclude 'node_modules/*' \
-          --exclude 'serverinstaller' \
-          --exclude 'logs/*' \
-          --exclude '*.zip' \
-          . "s3://$BUCKET/$SERVER_PATH/"
+      if [ "$IS_MODPACK" = "true" ]; then
+          # 1. MODPACK MODE: Zip heavy folders to avoid IOPS exhaustion
+          DIRS_TO_ZIP=""
+          for d in mods config kubejs defaultconfigs scripts libraries versions plugins patchouli_books structures openloader fancymenu_data; do
+            if [ -d "$d" ]; then
+              DIRS_TO_ZIP="$DIRS_TO_ZIP $d"
+            fi
+          done
+
+          if [ -n "$DIRS_TO_ZIP" ]; then
+            echo "[mc-sync] Modpack detected. Zipping folders: $DIRS_TO_ZIP"
+            zip -r -1 -q packed-data.zip $DIRS_TO_ZIP || true
+          fi
+          
+          # 2. Sync everything EXCEPT the folders we just zipped
+          sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
+              --exclude 'node_modules/*' \
+              --exclude 'serverinstaller' \
+              --exclude 'logs/*' \
+              --exclude 'crash-reports/*' \
+              --exclude 'debug/*' \
+              --exclude 'cache/*' \
+              --exclude 'backups/*' \
+              --exclude 'simplebackups/*' \
+              --exclude 'web/*' \
+              --exclude 'dynmap/*' \
+              --exclude 'bluemap/*' \
+              --exclude '*.zip' \
+              --exclude 'mods/*' \
+              --exclude 'config/*' \
+              --exclude 'kubejs/*' \
+              --exclude 'defaultconfigs/*' \
+              --exclude 'scripts/*' \
+              --exclude 'libraries/*' \
+              --exclude 'versions/*' \
+              --exclude 'plugins/*' \
+              --exclude 'patchouli_books/*' \
+              --exclude 'structures/*' \
+              --exclude 'openloader/*' \
+              --exclude 'fancymenu_data/*' \
+              . "s3://$BUCKET/$SERVER_PATH/"
+          
+          # 3. Explicitly upload the zip
+          if [ -f packed-data.zip ]; then
+             echo "[mc-sync] Uploading packed-data.zip..."
+             sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT cp packed-data.zip "s3://$BUCKET/$SERVER_PATH/packed-data.zip"
+             rm -f packed-data.zip
+          fi
+      else
+          # NORMAL MODE: Sync everything as loose files for easy file management
+          echo "[mc-sync] Standard server detected. Syncing loose files..."
+          sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
+              --exclude 'node_modules/*' \
+              --exclude 'serverinstaller' \
+              --exclude 'logs/*' \
+              --exclude 'crash-reports/*' \
+              --exclude 'debug/*' \
+              --exclude 'cache/*' \
+              --exclude 'backups/*' \
+              --exclude 'simplebackups/*' \
+              --exclude 'web/*' \
+              --exclude 'dynmap/*' \
+              --exclude 'bluemap/*' \
+              --exclude '*.zip' \
+              . "s3://$BUCKET/$SERVER_PATH/"
+      fi
       
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 0 ]; then
@@ -487,7 +547,8 @@ write_files:
 
       if [ -n "$RESTORE_KEY" ]; then
          echo "[mc-sync-from-s3] PENDING RESTORE FOUND. Restoring from $RESTORE_KEY..."
-         sudo -u minecraft /usr/local/bin/s5cmd $S5_ENDPOINT_OPT cp "s3://$BUCKET/$RESTORE_KEY" "$DEST/restore.zip"
+         # numworkers 10 for safe restore
+         sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT cp "s3://$BUCKET/$RESTORE_KEY" "$DEST/restore.zip"
          if [ -f "$DEST/restore.zip" ]; then
              cd $DEST
              sudo -u minecraft unzip -o restore.zip
@@ -504,9 +565,18 @@ write_files:
       
       echo "[mc-sync-from-s3] Starting high-speed sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
       
-      sudo -u minecraft /usr/local/bin/s5cmd --numworkers 5 $S5_ENDPOINT_OPT sync \
+      # 1. Download everything (including packed-data.zip if it exists)
+      sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync \
           --exclude 'node_modules/*' \
           "s3://$BUCKET/$SERVER_PATH/*" "$DEST/"
+      
+      # 2. Unpack if zip exists (This handles Modpacks)
+      cd "$DEST"
+      if [ -f packed-data.zip ]; then
+          echo "[mc-sync-from-s3] Modpack archive found. Unpacking..."
+          sudo -u minecraft unzip -o -q packed-data.zip
+          rm packed-data.zip
+      fi
   - path: /etc/systemd/system/mc-sync.service
     permissions: '0644'
     content: |
@@ -522,7 +592,7 @@ write_files:
       Environment="AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
       ExecStart=/usr/local/bin/mc-sync.sh
       RemainAfterExit=yes
-      TimeoutStartSec=300
+      TimeoutStartSec=600
 
       [Install]
       WantedBy=halt.target reboot.target shutdown.target
