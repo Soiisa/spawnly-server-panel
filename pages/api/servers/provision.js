@@ -352,27 +352,21 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const isModpack = software.startsWith('modpack-');
 
   // --- Java Version Selection Logic ---
-  // Default to 21 for modern, but fallback for older versions
   let javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'; 
   
   if (effectiveVersion) {
-      // Clean string to just version numbers (e.g. 1.8.8, 1.20.1)
       const vClean = effectiveVersion.replace(/[^0-9.]/g, '');
       const parts = vClean.split('.').map(Number);
       
       if (parts.length >= 2) {
-          const major = parts[0]; // 1
-          const minor = parts[1]; // 20, 16, 8, etc.
+          const minor = parts[1];
           const patch = parts[2] || 0;
 
           if (minor > 20 || (minor === 20 && patch >= 5)) {
-             // 1.20.5+ needs Java 21
              javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
           } else if (minor >= 17) {
-             // 1.17 to 1.20.4 needs Java 17
              javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
           } else {
-             // 1.16 and below needs Java 8
              javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
           }
       }
@@ -385,14 +379,12 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const escapedVersion = escapeForSingleQuotes(effectiveVersion);
   const escapedRestoreKey = escapeForSingleQuotes(pendingRestoreKey || '');
 
-  // S3 Config Strings
   const S3_BUCKET = (s3Config.S3_BUCKET || '').replace(/'/g, "'\"'\"'");
   const AWS_ACCESS_KEY_ID = (s3Config.AWS_ACCESS_KEY_ID || '').replace(/'/g, "'\"'\"'");
   const AWS_SECRET_ACCESS_KEY = (s3Config.AWS_SECRET_ACCESS_KEY || '').replace(/'/g, "'\"'\"'");
   const S3_ENDPOINT = (s3Config.S3_ENDPOINT || '').replace(/'/g, "'\"'\"'");
   
   const s5cmdEndpointOpt = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
-  const endpointCliOption = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
 
   const userData = `#cloud-config
 users:
@@ -452,72 +444,82 @@ write_files:
       echo "[mc-sync] Processing..."
       cd "$SRC"
       
+      # Define params for sync
+      SYNC_EXCLUDES=""
+      
+      # Determine World Name to avoid zipping it
+      WORLD_NAME=$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\r')
+      [ -z "$WORLD_NAME" ] && WORLD_NAME="world"
+
+      # === DYNAMIC ZIPPING LOGIC (Mainly for Modpacks) ===
       if [ "$IS_MODPACK" = "true" ]; then
-          # 1. MODPACK MODE: Zip heavy folders to avoid IOPS exhaustion
+          echo "[mc-sync] Modpack mode detected. Analyzing folders for optimization..."
+          
+          # We check every subfolder. If it has > 50 files, we zip it.
+          # We SKIP the world folder, logs, and sensitive system folders.
           DIRS_TO_ZIP=""
-          for d in mods config kubejs defaultconfigs scripts libraries versions plugins patchouli_books structures openloader fancymenu_data; do
-            if [ -d "$d" ]; then
-              DIRS_TO_ZIP="$DIRS_TO_ZIP $d"
-            fi
+          FILE_LIMIT=50
+          
+          for d in */ ; do
+              # remove trailing slash
+              # FIX: Escape the $ so JS doesn't try to interpret it
+              [ -L "\${d%/}" ] && continue
+              dirname="\${d%/}"
+              
+              # Exclude critical folders from being ZIPPED
+              if [[ "$dirname" == "$WORLD_NAME" || "$dirname" == "logs" || "$dirname" == "crash-reports" || "$dirname" == "backups" || "$dirname" == "serverinstaller" || "$dirname" == "node_modules" ]]; then
+                  continue
+              fi
+              
+              # Count files (stop counting if we hit limit + 1 for speed)
+              count=$(find "$dirname" -maxdepth 5 -type f | head -n $((FILE_LIMIT + 1)) | wc -l)
+              
+              if [ "$count" -gt "$FILE_LIMIT" ]; then
+                  echo "[mc-sync] Folder '$dirname' has >$FILE_LIMIT files. Adding to zip."
+                  DIRS_TO_ZIP="$DIRS_TO_ZIP $dirname"
+                  SYNC_EXCLUDES="$SYNC_EXCLUDES --exclude $dirname/*"
+              fi
           done
 
           if [ -n "$DIRS_TO_ZIP" ]; then
-            echo "[mc-sync] Modpack detected. Zipping folders: $DIRS_TO_ZIP"
+            echo "[mc-sync] Compressing heavy folders..."
+            # -r recursive, -1 fast compression, -q quiet
+            # We assume 'zip' is installed in the snapshot
             zip -r -1 -q packed-data.zip $DIRS_TO_ZIP || true
-          fi
-          
-          # 2. Sync everything EXCEPT the folders we just zipped
-          sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
-              --exclude 'node_modules/*' \
-              --exclude 'serverinstaller' \
-              --exclude 'logs/*' \
-              --exclude 'crash-reports/*' \
-              --exclude 'debug/*' \
-              --exclude 'cache/*' \
-              --exclude 'backups/*' \
-              --exclude 'simplebackups/*' \
-              --exclude 'web/*' \
-              --exclude 'dynmap/*' \
-              --exclude 'bluemap/*' \
-              --exclude '*.zip' \
-              --exclude 'mods/*' \
-              --exclude 'config/*' \
-              --exclude 'kubejs/*' \
-              --exclude 'defaultconfigs/*' \
-              --exclude 'scripts/*' \
-              --exclude 'libraries/*' \
-              --exclude 'versions/*' \
-              --exclude 'plugins/*' \
-              --exclude 'patchouli_books/*' \
-              --exclude 'structures/*' \
-              --exclude 'openloader/*' \
-              --exclude 'fancymenu_data/*' \
-              . "s3://$BUCKET/$SERVER_PATH/"
-          
-          # 3. Explicitly upload the zip
-          if [ -f packed-data.zip ]; then
-             echo "[mc-sync] Uploading packed-data.zip..."
-             sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT cp packed-data.zip "s3://$BUCKET/$SERVER_PATH/packed-data.zip"
-             rm -f packed-data.zip
+            
+            # Immediately upload the zip
+            if [ -f packed-data.zip ]; then
+               echo "[mc-sync] Uploading packed-data.zip..."
+               sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT cp packed-data.zip "s3://$BUCKET/$SERVER_PATH/packed-data.zip"
+               rm -f packed-data.zip
+            fi
+          else
+            echo "[mc-sync] No heavy folders found."
           fi
       else
-          # NORMAL MODE: Sync everything as loose files for easy file management
-          echo "[mc-sync] Standard server detected. Syncing loose files..."
-          sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
-              --exclude 'node_modules/*' \
-              --exclude 'serverinstaller' \
-              --exclude 'logs/*' \
-              --exclude 'crash-reports/*' \
-              --exclude 'debug/*' \
-              --exclude 'cache/*' \
-              --exclude 'backups/*' \
-              --exclude 'simplebackups/*' \
-              --exclude 'web/*' \
-              --exclude 'dynmap/*' \
-              --exclude 'bluemap/*' \
-              --exclude '*.zip' \
-              . "s3://$BUCKET/$SERVER_PATH/"
+          echo "[mc-sync] Standard server. Skipping zipping optimization."
       fi
+      
+      echo "[mc-sync] Syncing loose files..."
+      
+      # 2. Sync everything else (excluding what we just zipped)
+      # Note: $SYNC_EXCLUDES is unquoted so the string expands into multiple arguments
+      # Added --numworkers 10 to prevent IOPS exhaustion
+      sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
+          --exclude 'node_modules/*' \
+          --exclude 'serverinstaller' \
+          --exclude 'logs/*' \
+          --exclude 'crash-reports/*' \
+          --exclude 'debug/*' \
+          --exclude 'cache/*' \
+          --exclude 'backups/*' \
+          --exclude 'simplebackups/*' \
+          --exclude 'web/*' \
+          --exclude 'dynmap/*' \
+          --exclude 'bluemap/*' \
+          --exclude '*.zip' \
+          $SYNC_EXCLUDES \
+          . "s3://$BUCKET/$SERVER_PATH/"
       
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 0 ]; then
@@ -547,7 +549,6 @@ write_files:
 
       if [ -n "$RESTORE_KEY" ]; then
          echo "[mc-sync-from-s3] PENDING RESTORE FOUND. Restoring from $RESTORE_KEY..."
-         # numworkers 10 for safe restore
          sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT cp "s3://$BUCKET/$RESTORE_KEY" "$DEST/restore.zip"
          if [ -f "$DEST/restore.zip" ]; then
              cd $DEST
@@ -570,10 +571,10 @@ write_files:
           --exclude 'node_modules/*' \
           "s3://$BUCKET/$SERVER_PATH/*" "$DEST/"
       
-      # 2. Unpack if zip exists (This handles Modpacks)
+      # 2. Unpack if zip exists (This works for ANY server that used zipping)
       cd "$DEST"
       if [ -f packed-data.zip ]; then
-          echo "[mc-sync-from-s3] Modpack archive found. Unpacking..."
+          echo "[mc-sync-from-s3] Optimization archive found. Unpacking..."
           sudo -u minecraft unzip -o -q packed-data.zip
           rm packed-data.zip
       fi
@@ -730,7 +731,7 @@ write_files:
               echo "[Startup] Downloading Server JAR..."
               sudo -u minecraft wget -O server.jar "$DOWNLOAD_URL"
               echo "#!/bin/bash" > run.sh
-              echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
+              echo "$JAVA_BIN -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
               chmod +x run.sh
           fi
           
