@@ -730,7 +730,7 @@ write_files:
               echo "[Startup] Downloading Server JAR..."
               sudo -u minecraft wget -O server.jar "$DOWNLOAD_URL"
               echo "#!/bin/bash" > run.sh
-              echo "$JAVA_BIN -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
+              echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
               chmod +x run.sh
           fi
           
