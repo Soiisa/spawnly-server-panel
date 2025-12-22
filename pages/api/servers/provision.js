@@ -35,12 +35,11 @@ const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
   const url = `${HETZNER_API_BASE}/actions/${actionId}`;
   for (let i = 0; i < maxTries; i++) {
     try {
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}` } });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => 'cannot-read-body');
-        throw new Error(`Failed to fetch action status: ${res.status} ${txt}`);
-      }
-      const json = await res.json();
+      const res = await axios.get(url, {
+        headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
+      });
+      
+      const json = res.data;
       if (json.action && (json.action.status === 'success' || json.action.status === 'error')) {
         return json.action;
       }
@@ -463,8 +462,8 @@ write_files:
           
           for d in */ ; do
               # remove trailing slash
-              # FIX: Escape the $ so JS doesn't try to interpret it
-              [ -L "\${d%/}" ] && continue
+              # FIX: Use safe IF check instead of && shorthand to prevent crash on 'false' return
+              if [ -L "\${d%/}" ]; then continue; fi
               dirname="\${d%/}"
               
               # Exclude critical folders from being ZIPPED
@@ -931,6 +930,7 @@ runcmd:
   return userData;
 };
 
+// Switched to AXIOS for provisioning to handle large bodies and better errors
 async function provisionServer(serverRow, version, ssh_keys, res) {
   try {
     console.log('provisionServer: Starting for serverId:', serverRow.id, 'software:', serverRow.type, 'version:', version);
@@ -939,6 +939,26 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const needsFileDeletion = serverRow.needs_file_deletion;
     const pendingRestoreKey = serverRow.pending_backup_restore; 
     const subdomain = serverRow.subdomain.toLowerCase() || '';
+
+    // --- 1. ZOMBIE CLEANUP ---
+    try {
+        const encodedName = encodeURIComponent(serverRow.name);
+        const existingRes = await axios.get(`${HETZNER_API_BASE}/servers?name=${encodedName}`, {
+            headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
+        });
+        
+        const existingJson = existingRes.data;
+        if (existingJson.servers && existingJson.servers.length > 0) {
+            for (const s of existingJson.servers) {
+                await axios.delete(`${HETZNER_API_BASE}/servers/${s.id}`, {
+                    headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
+                });
+            }
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    } catch (cleanupErr) {
+        console.warn(`[Provision] Zombie cleanup warning: ${cleanupErr.message}`);
+    }
 
     // --- 2. S3 Cleanup ---
     const s3Config = {
@@ -987,15 +1007,13 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     let sshKeysToUse = Array.isArray(ssh_keys) && ssh_keys.length > 0 ? ssh_keys : [];
     if (sshKeysToUse.length === 0 && DEFAULT_SSH_KEY) {
       try {
-        const keysRes = await fetch(`${HETZNER_API_BASE}/ssh_keys`, {
+        const keysRes = await axios.get(`${HETZNER_API_BASE}/ssh_keys`, {
           headers: { Authorization: `Bearer ${HETZNER_TOKEN}` },
         });
-        if (keysRes.ok) {
-          const keysJson = await keysRes.json();
-          const projectKeys = keysJson.ssh_keys || [];
-          const match = projectKeys.find((k) => k.name === DEFAULT_SSH_KEY);
-          if (match) sshKeysToUse = [match.id];
-        }
+        const keysJson = keysRes.data;
+        const projectKeys = keysJson.ssh_keys || [];
+        const match = projectKeys.find((k) => k.name === DEFAULT_SSH_KEY);
+        if (match) sshKeysToUse = [match.id];
       } catch (e) {
         // ignore
       }
@@ -1012,21 +1030,21 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       location: 'nbg1',
     };
 
-    const createRes = await fetch(`${HETZNER_API_BASE}/servers`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${HETZNER_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!createRes.ok) {
-      const errText = await createRes.text().catch(() => 'no-body');
-      return res.status(502).json({ error: 'Hetzner create failed', detail: errText });
+    // Use AXIOS here for robust error handling on POST
+    let createRes;
+    try {
+      createRes = await axios.post(`${HETZNER_API_BASE}/servers`, payload, {
+        headers: {
+          Authorization: `Bearer ${HETZNER_TOKEN}`,
+          'Content-Type': 'application/json',
+        }
+      });
+    } catch (postErr) {
+      const errMsg = postErr.response ? JSON.stringify(postErr.response.data) : postErr.message;
+      return res.status(502).json({ error: 'Hetzner create failed', detail: errMsg });
     }
 
-    const createJson = await createRes.json();
+    const createJson = createRes.data;
     const hetznerServer = createJson.server || null;
     const actionId = createJson.action?.id;
 
@@ -1041,13 +1059,10 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     let finalServer = hetznerServer;
     if (hetznerServer?.id) {
       try {
-        const sRes = await fetch(`${HETZNER_API_BASE}/servers/${hetznerServer.id}`, {
+        const sRes = await axios.get(`${HETZNER_API_BASE}/servers/${hetznerServer.id}`, {
           headers: { Authorization: `Bearer ${HETZNER_TOKEN}` },
         });
-        if (sRes.ok) {
-          const sJson = await sRes.json();
-          finalServer = sJson.server || finalServer;
-        }
+        finalServer = sRes.data.server || finalServer;
       } catch (e) {}
     }
 
