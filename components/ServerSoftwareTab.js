@@ -40,6 +40,9 @@ const parseMavenXml = (text) => {
   }
 };
 
+// Helper to sanitize modpack name for storage (remove :: to prevent parsing errors)
+const sanitizePackName = (name) => name ? name.replace(/::/g, ' ').trim() : 'Modpack';
+
 export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   // --- State ---
   const isModpack = server?.type?.startsWith('modpack');
@@ -423,16 +426,21 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         if (customJavaVer === '8') mcVerMeta = '1.12.2';
         if (customJavaVer === '11') mcVerMeta = '1.16.5';
         if (customJavaVer === '17') mcVerMeta = '1.18.2';
-        payloadVersion = `${customZipUrl}::${mcVerMeta}`;
+        if (customJavaVer === '21') mcVerMeta = '1.20.5';
+        
+        // Payload: Url::Version::Name
+        payloadVersion = `${customZipUrl}::${mcVerMeta}::Custom Zip`;
 
     } else {
         const verObj = modpackFiles.find(f => f.id === modpackVersionId);
         if (!verObj) return;
 
         const mcVer = verObj.mcVersion !== 'Unknown' ? verObj.mcVersion : '1.20.1';
+        // Get name and sanitize
+        const packName = sanitizePackName(selectedModpack.name || selectedModpack.title);
 
         if (modpackProvider === 'ftb') {
-            payloadVersion = `${selectedModpack.id}|${modpackVersionId}::${mcVer}`;
+            payloadVersion = `${selectedModpack.id}|${modpackVersionId}::${mcVer}::${packName}`;
 
         } else if (modpackProvider === 'curseforge') {
             
@@ -449,7 +457,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
                     if (packData && packData.downloadUrl) {
                         console.log("Resolved Server Pack URL:", packData.downloadUrl);
-                        payloadVersion = `${packData.downloadUrl}::${mcVer}`;
+                        payloadVersion = `${packData.downloadUrl}::${mcVer}::${packName}`;
                     } else {
                         throw new Error("Server pack file found, but no download URL available in response.");
                     }
@@ -466,7 +474,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     setError("This file does not have a download URL.");
                     return;
                 }
-                payloadVersion = `${verObj.downloadUrl}::${mcVer}`;
+                payloadVersion = `${verObj.downloadUrl}::${mcVer}::${packName}`;
             }
 
         } else if (modpackProvider === 'modrinth') {
@@ -474,7 +482,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                  setError("No file found for this version.");
                  return;
             }
-            payloadVersion = `${verObj.downloadUrl}::${mcVer}`;
+            payloadVersion = `${verObj.downloadUrl}::${mcVer}::${packName}`;
         }
     }
 

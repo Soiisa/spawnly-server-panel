@@ -1,5 +1,3 @@
-// pages/server/[id].js
-
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
@@ -744,7 +742,7 @@ export default function ServerDetailPage({ initialServer }) {
                         <option value="30">30 minutes</option>
                         <option value="60">1 hour</option>
                       </select>
-                      {savingAutoStop && <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full" />}
+                      {savingAutoStop && <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />}
                     </div>
                     {autoStopCountdown && (
                       <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-xs rounded-lg flex items-center gap-2 animate-pulse border border-amber-100 dark:border-amber-900">
