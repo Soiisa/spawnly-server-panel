@@ -478,8 +478,8 @@ write_files:
               if [ "$count" -gt "$FILE_LIMIT" ]; then
                   echo "[mc-sync] Folder '$dirname' has >$FILE_LIMIT files. Adding to zip."
                   DIRS_TO_ZIP="$DIRS_TO_ZIP $dirname"
-                  # FIX: Escape wildcard so bash passes it literally to s5cmd
-                  SYNC_EXCLUDES="$SYNC_EXCLUDES --exclude $dirname/\\*"
+                  # FIX: Use normal string for exclude, set -f below prevents expansion
+                  SYNC_EXCLUDES="$SYNC_EXCLUDES --exclude $dirname/*"
               fi
           done
 
@@ -503,6 +503,10 @@ write_files:
       
       echo "[mc-sync] Syncing loose files..."
       
+      # FIX: Disable wildcard expansion (globbing) so '--exclude config/*' is passed
+      # literally to s5cmd, instead of being expanded by bash into a list of files.
+      set -f
+
       # 2. Sync everything else (excluding what we just zipped)
       # Note: $SYNC_EXCLUDES is unquoted so the string expands into multiple arguments
       sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
@@ -521,6 +525,9 @@ write_files:
           $SYNC_EXCLUDES \
           . "s3://$BUCKET/$SERVER_PATH/"
       
+      # Re-enable globbing
+      set +f
+
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 0 ]; then
         echo "[mc-sync] Sync complete. Notifying API for teardown..."
