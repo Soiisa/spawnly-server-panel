@@ -462,7 +462,7 @@ write_files:
           
           for d in */ ; do
               # remove trailing slash
-              # FIX: Use safe IF check instead of && shorthand to prevent crash on 'false' return
+              # FIX: Escape the $ so JS doesn't try to interpret it
               if [ -L "\${d%/}" ]; then continue; fi
               dirname="\${d%/}"
               
@@ -471,13 +471,15 @@ write_files:
                   continue
               fi
               
-              # Count files (stop counting if we hit limit + 1 for speed)
-              count=$(find "$dirname" -maxdepth 5 -type f | head -n $((FILE_LIMIT + 1)) | wc -l)
+              # Count files (SAFE VERSION: Removed 'head' to prevent SIGPIPE crash on large folders)
+              # FIX: Increased depth to 20 to catch nested files deep in mods/kubejs/etc
+              count=$(find "$dirname" -maxdepth 20 -type f | wc -l)
               
               if [ "$count" -gt "$FILE_LIMIT" ]; then
                   echo "[mc-sync] Folder '$dirname' has >$FILE_LIMIT files. Adding to zip."
                   DIRS_TO_ZIP="$DIRS_TO_ZIP $dirname"
-                  SYNC_EXCLUDES="$SYNC_EXCLUDES --exclude $dirname/*"
+                  # FIX: Escape wildcard so bash passes it literally to s5cmd
+                  SYNC_EXCLUDES="$SYNC_EXCLUDES --exclude $dirname/\\*"
               fi
           done
 
