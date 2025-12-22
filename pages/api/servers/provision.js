@@ -766,6 +766,7 @@ write_files:
           echo "pvp=true" >> server.properties
           echo "generate-structures=true" >> server.properties
           echo "max-world-size=29999984" >> server.properties
+          echo "max-tick-time=-1" >> server.properties
 
           chown minecraft:minecraft server.properties
       fi
