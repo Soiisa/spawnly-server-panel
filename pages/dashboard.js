@@ -21,6 +21,39 @@ import {
   CommandLineIcon
 } from '@heroicons/react/24/outline';
 
+// --- NEW: Helper for Displaying Software/Version ---
+const getDisplayInfo = (server) => {
+  if (!server) return { software: 'Unknown', version: 'Unknown' };
+
+  let software = server.type || 'Vanilla';
+  let version = server.version || '';
+
+  // Handle Modpacks
+  if (server.type?.startsWith('modpack-')) {
+    const providerRaw = server.type.replace('modpack-', '');
+    const provider = providerRaw.charAt(0).toUpperCase() + providerRaw.slice(1);
+    
+    // Default fallback
+    software = `Modpack (${provider})`;
+
+    // Handle Version & Name extraction
+    if (server.version?.includes('::')) {
+      const parts = server.version.split('::');
+      // parts[0] = URL or ID (hidden)
+      // parts[1] = Game Version (displayed as Version)
+      // parts[2] = Modpack Name (displayed as Software) - *If available*
+      
+      if (parts[1]) version = parts[1];
+      if (parts[2]) {
+        // Format as "Name (Provider)"
+        software = `${parts[2]} (${provider})`; 
+      }
+    }
+  }
+
+  return { software, version };
+};
+
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -206,17 +239,15 @@ export default function Dashboard() {
     setShowModal(false);
 
     try {
-      // --- FIX: Get Session Token for Authorization Header ---
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
       const token = session.access_token;
-      // -----------------------------------------------------
 
       const resp = await fetch('/api/servers/create', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` // <--- Added Authorization Header
+          'Authorization': `Bearer ${token}` 
         },
         body: JSON.stringify({ ...serverData, userId: user.id }),
       });
@@ -276,7 +307,6 @@ export default function Dashboard() {
   // --- Render Helpers ---
 
   if (loading) return (
-    // UPDATED: Added dark mode classes
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
@@ -286,13 +316,12 @@ export default function Dashboard() {
   );
 
   return (
-    // UPDATED: Added dark mode class for text color
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={isLoadingServers} onLogout={handleLogout} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* Error Toast (No changes needed) */}
+        {/* Error Toast */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex justify-between items-center shadow-sm">
             <span className="flex items-center gap-2">
@@ -361,7 +390,11 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {servers.map((server) => (
+            {servers.map((server) => {
+              // --- USE HELPER HERE ---
+              const { software, version } = getDisplayInfo(server);
+              
+              return (
               <div key={server.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col group hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors">
                 
                 {/* Card Header */}
@@ -375,7 +408,10 @@ export default function Dashboard() {
                         <h3 className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => !server.id.startsWith('temp') && router.push(`/server/${server.id}`)}>
                           {server.name}
                         </h3>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{server.type || 'Vanilla'} {server.version}</p>
+                        {/* UPDATED: Use clean software/version strings */}
+                        <p className="text-xs text-gray-500 dark:text-gray-400 capitalize truncate max-w-[180px]" title={software}>
+                            {software} <span className="text-gray-400 dark:text-gray-500">{version}</span>
+                        </p>
                       </div>
                     </div>
                     <ServerStatusIndicator server={server} />
@@ -406,7 +442,6 @@ export default function Dashboard() {
                   ) : server.status === "Running" ? (
                     <button 
                       onClick={() => handleStopServer(server.id)}
-                      // UPDATED: Added dark mode classes for stop button
                       className="flex-1 flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/20 dark:hover:border-red-600 py-2 rounded-lg text-sm font-medium transition-colors"
                     >
                       <StopIcon className="w-4 h-4" /> Stop
@@ -420,7 +455,6 @@ export default function Dashboard() {
 
                   <Link 
                     href={server.id.startsWith('temp') ? '#' : `/server/${server.id}`}
-                    // UPDATED: Added dark mode classes for link buttons
                     className={`p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
                     title="Console & Files"
                   >
@@ -429,7 +463,6 @@ export default function Dashboard() {
                   
                   <Link 
                     href={server.id.startsWith('temp') ? '#' : `/server/${server.id}?tab=properties`}
-                    // UPDATED: Added dark mode classes for link buttons
                     className={`p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
                     title="Settings"
                   >
@@ -439,7 +472,6 @@ export default function Dashboard() {
                   <button
                     onClick={() => handleDeleteServer(server.id)}
                     disabled={!['Stopped', 'Running'].includes(server.status)}
-                    // UPDATED: Added dark mode classes for delete button
                     className="p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-400 hover:text-red-600 hover:border-red-200 dark:hover:border-red-600 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
                     title="Delete Server"
                   >
@@ -447,7 +479,7 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         )}
       </main>
