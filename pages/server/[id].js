@@ -19,7 +19,8 @@ import {
   PencilSquareIcon, 
   CheckIcon, 
   XMarkIcon,
-  ArchiveBoxIcon 
+  ArchiveBoxIcon,
+  CalendarDaysIcon // Imported for the Schedules tab
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -35,6 +36,7 @@ import Footer from '../../components/ServersFooter';
 import PlayersTab from '../../components/PlayersTab';
 import WorldTab from '../../components/WorldTab';
 import BackupsTab from '../../components/BackupsTab';
+import SchedulesTab from '../../components/SchedulesTab'; // New Component Import
 
 // Helper: Convert DB player string to array
 const getOnlinePlayersArray = (server) => {
@@ -488,6 +490,7 @@ export default function ServerDetailPage({ initialServer }) {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: SignalIcon },
+    { id: 'schedules', label: 'Schedules', icon: CalendarDaysIcon }, // ADDED: Schedules Tab
     { id: 'properties', label: 'Properties', icon: ServerIcon },
     { id: 'console', label: 'Console', icon: ClockIcon },
     { id: 'players', label: 'Players', icon: UserGroupIcon },
@@ -641,6 +644,7 @@ export default function ServerDetailPage({ initialServer }) {
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800'
                 }`}
               >
+                <tab.icon className="w-5 h-5" />
                 {tab.label}
                 {activeTab === tab.id && (
                   <motion.div
@@ -818,6 +822,13 @@ export default function ServerDetailPage({ initialServer }) {
               {activeTab === 'properties' && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <ServerPropertiesEditor server={server} />
+                </div>
+              )}
+
+              {/* ADDED: Schedules Tab Render Logic */}
+              {activeTab === 'schedules' && (
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
+                  <SchedulesTab server={server} />
                 </div>
               )}
 
