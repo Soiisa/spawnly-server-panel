@@ -69,7 +69,8 @@ export default function FileManager({ server, token, setActiveTab }) {
     'server.jar', '.git', 'eula.txt', 'file-api.js', 'metrics-server.js', 
     'properties-api.js', 'status-reporter.js', 'console-server.js', 
     'startup.sh', 'startup.bat', 'package.json', 'package-lock.json', 
-    'server-installer.jar.log', 'libraries', 'node_modules', 'server-wrapper.js'
+    'server-installer.jar.log', 'libraries', 'node_modules', 'server-wrapper.js', '.server_status',
+    'packed-data.zip', 'run.bat', 'run.sh', 'startserver.sh', 'startserver.bat', 'user_jvm_args.txt'
   ].map(item => item.toLowerCase());
 
   const specialFiles = ['server.properties'].map(item => item.toLowerCase());
