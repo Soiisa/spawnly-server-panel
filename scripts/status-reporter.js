@@ -3,11 +3,14 @@ const { execSync } = require('child_process');
 const WebSocket = require('ws');
 const Query = require('minecraft-query');
 const url = require('url');
-const os = require('os'); // Added OS module
+const os = require('os');
+const fs = require('fs'); // Added fs
+const path = require('path'); // Added path
 
 const SERVER_ID = process.env.SERVER_ID || 'unknown';
 const QUERY_PORT = parseInt(process.env.QUERY_PORT) || 25565;
 const HOST = '127.0.0.1';
+const STATE_FILE = path.join(process.cwd(), '.server_status');
 
 // Explicit API URL
 const NEXTJS_API_URL = process.env.NEXTJS_API_URL ||
@@ -79,8 +82,18 @@ function getSystemMetrics() {
 
 function getMinecraftStatus() {
   try {
-    const status = execSync('ps aux | grep server-wrapper.js | grep -v grep | wc -l', { encoding: 'utf8' }).trim();
-    return parseInt(status) > 0 ? 'Running' : 'Stopped';
+    // 1. Check if the wrapper process is actually alive as a safety guard
+    const procCheck = execSync('ps aux | grep server-wrapper.js | grep -v grep | wc -l', { encoding: 'utf8' }).trim();
+    if (parseInt(procCheck) === 0) return 'Stopped';
+
+    // 2. Read the state file written by server-wrapper.js
+    if (fs.existsSync(STATE_FILE)) {
+      const state = fs.readFileSync(STATE_FILE, 'utf8').trim();
+      return state || 'Starting';
+    }
+    
+    // Fallback: if process is running but file is missing, assume starting
+    return 'Starting'; 
   } catch (e) {
     return 'Stopped';
   }
@@ -107,6 +120,7 @@ async function broadcastStatus() {
         map: stats.map || ''
       };
     } catch (error) {
+      // If we are "Running" but query fails, it might just be the query port isn't ready yet or blocked
       playerData.online_text = 'Online (Querying...)';
     }
   }

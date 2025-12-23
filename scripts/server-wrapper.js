@@ -15,10 +15,26 @@ const RCON_PASSWORD = process.env.RCON_PASSWORD;
 const HEAP_GB = process.env.HEAP_GB || '2';
 const USE_RUN_SH = fs.existsSync(path.join(process.cwd(), 'run.sh'));
 
+// File to communicate state to status-reporter.js
+const STATE_FILE = path.join(process.cwd(), '.server_status');
+
 if (!SERVER_ID || !NEXTJS_API_URL) {
   console.error('[Wrapper] Missing env: SERVER_ID or NEXTJS_API_URL');
   process.exit(1);
 }
+
+// --- Helper: Update State File ---
+const updateState = (status) => {
+  try {
+    fs.writeFileSync(STATE_FILE, status);
+  } catch (e) {
+    console.error('[Wrapper] Failed to write state file:', e.message);
+  }
+};
+
+// Initialize State as Starting
+console.log('[Wrapper] Initializing state: Starting');
+updateState('Starting');
 
 // --- Log Buffer Logic ---
 const MAX_LOG_LINES = 500;
@@ -29,6 +45,13 @@ const appendLog = (data) => {
   const line = data.toString().trim();
   if (!line) return;
   console.log(line); 
+
+  // --- NEW: Scan for Boot Completion ---
+  // Checks for the standard message indicating the server is open for business
+  if (line.includes('Thread RCON Listener started')) {
+    console.log('[Wrapper] RCON detected. Setting status to Running.');
+    updateState('Running');
+  }
 
   logBuffer.push(line);
   if (logBuffer.length > MAX_LOG_LINES) {
@@ -108,6 +131,7 @@ mcProcess.on('close', async (code) => {
   console.log(`[Wrapper] Minecraft process exited with code ${code}`);
   // If exit code is not 0 or null, signal a crash to the API
   const finalStatus = (code !== 0 && code !== null) ? 'Crashed' : 'Stopped';
+  updateState(finalStatus); // Update local state file
   await sendUpdate(finalStatus).finally(() => process.exit(code || 0));
 });
 
@@ -149,5 +173,6 @@ app.listen(PORT, () => console.log(`[Wrapper] Command API listening on port ${PO
 
 process.on('SIGTERM', () => {
   if (mcProcess) mcProcess.kill();
+  updateState('Stopped');
   sendUpdate('Stopped').finally(() => process.exit(0));
 });

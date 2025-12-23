@@ -430,6 +430,12 @@ write_files:
       SERVER_PATH="servers/${serverId}"
       S5_ENDPOINT_OPT="${s5cmdEndpointOpt}"
       IS_MODPACK="${isModpack}"
+
+      # Check for teardown flag
+      TEARDOWN="false"
+      if [ "$1" == "--teardown" ]; then
+        TEARDOWN="true"
+      fi
       
       export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
       export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
@@ -440,7 +446,7 @@ write_files:
         exit 0
       fi
       
-      echo "[mc-sync] Processing..."
+      echo "[mc-sync] Processing... (Teardown: $TEARDOWN)"
       cd "$SRC"
       
       # Define params for sync
@@ -530,11 +536,15 @@ write_files:
 
       EXIT_CODE=$?
       if [ $EXIT_CODE -eq 0 ]; then
-        echo "[mc-sync] Sync complete. Notifying API for teardown..."
-        curl -X POST -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${escapedRconPassword}" \
-            -d '{"serverId": "${serverId}", "sync_complete": true}' \
-            "${appBaseUrl.replace(/\/+$/, '')}/api/servers/update-status" || true
+        if [ "$TEARDOWN" == "true" ]; then
+            echo "[mc-sync] Sync complete. TEARDOWN flag set. Notifying API..."
+            curl -X POST -H "Content-Type: application/json" \
+                -H "Authorization: Bearer ${escapedRconPassword}" \
+                -d '{"serverId": "${serverId}", "sync_complete": true}' \
+                "${appBaseUrl.replace(/\/+$/, '')}/api/servers/update-status" || true
+        else
+            echo "[mc-sync] Sync complete. Periodic backup mode (no API trigger)."
+        fi
       else
         echo "[mc-sync] Sync failed with exit code $EXIT_CODE"
         exit $EXIT_CODE
@@ -598,12 +608,24 @@ write_files:
       Type=oneshot
       Environment="AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
       Environment="AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
-      ExecStart=/usr/local/bin/mc-sync.sh
+      ExecStart=/usr/local/bin/mc-sync.sh --teardown
       RemainAfterExit=yes
       TimeoutStartSec=600
 
       [Install]
       WantedBy=halt.target reboot.target shutdown.target
+  - path: /etc/systemd/system/mc-backup.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Periodic Minecraft Backup to S3
+
+      [Service]
+      Type=oneshot
+      Environment="AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
+      Environment="AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
+      ExecStart=/usr/local/bin/mc-sync.sh
+
   - path: /etc/systemd/system/mc-sync.timer
     permissions: '0644'
     content: |
@@ -613,7 +635,7 @@ write_files:
       [Timer]
       OnBootSec=5m
       OnUnitActiveSec=10m
-      Unit=mc-sync.service
+      Unit=mc-backup.service
 
       [Install]
       WantedBy=timers.target
@@ -795,7 +817,7 @@ write_files:
       
       ExecStartPre=/usr/local/bin/mc-sync-from-s3.sh
       ExecStart=/usr/bin/node /opt/minecraft/server-wrapper.js
-      ExecStopPost=/usr/local/bin/mc-sync.sh
+      ExecStopPost=/usr/local/bin/mc-sync.sh --teardown
       
       Restart=no
       User=minecraft
@@ -921,6 +943,7 @@ runcmd:
   # 4. Enable/Start Services
   - systemctl daemon-reload
   - systemctl enable mc-sync.service
+  - systemctl enable mc-backup.service
   - systemctl enable mc-sync.timer
   - systemctl start mc-sync.timer
   - systemctl enable minecraft
