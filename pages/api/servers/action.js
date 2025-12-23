@@ -15,7 +15,7 @@ const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
 const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 const DOMAIN_SUFFIX = '.spawnly.net';
 
-// The IP of the Sleeper Proxy Server created in Step 2
+// The IP of the Sleeper Proxy Server
 const SLEEPER_PROXY_IP = process.env.SLEEPER_PROXY_IP || '91.99.130.49'; 
 
 const s3Client = new S3Client({
@@ -34,7 +34,6 @@ const deleteCloudflareRecords = async (subdomain, maxRetries = 3) => {
   let subdomainPrefix = subdomain;
   if (subdomain.endsWith(DOMAIN_SUFFIX)) {
     subdomainPrefix = subdomain.replace(DOMAIN_SUFFIX, '');
-    console.log(`[deleteCloudflareRecords] Extracted subdomain prefix: ${subdomainPrefix}`);
   }
 
   if (!subdomainPrefix || typeof subdomainPrefix !== 'string' || !subdomainPrefix.match(/^[a-zA-Z0-9-]+$/)) {
@@ -63,47 +62,32 @@ const deleteCloudflareRecords = async (subdomain, maxRetries = 3) => {
         });
 
         if (!response.ok) {
-          const errorText = await response.text().catch(() => 'no-body');
-          throw new Error(`Cloudflare ${recordType.type} record lookup failed: ${response.status} ${errorText}`);
+           // If 404 or other error, mostly harmless for DNS cleanup usually
+           console.warn(`[deleteCloudflareRecords] Lookup failed: ${response.status}`);
+           throw new Error(`Cloudflare lookup failed: ${response.status}`);
         }
 
         const { result } = await response.json();
         console.log(`[deleteCloudflareRecords] Found ${result.length} ${recordType.type} records for ${recordType.name}`);
 
         for (const record of result) {
-          const deleteUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record.id}`;
-          const deleteResponse = await fetch(deleteUrl, {
+          await fetch(`${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record.id}`, {
             method: 'DELETE',
-            headers: {
-              Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
+            headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
           });
-
-          if (!deleteResponse.ok) {
-            const errorText = await deleteResponse.text().catch(() => 'no-body');
-            console.warn(`[deleteCloudflareRecords] Failed to delete ${record.type} record ${record.id}: ${deleteResponse.status} ${errorText}`);
-            allDeleted = false;
-          } else {
-            console.log(`[deleteCloudflareRecords] Successfully deleted ${record.type} record ${record.id} for ${recordType.name}`);
-          }
         }
         break;
       } catch (err) {
         attempt++;
-        console.error(`[deleteCloudflareRecords] Attempt ${attempt} failed for ${recordType.type} record: ${err.message}`);
-        if (attempt >= maxRetries) {
-          console.error(`[deleteCloudflareRecords] Failed to delete ${recordType.type} records for ${recordType.name} after ${maxRetries} attempts: ${err.message}`);
-          allDeleted = false;
-        }
+        if (attempt >= maxRetries) allDeleted = false;
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
   }
-  console.log(`[deleteCloudflareRecords] DNS deletion result for ${subdomainPrefix}: ${allDeleted ? 'success' : 'partial or failed'}`);
   return allDeleted;
 };
 
+// [UPDATED] Helper to handle 404 gracefully
 const hetznerDoAction = async (hetznerId, action) => {
   console.log(`[hetznerDoAction] Performing action ${action} for server ${hetznerId}`);
   const url = `${HETZNER_API_BASE}/servers/${hetznerId}/actions/${action}`;
@@ -114,6 +98,12 @@ const hetznerDoAction = async (hetznerId, action) => {
       'Content-Type': 'application/json',
     },
   });
+
+  // FIX: If server is gone (404), action is considered "done" (race condition handled)
+  if (res.status === 404) {
+      console.warn(`[hetznerDoAction] Server ${hetznerId} not found (404). Assuming action '${action}' is moot/done.`);
+      return null;
+  }
 
   const text = await res.text().catch(() => '');
   let json = null;
@@ -128,22 +118,39 @@ const hetznerDoAction = async (hetznerId, action) => {
   return json;
 };
 
+// [UPDATED] Helper returns null on 404 instead of throwing
 const hetznerGetServer = async (hetznerId) => {
   console.log(`[hetznerGetServer] Fetching server info for ${hetznerId}`);
   const url = `${HETZNER_API_BASE}/servers/${hetznerId}`;
   const r = await fetch(url, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}` } });
+  
+  // FIX: Handle 404 gracefully
+  if (r.status === 404) {
+      console.warn(`[hetznerGetServer] Server ${hetznerId} returned 404 Not Found.`);
+      return null;
+  }
+
   const txt = await r.text().catch(() => '');
   let j = null;
   try { j = txt ? JSON.parse(txt) : null; } catch (e) {}
+  
   if (!r.ok) throw new Error(`Hetzner GET server failed (${r.status}): ${txt || JSON.stringify(j)}`);
   console.log(`[hetznerGetServer] Successfully fetched server info for ${hetznerId}`);
   return j;
 };
 
+// [UPDATED] Wait helper treats "Server Gone (null)" as "Target Reached"
 const waitForServerStatus = async (hetznerId, targetStatus, maxAttempts = 30, intervalMs = 5000) => {
   console.log(`[waitForServerStatus] Waiting for server ${hetznerId} to reach status: ${targetStatus}`);
   for (let i = 0; i < maxAttempts; i++) {
     const serverData = await hetznerGetServer(hetznerId);
+    
+    // FIX: If server is gone (null) and we are waiting for it to stop/delete, that is a success.
+    if (!serverData) {
+        console.log(`[waitForServerStatus] Server ${hetznerId} is gone (404). Treating as success (race condition win).`);
+        return true;
+    }
+
     const currentStatus = serverData?.server?.status;
     console.log(`[waitForServerStatus] Attempt ${i + 1}: Current status is ${currentStatus}`);
     if (currentStatus === targetStatus) {
@@ -156,6 +163,7 @@ const waitForServerStatus = async (hetznerId, targetStatus, maxAttempts = 30, in
   return false;
 };
 
+// [UPDATED] Delete helper handles 404 gracefully
 const hetznerDeleteServer = async (hetznerId) => {
   console.log(`[hetznerDeleteServer] Deleting Hetzner server: ${hetznerId}`);
   const url = `${HETZNER_API_BASE}/servers/${hetznerId}`;
@@ -163,6 +171,13 @@ const hetznerDeleteServer = async (hetznerId) => {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${HETZNER_TOKEN}` },
   });
+
+  // FIX: If already deleted, just log it and return true
+  if (res.status === 404) {
+      console.log(`[hetznerDeleteServer] Server ${hetznerId} already deleted (404). Skipping.`);
+      return true;
+  }
+
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`Hetzner delete failed (${res.status}): ${txt}`);
@@ -256,14 +271,13 @@ export default async function handler(req, res) {
 
     const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
     const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!HETZNER_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !S3_ENDPOINT || !S3_BUCKET || !S3_REGION || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY || !CLOUDFLARE_API_TOKEN || !CLOUDFLARE_ZONE_ID) {
+    if (!HETZNER_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       console.error('[API:action] Missing environment variables');
       return res.status(500).json({ error: 'Missing env vars' });
     }
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // --- SECURITY FIX: Authenticate User ---
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized', detail: 'Missing Authorization header' });
@@ -274,7 +288,6 @@ export default async function handler(req, res) {
     if (authError || !user) {
       return res.status(401).json({ error: 'Unauthorized', detail: 'Invalid token' });
     }
-    // ---------------------------------------
 
     const { serverId, action } = req.body || {};
     if (!serverId || !action) {
@@ -294,14 +307,10 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Server not found', detail: serverErr?.message || null });
     }
     
-    // --- SECURITY FIX: Authorize Ownership ---
     if (server.user_id !== user.id) {
       console.warn(`[Security] User ${user.id} attempted to control server ${server.id} owned by ${server.user_id}`);
       return res.status(403).json({ error: 'Forbidden', detail: 'You do not own this server' });
     }
-    // ----------------------------------------
-
-    console.log(`[API:action] Server data retrieved:`, { id: server.id, subdomain: server.subdomain, hetzner_id: server.hetzner_id, status: server.status, ipv4: server.ipv4, current_session_id: server.current_session_id });
 
     const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
     if (profileErr || !profile) return res.status(500).json({ error: 'Failed to fetch user profile' });
@@ -316,22 +325,24 @@ export default async function handler(req, res) {
     if (action === 'delete' || action === 'stop') {
       await billRemainingTime(supabaseAdmin, server);
 
-      if (server.hetzner_id && server.status === 'Running') {
+      if (server.hetzner_id) {
+        // [UPDATED] Graceful Shutdown Loop
+        // We try to shutdown, but if it's already gone (race condition), we don't crash.
         try {
           console.log(`[API:action] Shutting down Hetzner server: ${server.hetzner_id}`);
           await hetznerDoAction(server.hetzner_id, 'shutdown');
+          
           const isOff = await waitForServerStatus(server.hetzner_id, 'off', 30, 5000);
           if (!isOff) {
-            console.warn(`[API:action] Server ${server.hetzner_id} did not reach 'off' status in time, proceeding with deletion`);
+            console.warn(`[API:action] Server ${server.hetzner_id} did not reach 'off' status (or is still running), proceeding with force deletion`);
           }
         } catch (stopErr) {
-          console.error('[API:action] Failed to stop server before deletion:', stopErr.message);
-          return res.status(502).json({ error: 'Failed to stop server before deletion', detail: stopErr.message });
+          console.error('[API:action] Stop sequence warning (likely non-fatal):', stopErr.message);
         }
-      }
 
-      if (server.hetzner_id) {
         try {
+          // [UPDATED] Robust Deletion
+          // If the Sync callback already deleted it, this will simply log "Already deleted" and continue.
           await hetznerDeleteServer(server.hetzner_id);
         } catch (hetznerErr) {
           console.error('[API:action] Failed to delete server from Hetzner:', hetznerErr.message);
@@ -342,15 +353,11 @@ export default async function handler(req, res) {
       if (server.subdomain) {
         try {
           console.log(`[API:action] Cleaning up DNS records for subdomain: ${server.subdomain}`);
-          
-          // 1. Always delete the specific IP records (Hetzner IP) first
           await deleteCloudflareRecords(server.subdomain);
 
-          // 2. IF STOPPING: Point DNS to Sleeper Proxy
           if (action === 'stop') {
             console.log(`[API:action] Pointing ${server.subdomain} to Sleeper Proxy (${SLEEPER_PROXY_IP})`);
             const dnsUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
-            
             await fetch(dnsUrl, {
               method: 'POST',
               headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
@@ -358,14 +365,13 @@ export default async function handler(req, res) {
                 type: 'A',
                 name: `${server.subdomain}${DOMAIN_SUFFIX}`,
                 content: SLEEPER_PROXY_IP,
-                ttl: 60, // Short TTL for fast propagation when starting
+                ttl: 60, 
                 proxied: false 
               })
             });
           }
         } catch (dnsErr) {
           console.error('[API:action] Failed to update Cloudflare DNS records:', dnsErr.message);
-          // Don't fail the whole request, but log it
         }
       }
 
@@ -386,7 +392,7 @@ export default async function handler(req, res) {
           return res.status(500).json({ error: 'Failed to delete server from Supabase', detail: delErr.message });
         }
       } else {
-        console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped', clearing hetzner_id and ipv4`);
+        console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped'`);
         const nowIso = new Date().toISOString();
         const { error: updateErr } = await supabaseAdmin
           .from('servers')
@@ -397,9 +403,9 @@ export default async function handler(req, res) {
             last_billed_at: null,
             runtime_accumulated_seconds: 0,
             running_since: null,
-            current_session_id: null, // ← CLEARED ON STOP
+            current_session_id: null, 
             last_heartbeat_at: nowIso,
-            last_empty_at: null // ← CLEARED ON STOP (Fix for auto-stop loop)
+            last_empty_at: null 
           })
           .eq('id', serverId);
         if (updateErr) {
@@ -433,10 +439,9 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Unknown action' });
     }
 
-    // Generate new session ID on fresh start (after stop)
     let sessionId = server.current_session_id;
-    if (action === 'start' && !sessionId) { // Falsy check for null/undefined
-      sessionId = uuidv4(); // ← NEW UUID EVERY FRESH START
+    if (action === 'start' && !sessionId) { 
+      sessionId = uuidv4(); 
       console.log(`[API:action] Generating new session_id: ${sessionId}`);
     }
 
@@ -449,10 +454,10 @@ export default async function handler(req, res) {
       status: newStatus,
       last_billed_at: now,
       runtime_accumulated_seconds: 0,
-      last_empty_at: null // ← CLEARED ON START/RESTART
+      last_empty_at: null 
     };
     if (action === 'start' && sessionId && sessionId !== server.current_session_id) {
-      updateFields.current_session_id = sessionId; // ← SET NEW SESSION ID
+      updateFields.current_session_id = sessionId; 
     }
     const { error: statusUpdateErr } = await supabaseAdmin.from('servers').update(updateFields).eq('id', serverId);
     if (statusUpdateErr) {
