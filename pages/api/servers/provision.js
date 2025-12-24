@@ -512,6 +512,9 @@ write_files:
       sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
           --exclude 'node_modules/*' \
           --exclude 'serverinstaller' \
+          --exclude 'logs/*' \
+          --exclude 'crash-reports/*' \
+          --exclude 'debug/*' \
           --exclude 'cache/*' \
           --exclude 'backups/*' \
           --exclude 'simplebackups/*' \
@@ -948,6 +951,13 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         console.error('Failed to delete S3 files:', e.message);
         return res.status(500).json({ error: 'Failed to delete S3 files', detail: e.message });
       }
+    }
+
+    // --- 2.5 Console Cleanup (New) ---
+    try {
+      await supabaseAdmin.from('server_console').delete().eq('server_id', serverRow.id);
+    } catch (consoleErr) {
+       console.warn('Failed to clear console logs:', consoleErr.message);
     }
 
     // --- 3. Get Download URL ---
