@@ -1,5 +1,19 @@
 // pages/api/servers/[serverId]/backup-action.js
 import { createClient } from '@supabase/supabase-js';
+import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
+import archiver from 'archiver';
+import { PassThrough } from 'stream';
+
+const s3Client = new S3Client({
+  endpoint: process.env.S3_ENDPOINT,
+  region: process.env.S3_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+  forcePathStyle: true,
+});
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -29,26 +43,19 @@ export default async function handler(req, res) {
   if (!server) return res.status(404).json({ error: 'Server not found' });
   if (server.user_id !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-  // --- LOGIC SPLIT ---
+  // --- LOGIC ---
 
   if (action === 'restore') {
-    // RESTORE: Must be done when STOPPED (Ephemeral architecture)
     if (server.status === 'Running' || server.status === 'Starting') {
-      return res.status(409).json({ 
-        error: 'Server must be STOPPED to restore a backup.' 
-      });
+      return res.status(409).json({ error: 'Server must be STOPPED to restore a backup.' });
     }
 
-    // Queue the restore in the DB
     const { error: updateError } = await supabaseAdmin
       .from('servers')
       .update({ pending_backup_restore: s3Key })
       .eq('id', serverId);
 
-    if (updateError) {
-      console.error('Failed to queue restore:', updateError);
-      return res.status(500).json({ error: 'Database error queuing restore' });
-    }
+    if (updateError) return res.status(500).json({ error: 'Database error queuing restore' });
 
     return res.status(200).json({ 
       success: true, 
@@ -57,35 +64,93 @@ export default async function handler(req, res) {
   } 
   
   else if (action === 'create') {
-    // CREATE: Must be done when RUNNING (Needs VPS to zip files)
-    if (server.status !== 'Running') {
-      return res.status(409).json({ 
-        error: 'Server must be RUNNING to create a backup.' 
-      });
-    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `manual-backup-${timestamp}.zip`;
+    const targetKey = `backups/${serverId}/${filename}`;
 
-    const fileApiUrl = `http://${server.subdomain}.spawnly.net:3005/api/backups`;
+    // CASE A: Server is Running -> Use VPS Agent (Faster, safer for live data)
+    if (server.status === 'Running') {
+        const fileApiUrl = `http://${server.subdomain}.spawnly.net:3005/api/backups`;
+        try {
+            const vpsRes = await fetch(fileApiUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${server.rcon_password}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ s3Key }) // Note: The agent generates its own name usually, but we accept what it returns
+            });
 
-    try {
-      const vpsRes = await fetch(fileApiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${server.rcon_password}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ s3Key })
-      });
+            if (!vpsRes.ok) throw new Error((await vpsRes.text()) || vpsRes.statusText);
+            const data = await vpsRes.json();
+            
+            // Update last_backup_at
+            await supabaseAdmin.from('servers').update({ last_backup_at: new Date().toISOString() }).eq('id', serverId);
+            
+            return res.status(200).json(data);
+        } catch (err) {
+            console.error('VPS Backup error:', err.message);
+            return res.status(502).json({ error: 'Failed to create backup on server', details: err.message });
+        }
+    } 
+    
+    // CASE B: Server is Stopped -> Zip S3 files directly (Serverless)
+    else if (server.status === 'Stopped') {
+        try {
+            console.log(`[Backup] Server stopped. Zipping S3 files for ${serverId}...`);
+            const Bucket = process.env.S3_BUCKET;
+            const prefix = `servers/${serverId}/`;
 
-      if (!vpsRes.ok) {
-          const text = await vpsRes.text();
-          throw new Error(text || vpsRes.statusText);
-      }
-      
-      const data = await vpsRes.json();
-      res.status(200).json(data);
-    } catch (err) {
-      console.error('Backup creation error:', err.message);
-      res.status(502).json({ error: 'Failed to communicate with server agent', details: err.message });
+            // 1. List files
+            const listCommand = new ListObjectsV2Command({ Bucket, Prefix: prefix });
+            const listRes = await s3Client.send(listCommand);
+            const files = listRes.Contents || [];
+
+            if (files.length === 0) return res.status(404).json({ error: 'No files found to backup' });
+
+            // 2. Setup Stream Archiver
+            const archive = archiver('zip', { zlib: { level: 9 } });
+            const passThrough = new PassThrough();
+            
+            // 3. Setup Upload Stream
+            const upload = new Upload({
+                client: s3Client,
+                params: {
+                    Bucket,
+                    Key: targetKey,
+                    Body: passThrough,
+                    ContentType: 'application/zip'
+                },
+            });
+
+            // 4. Pipe Archive -> Upload
+            archive.pipe(passThrough);
+
+            // 5. Append files from S3 to Archive
+            for (const file of files) {
+                // Skip existing backups/ or node_modules if somehow present
+                if (file.Key.includes('node_modules') || file.Key.includes('/backups/')) continue;
+
+                const fileStream = await s3Client.send(new GetObjectCommand({ Bucket, Key: file.Key }));
+                // Rel path inside zip
+                const name = file.Key.replace(prefix, ''); 
+                archive.append(fileStream.Body, { name });
+            }
+
+            // 6. Finalize
+            await archive.finalize();
+            await upload.done();
+
+            // Update last_backup_at
+            await supabaseAdmin.from('servers').update({ last_backup_at: new Date().toISOString() }).eq('id', serverId);
+
+            return res.status(200).json({ success: true, filename, s3Path: `s3://${Bucket}/${targetKey}` });
+        } catch (err) {
+            console.error('S3 Backup error:', err);
+            return res.status(500).json({ error: 'Failed to zip S3 files', details: err.message });
+        }
+    } else {
+        return res.status(409).json({ error: 'Server is in a transitional state. Please wait.' });
     }
   } else {
     return res.status(400).json({ error: 'Invalid action' });

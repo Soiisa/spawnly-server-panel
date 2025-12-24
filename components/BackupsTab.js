@@ -5,7 +5,9 @@ import {
   CloudArrowUpIcon, 
   ArchiveBoxIcon,
   ExclamationTriangleIcon,
-  ClockIcon
+  ClockIcon,
+  Cog6ToothIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabaseClient';
 
@@ -13,6 +15,13 @@ export default function BackupsTab({ server }) {
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  
+  // Settings State
+  const [showSettings, setShowSettings] = useState(false);
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(server.auto_backup_enabled || false);
+  const [autoBackupInterval, setAutoBackupInterval] = useState(server.auto_backup_interval_hours || 24);
+  const [maxAutoBackups, setMaxAutoBackups] = useState(server.max_auto_backups || 5);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // Derived state
   const isRunning = server.status === 'Running';
@@ -24,6 +33,13 @@ export default function BackupsTab({ server }) {
       fetchBackups();
     }
   }, [server.id]);
+
+  // Update local state if server prop updates (e.g. from external change)
+  useEffect(() => {
+    setAutoBackupEnabled(server.auto_backup_enabled || false);
+    setAutoBackupInterval(server.auto_backup_interval_hours || 24);
+    setMaxAutoBackups(server.max_auto_backups || 5);
+  }, [server.auto_backup_enabled, server.auto_backup_interval_hours, server.max_auto_backups]);
 
   const fetchBackups = async () => {
     setLoading(true);
@@ -46,8 +62,7 @@ export default function BackupsTab({ server }) {
   };
 
   const handleCreateBackup = async () => {
-    if (!isRunning) return alert("Server must be RUNNING to create a backup (so the agent can zip files).");
-    
+    // Logic updated to allow backup when stopped (handled by backend)
     setProcessing(true);
     const { data: { session } } = await supabase.auth.getSession();
     try {
@@ -69,10 +84,32 @@ export default function BackupsTab({ server }) {
       // Poll a few times to see the new file
       setTimeout(fetchBackups, 2000);
       setTimeout(fetchBackups, 5000);
+      setTimeout(fetchBackups, 10000); // Extra poll for slower S3 zips
     } catch (e) {
       alert("Failed to start backup: " + e.message);
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const { error } = await supabase
+        .from('servers')
+        .update({ 
+          auto_backup_enabled: autoBackupEnabled,
+          auto_backup_interval_hours: parseInt(autoBackupInterval),
+          max_auto_backups: parseInt(maxAutoBackups)
+        })
+        .eq('id', server.id);
+      
+      if (error) throw error;
+      setShowSettings(false);
+    } catch (e) {
+      alert("Failed to save settings: " + e.message);
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -101,18 +138,11 @@ export default function BackupsTab({ server }) {
       }
       
       alert("Restore Queued!\n\nThe backup will be applied automatically when you next START the server.");
-      // Trigger a refresh/update of the server object if possible, or wait for Supabase subscription
     } catch (e) {
       alert("Restore request failed: " + e.message);
     } finally {
       setProcessing(false);
     }
-  };
-
-  const handleCancelRestore = async () => {
-    // Optional: Logic to clear the pending column if the user changes their mind
-    // You would need a backend endpoint for this or just re-save with null
-    alert("To cancel, simply do not start the server, or restore a different backup.");
   };
 
   const formatSize = (bytes) => {
@@ -156,9 +186,16 @@ export default function BackupsTab({ server }) {
               <ArchiveBoxIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               Backups
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Create snapshots (While Running) or restore them (On Startup).</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Manage snapshots and configure auto-backups.</p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
+              <button 
+                  onClick={() => setShowSettings(!showSettings)}
+                  className={`p-2 rounded-lg border transition-colors ${showSettings ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
+                  title="Backup Settings"
+              >
+                  <Cog6ToothIcon className="w-5 h-5" />
+              </button>
               <button 
                   onClick={fetchBackups} 
                   className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:text-gray-100 rounded-lg border border-gray-200 dark:border-slate-700"
@@ -169,13 +206,8 @@ export default function BackupsTab({ server }) {
               
               <button
                   onClick={handleCreateBackup}
-                  disabled={processing || loading || !isRunning}
-                  title={!isRunning ? "Server must be running to create a backup" : ""}
-                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg shadow-sm font-medium transition-colors ${
-                    isRunning 
-                      ? 'bg-indigo-600 hover:bg-indigo-700' 
-                      : 'bg-gray-400 cursor-not-allowed'
-                  }`}
+                  disabled={processing || loading}
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg shadow-sm font-medium transition-colors bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                   {processing ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -186,6 +218,65 @@ export default function BackupsTab({ server }) {
               </button>
           </div>
         </div>
+
+        {/* Auto Backup Settings Panel */}
+        {showSettings && (
+          <div className="mb-6 bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl border border-gray-200 dark:border-slate-600 animate-in fade-in slide-in-from-top-2">
+            <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 text-sm">Auto-Backup Configuration</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer mb-1">
+                  <input 
+                    type="checkbox" 
+                    checked={autoBackupEnabled}
+                    onChange={(e) => setAutoBackupEnabled(e.target.checked)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Auto-Backup</span>
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 pl-6">Runs when server stops.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Frequency (Hours)</label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    min="1"
+                    value={autoBackupInterval} 
+                    onChange={(e) => setAutoBackupInterval(e.target.value)}
+                    className="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                  <span className="absolute right-3 top-2 text-xs text-gray-400">hrs</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Retention (Count)</label>
+                <div className="relative">
+                    <input 
+                      type="number" 
+                      min="1" max="50"
+                      value={maxAutoBackups} 
+                      onChange={(e) => setMaxAutoBackups(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    />
+                    <span className="absolute right-3 top-2 text-xs text-gray-400">files</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+               <button 
+                  onClick={handleSaveSettings}
+                  disabled={savingSettings}
+                  className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-70"
+               >
+                 {savingSettings && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                 Save Settings
+               </button>
+            </div>
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
@@ -205,7 +296,7 @@ export default function BackupsTab({ server }) {
                               <CloudArrowUpIcon className="w-6 h-6 text-gray-400" />
                           </div>
                           <p className="text-gray-900 dark:text-gray-100 font-medium">No backups found</p>
-                          <p className="text-gray-500 dark:text-gray-400 text-sm">Start the server to create your first backup.</p>
+                          <p className="text-gray-500 dark:text-gray-400 text-sm">Create a backup manually or enable auto-backups.</p>
                       </td>
                   </tr>
               ) : (
@@ -214,6 +305,7 @@ export default function BackupsTab({ server }) {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
                         <ArchiveBoxIcon className="w-4 h-4 text-indigo-400" />
                         {backup.name}
+                        {backup.name.includes('auto-') && <span className="text-[10px] bg-gray-100 dark:bg-slate-600 px-1.5 py-0.5 rounded text-gray-500 dark:text-gray-300 uppercase tracking-wide">Auto</span>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-mono">{formatSize(backup.size)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{new Date(backup.lastModified).toLocaleString()}</td>

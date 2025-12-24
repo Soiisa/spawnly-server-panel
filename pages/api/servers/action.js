@@ -1,6 +1,12 @@
 // pages/api/servers/action.js
 import { createClient } from '@supabase/supabase-js';
-import { S3Client, DeleteObjectsCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { 
+  S3Client, 
+  DeleteObjectsCommand, 
+  ListObjectsV2Command, 
+  CopyObjectCommand, 
+  DeleteObjectCommand 
+} from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
@@ -62,7 +68,6 @@ const deleteCloudflareRecords = async (subdomain, maxRetries = 3) => {
         });
 
         if (!response.ok) {
-           // If 404 or other error, mostly harmless for DNS cleanup usually
            console.warn(`[deleteCloudflareRecords] Lookup failed: ${response.status}`);
            throw new Error(`Cloudflare lookup failed: ${response.status}`);
         }
@@ -87,7 +92,6 @@ const deleteCloudflareRecords = async (subdomain, maxRetries = 3) => {
   return allDeleted;
 };
 
-// [UPDATED] Helper to handle 404 gracefully
 const hetznerDoAction = async (hetznerId, action) => {
   console.log(`[hetznerDoAction] Performing action ${action} for server ${hetznerId}`);
   const url = `${HETZNER_API_BASE}/servers/${hetznerId}/actions/${action}`;
@@ -99,7 +103,6 @@ const hetznerDoAction = async (hetznerId, action) => {
     },
   });
 
-  // FIX: If server is gone (404), action is considered "done" (race condition handled)
   if (res.status === 404) {
       console.warn(`[hetznerDoAction] Server ${hetznerId} not found (404). Assuming action '${action}' is moot/done.`);
       return null;
@@ -118,13 +121,11 @@ const hetznerDoAction = async (hetznerId, action) => {
   return json;
 };
 
-// [UPDATED] Helper returns null on 404 instead of throwing
 const hetznerGetServer = async (hetznerId) => {
   console.log(`[hetznerGetServer] Fetching server info for ${hetznerId}`);
   const url = `${HETZNER_API_BASE}/servers/${hetznerId}`;
   const r = await fetch(url, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}` } });
   
-  // FIX: Handle 404 gracefully
   if (r.status === 404) {
       console.warn(`[hetznerGetServer] Server ${hetznerId} returned 404 Not Found.`);
       return null;
@@ -139,15 +140,13 @@ const hetznerGetServer = async (hetznerId) => {
   return j;
 };
 
-// [UPDATED] Wait helper treats "Server Gone (null)" as "Target Reached"
 const waitForServerStatus = async (hetznerId, targetStatus, maxAttempts = 30, intervalMs = 5000) => {
   console.log(`[waitForServerStatus] Waiting for server ${hetznerId} to reach status: ${targetStatus}`);
   for (let i = 0; i < maxAttempts; i++) {
     const serverData = await hetznerGetServer(hetznerId);
     
-    // FIX: If server is gone (null) and we are waiting for it to stop/delete, that is a success.
     if (!serverData) {
-        console.log(`[waitForServerStatus] Server ${hetznerId} is gone (404). Treating as success (race condition win).`);
+        console.log(`[waitForServerStatus] Server ${hetznerId} is gone (404). Treating as success.`);
         return true;
     }
 
@@ -163,7 +162,6 @@ const waitForServerStatus = async (hetznerId, targetStatus, maxAttempts = 30, in
   return false;
 };
 
-// [UPDATED] Delete helper handles 404 gracefully
 const hetznerDeleteServer = async (hetznerId) => {
   console.log(`[hetznerDeleteServer] Deleting Hetzner server: ${hetznerId}`);
   const url = `${HETZNER_API_BASE}/servers/${hetznerId}`;
@@ -172,7 +170,6 @@ const hetznerDeleteServer = async (hetznerId) => {
     headers: { Authorization: `Bearer ${HETZNER_TOKEN}` },
   });
 
-  // FIX: If already deleted, just log it and return true
   if (res.status === 404) {
       console.log(`[hetznerDeleteServer] Server ${hetznerId} already deleted (404). Skipping.`);
       return true;
@@ -263,6 +260,99 @@ async function billRemainingTime(supabaseAdmin, server) {
   }
 }
 
+// --- NEW HELPER: Rotate Auto Backups ---
+const rotateAutoBackups = async (serverId, maxKeep) => {
+    try {
+        const command = new ListObjectsV2Command({
+            Bucket: S3_BUCKET,
+            Prefix: `backups/${serverId}/auto-`, 
+        });
+        const response = await s3Client.send(command);
+        const backups = (response.Contents || [])
+            .sort((a, b) => new Date(a.LastModified) - new Date(b.LastModified)); // Ascending (Oldest first)
+
+        if (backups.length > maxKeep) {
+            const toDelete = backups.slice(0, backups.length - maxKeep);
+            console.log(`[AutoBackup] Rotating: Deleting ${toDelete.length} old backups for server ${serverId}`);
+            
+            if (toDelete.length > 0) {
+                await s3Client.send(new DeleteObjectsCommand({
+                    Bucket: S3_BUCKET,
+                    Delete: { Objects: toDelete.map(b => ({ Key: b.Key })) }
+                }));
+            }
+        }
+    } catch (e) {
+        console.error(`[AutoBackup] Rotation failed: ${e.message}`);
+    }
+};
+
+// --- NEW HELPER: Perform Auto Backup ---
+const performAutoBackup = async (server, supabaseAdmin) => {
+    console.log(`[AutoBackup] Checking criteria for server ${server.id}`);
+    
+    // 1. Check Interval
+    const lastBackupTime = server.last_backup_at ? new Date(server.last_backup_at).getTime() : 0;
+    const intervalMs = (server.auto_backup_interval_hours || 24) * 60 * 60 * 1000;
+    const now = Date.now();
+
+    if (now - lastBackupTime < intervalMs) {
+        console.log(`[AutoBackup] Skipping: Last backup was ${(now - lastBackupTime)/3600000}h ago (Interval: ${server.auto_backup_interval_hours}h)`);
+        return;
+    }
+
+    console.log(`[AutoBackup] Starting auto-backup for ${server.id}`);
+    const fileApiUrl = `http://${server.subdomain}.spawnly.net:3005/api/backups`;
+    
+    // 2. Trigger Backup on VPS
+    const res = await fetch(fileApiUrl, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${server.rcon_password}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({}) // Empty body implies default behavior
+    });
+
+    if (!res.ok) throw new Error(`Agent returned ${res.status}: ${await res.text()}`);
+    
+    const data = await res.json();
+    
+    // 3. Rename/Tag as Auto (Agent usually names it backup-timestamp.zip)
+    // We copy it to a "auto-" prefix so UI can identify it and rotation logic works.
+    const originalKey = data.s3Path.replace(`s3://${S3_BUCKET}/`, '');
+    
+    // Only rename if it doesn't already have 'auto-' (Agent currently generates 'backup-XYZ.zip')
+    if (originalKey && !originalKey.includes('auto-')) {
+        const fileName = originalKey.split('/').pop();
+        const autoFileName = fileName.replace('backup-', 'auto-backup-');
+        const autoKey = originalKey.replace(fileName, autoFileName);
+
+        console.log(`[AutoBackup] Renaming ${originalKey} to ${autoKey}`);
+
+        // Copy
+        await s3Client.send(new CopyObjectCommand({
+            Bucket: S3_BUCKET,
+            CopySource: `${S3_BUCKET}/${originalKey}`,
+            Key: autoKey
+        }));
+
+        // Delete Original
+        await s3Client.send(new DeleteObjectCommand({
+            Bucket: S3_BUCKET,
+            Key: originalKey
+        }));
+    }
+
+    console.log(`[AutoBackup] Success`);
+    
+    // 4. Update DB
+    await supabaseAdmin.from('servers').update({ last_backup_at: new Date().toISOString() }).eq('id', server.id);
+
+    // 5. Rotation (Delete Oldest)
+    await rotateAutoBackups(server.id, server.max_auto_backups || 5);
+};
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   try {
@@ -325,9 +415,23 @@ export default async function handler(req, res) {
     if (action === 'delete' || action === 'stop') {
       await billRemainingTime(supabaseAdmin, server);
 
+      // --- AUTO BACKUP LOGIC START ---
+      // We only attempt backup if: 
+      // 1. Action is STOP (not delete)
+      // 2. Feature is enabled
+      // 3. Server is actually running/provisioned (has Hetzner ID)
+      if (action === 'stop' && server.auto_backup_enabled && server.hetzner_id) {
+          try {
+             await performAutoBackup(server, supabaseAdmin);
+          } catch (backupErr) {
+             console.error('[API:action] Auto-backup failed, proceeding with stop:', backupErr.message);
+             // We do NOT return error here, we proceed to stop the server to avoid getting stuck.
+          }
+      }
+      // --- AUTO BACKUP LOGIC END ---
+
       if (server.hetzner_id) {
         // [UPDATED] Graceful Shutdown Loop
-        // We try to shutdown, but if it's already gone (race condition), we don't crash.
         try {
           console.log(`[API:action] Shutting down Hetzner server: ${server.hetzner_id}`);
           await hetznerDoAction(server.hetzner_id, 'shutdown');
@@ -342,7 +446,6 @@ export default async function handler(req, res) {
 
         try {
           // [UPDATED] Robust Deletion
-          // If the Sync callback already deleted it, this will simply log "Already deleted" and continue.
           await hetznerDeleteServer(server.hetzner_id);
         } catch (hetznerErr) {
           console.error('[API:action] Failed to delete server from Hetzner:', hetznerErr.message);
