@@ -1,0 +1,58 @@
+{
+  "title": "Create New Server",
+  "labels": {
+    "name": "Server Name",
+    "game": "Game",
+    "software": "Software",
+    "ram": "RAM Allocation",
+    "cost_est": "Estimated Cost",
+    "your_credits": "Your Credits"
+  },
+  "placeholders": {
+    "name": "my-awesome-server"
+  },
+  "hints": {
+    "name_rules": "3-20 characters, letters, numbers, and hyphens only. Must be unique.",
+    "cost_basis": "Based on {{price}} credits per GB per hour",
+    "insufficient_credits": "You need at least {{cost}} credits for this server",
+    "need_more": "You need at least {{cost}} credits"
+  },
+  "buttons": {
+    "cancel": "Cancel",
+    "create": "Create Server",
+    "creating": "Creating...",
+    "fix_errors": "Fix Name Errors",
+    "insufficient": "Insufficient Credits"
+  },
+  "errors": {
+    "required": "Server name is required",
+    "min_length": "Name must be at least 3 characters",
+    "max_length": "Name must be at most 20 characters",
+    "invalid_chars": "Name can only contain letters, numbers, and hyphens",
+    "exists": "A server with this name already exists",
+    "credits": "You don't have enough credits for this server",
+    "valid_name": "Please enter a valid server name"
+  },
+  "games": {
+    "minecraft": "Minecraft",
+    "valheim": "Valheim",
+    "rust": "Rust",
+    "terraria": "Terraria",
+    "ark": "ARK: Survival Evolved"
+  },
+  "software_desc": {
+    "vanilla": "Official server software",
+    "paper": "High-performance Spigot fork",
+    "purpur": "Paper fork with more features",
+    "folia": "Experimental multithreaded server",
+    "spigot": "Standard plugin server",
+    "forge": "Classic mod loader",
+    "neoforge": "Modern mod loader",
+    "fabric": "Lightweight mod loader",
+    "quilt": "Community-driven mod loader",
+    "velocity": "Proxy server",
+    "waterfall": "Legacy proxy server",
+    "modding": "Modding platform",
+    "enhanced": "Enhanced with quality-of-life features"
+  }
+}

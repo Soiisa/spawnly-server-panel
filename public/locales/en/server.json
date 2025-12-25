@@ -1,0 +1,116 @@
+{
+  "loading": "Loading Command Center...",
+  "not_found": "Server not found.",
+  "actions": {
+    "start": "Start Server",
+    "stop": "Stop",
+    "restart": "Restart",
+    "copy_ip": "Click to copy",
+    "copied": "Copied!",
+    "edit_motd": "Edit MOTD",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "tabs": {
+    "overview": "Overview",
+    "schedules": "Schedules",
+    "properties": "Properties",
+    "console": "Console",
+    "players": "Players",
+    "software": "Software",
+    "mods": "Mods",
+    "plugins": "Plugins",
+    "mods_plugins": "Mods/Plugins",
+    "world": "World",
+    "files": "Files",
+    "backups": "Backups"
+  },
+  "connection": {
+    "title": "Connection",
+    "address": "Server Address",
+    "software": "Software",
+    "version": "Version"
+  },
+  "resources": {
+    "title": "Live Resources",
+    "active_players": "Active Players",
+    "server_offline": "Server is offline. Start it to view metrics."
+  },
+  "config": {
+    "title": "Configuration",
+    "auto_stop": "Auto-Stop (Empty)",
+    "auto_stop_never": "Never",
+    "auto_stop_5m": "5 minutes",
+    "auto_stop_15m": "15 minutes",
+    "auto_stop_30m": "30 minutes",
+    "auto_stop_1h": "1 hour",
+    "stopping_soon": "Stopping soon...",
+    "stopping_in": "Stopping in {{time}}",
+    "ram_allocation": "RAM Allocation",
+    "edit_ram": "Edit"
+  },
+  "billing": {
+    "title": "Billing Status",
+    "hourly_cost": "Hourly Cost",
+    "credits_hr": "credits/hr",
+    "est_runtime": "Est. Runtime",
+    "hours_left": "hours left",
+    "warning_low": "Warning: Low balance. Server may stop soon."
+  },
+  "errors": {
+    "load_session": "Failed to load session data.",
+    "timeout": "Operation timed out. Please refresh.",
+    "update_auto_stop": "Failed to update auto-stop setting",
+    "failed_action": "Failed to {{action}}: {{message}}",
+    "stop_ram": "Server must be stopped to change RAM.",
+    "ram_range": "RAM must be between 2 and 32 GB.",
+    "save_motd": "Failed to save MOTD"
+  },
+  "notifications": {
+    "ready_title": "{{serverName}} is READY!",
+    "ready_body": "Your server \"{{serverName}}\" has finished starting up and is now Running."
+  },
+  "status": {
+    "starting": "Starting",
+    "stopping": "Stopping",
+    "restarting": "Restarting",
+    "running": "Running",
+    "stopped": "Stopped",
+    "offline": "Offline",
+    "initializing": "Initializing",
+    "unknown": "Unknown",
+    "provisioning": "Provisioning",
+    "disconnected": "Disconnected"
+  },
+  "console": {
+    "title": "Terminal",
+    "status": {
+      "fetching": "Fetching logs...",
+      "error": "Error loading logs",
+      "ready": "Ready",
+      "live": "Live Stream Active",
+      "connecting": "Connecting...",
+      "waiting": "Waiting for logs..."
+    },
+    "controls": {
+      "auto_scroll": "Auto-scroll",
+      "pause": "Pause",
+      "resume": "Resume",
+      "clear": "Clear",
+      "toggle_scroll": "Toggle Auto-scroll"
+    },
+    "input": {
+      "placeholder": "Type a command (e.g. /op user, /time set day)...",
+      "disconnected": "* Console is disconnected. Start the server to issue commands."
+    },
+    "errors": {
+      "failed_send": "Failed to send command",
+      "no_session": "No active session"
+    }
+  },
+  "metrics": {
+    "cpu": "CPU Usage",
+    "ram": "RAM Usage",
+    "usage": "Usage"
+  }
+}

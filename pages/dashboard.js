@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
+import { useTranslation } from 'next-i18next'; // <--- IMPORTED
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
 import CreateServerForm from "./CreateServerForm";
 import Link from 'next/link';
 import ServerStatusIndicator from "../components/ServerStatusIndicator";
@@ -22,8 +24,9 @@ import {
 } from '@heroicons/react/24/outline';
 
 // --- NEW: Helper for Displaying Software/Version ---
-const getDisplayInfo = (server) => {
-  if (!server) return { software: 'Unknown', version: 'Unknown' };
+// Updated to accept 't' for translation
+const getDisplayInfo = (server, t) => {
+  if (!server) return { software: t('software.unknown'), version: t('software.unknown') };
 
   let software = server.type || 'Vanilla';
   let version = server.version || '';
@@ -34,7 +37,7 @@ const getDisplayInfo = (server) => {
     const provider = providerRaw.charAt(0).toUpperCase() + providerRaw.slice(1);
     
     // Default fallback
-    software = `Modpack (${provider})`;
+    software = `${t('software.modpack')} (${provider})`;
 
     // Handle Version & Name extraction
     if (server.version?.includes('::')) {
@@ -56,6 +59,7 @@ const getDisplayInfo = (server) => {
 
 export default function Dashboard() {
   const router = useRouter();
+  const { t } = useTranslation('dashboard'); // <--- INITIALIZED with 'dashboard' namespace
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -259,12 +263,12 @@ export default function Dashboard() {
       if (newServerId) router.push(`/server/${newServerId}`);
     } catch (err) {
       setServers((prev) => prev.filter((s) => s.id !== tempServerId));
-      setError(`Failed to create server: ${err.message}`);
+      setError(`${t('messages.error_create')}: ${err.message}`); // <--- TRANSLATED
     }
   };
 
   const handleDeleteServer = async (serverId) => {
-    if (!confirm('Are you sure? This will delete the server and all data permanently.')) return;
+    if (!confirm(t('messages.confirm_delete'))) return; // <--- TRANSLATED
     try {
       await fetch('/api/servers/action', {
         method: 'POST',
@@ -272,7 +276,7 @@ export default function Dashboard() {
         body: JSON.stringify({ serverId, action: 'delete' }),
       });
     } catch (err) {
-      setError('Failed to delete server');
+      setError(t('messages.error_delete')); // <--- TRANSLATED
     }
   };
 
@@ -288,7 +292,7 @@ export default function Dashboard() {
       });
       if (!res.ok) throw new Error(await res.text());
     } catch (err) {
-      setError(`Failed to start server: ${err.message}`);
+      setError(`${t('messages.error_start')}: ${err.message}`); // <--- TRANSLATED
     }
   };
 
@@ -300,7 +304,7 @@ export default function Dashboard() {
         body: JSON.stringify({ serverId, action: 'stop' }),
       });
     } catch (err) {
-      setError('Failed to stop server');
+      setError(t('messages.error_stop')); // <--- TRANSLATED
     }
   };
 
@@ -310,7 +314,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-        <p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">Loading dashboard...</p>
+        <p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">{t('loading')}</p> {/* <--- TRANSLATED */}
       </div>
     </div>
   );
@@ -328,7 +332,7 @@ export default function Dashboard() {
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
               {error}
             </span>
-            <button onClick={() => setError(null)} className="text-sm font-semibold hover:underline">Dismiss</button>
+            <button onClick={() => setError(null)} className="text-sm font-semibold hover:underline">{t('messages.dismiss')}</button> {/* <--- TRANSLATED */}
           </div>
         )}
 
@@ -337,28 +341,28 @@ export default function Dashboard() {
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><ServerIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Total Servers</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.total_servers')}</p> {/* <--- TRANSLATED */}
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.length}</p>
             </div>
           </div>
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-green-50 text-green-600 rounded-xl"><PlayIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Active Now</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.active_now')}</p> {/* <--- TRANSLATED */}
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.filter(s => s.status === 'Running').length}</p>
             </div>
           </div>
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-purple-50 text-purple-600 rounded-xl"><CpuChipIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Total RAM</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.total_ram')}</p> {/* <--- TRANSLATED */}
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.reduce((a, b) => a + b.ram, 0)} GB</p>
             </div>
           </div>
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><CurrencyDollarIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Hourly Cost</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.hourly_cost')}</p> {/* <--- TRANSLATED */}
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.reduce((a, b) => a + b.cost_per_hour, 0).toFixed(2)}</p>
             </div>
           </div>
@@ -366,13 +370,13 @@ export default function Dashboard() {
 
         {/* Action Bar */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Your Servers</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('headers.your_servers')}</h2> {/* <--- TRANSLATED */}
           <button
             onClick={() => setShowModal(true)}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium shadow-sm transition-all hover:-translate-y-0.5"
           >
             <PlusIcon className="w-5 h-5" />
-            New Server
+            {t('headers.new_server')} {/* <--- TRANSLATED */}
           </button>
         </div>
 
@@ -384,15 +388,15 @@ export default function Dashboard() {
             <div className="mx-auto w-16 h-16 bg-gray-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
               <ServerIcon className="w-8 h-8 text-gray-400" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No servers found</h3>
-            <p className="text-gray-500 dark:text-gray-400 mt-1 mb-6">Get started by creating your first game server.</p>
-            <button onClick={() => setShowModal(true)} className="text-indigo-600 font-medium hover:underline">Create Server &rarr;</button>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">{t('empty_state.title')}</h3> {/* <--- TRANSLATED */}
+            <p className="text-gray-500 dark:text-gray-400 mt-1 mb-6">{t('empty_state.description')}</p> {/* <--- TRANSLATED */}
+            <button onClick={() => setShowModal(true)} className="text-indigo-600 font-medium hover:underline">{t('empty_state.button')} &rarr;</button> {/* <--- TRANSLATED */}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {servers.map((server) => {
-              // --- USE HELPER HERE ---
-              const { software, version } = getDisplayInfo(server);
+              // --- USE HELPER HERE with 't' ---
+              const { software, version } = getDisplayInfo(server, t);
               
               return (
               <div key={server.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col group hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors">
@@ -419,11 +423,11 @@ export default function Dashboard() {
                   
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">Memory</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.memory')}</p> {/* <--- TRANSLATED */}
                       <p className="font-semibold text-gray-900 dark:text-gray-100">{server.ram} GB</p>
                     </div>
                     <div>
-                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">Address</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.address')}</p> {/* <--- TRANSLATED */}
                       <p className="font-mono text-gray-700 dark:text-gray-300 truncate" title={`${server.name}.spawnly.net`}>{server.name}.spawnly.net</p>
                     </div>
                   </div>
@@ -437,19 +441,19 @@ export default function Dashboard() {
                       disabled={server.id.startsWith('temp')}
                       className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-sm font-medium transition-colors"
                     >
-                      <PlayIcon className="w-4 h-4" /> Start
+                      <PlayIcon className="w-4 h-4" /> {t('server_card.start')} {/* <--- TRANSLATED */}
                     </button>
                   ) : server.status === "Running" ? (
                     <button 
                       onClick={() => handleStopServer(server.id)}
                       className="flex-1 flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/20 dark:hover:border-red-600 py-2 rounded-lg text-sm font-medium transition-colors"
                     >
-                      <StopIcon className="w-4 h-4" /> Stop
+                      <StopIcon className="w-4 h-4" /> {t('server_card.stop')} {/* <--- TRANSLATED */}
                     </button>
                   ) : (
                     <button disabled className="flex-1 flex items-center justify-center gap-2 bg-gray-200 dark:bg-slate-600 text-gray-500 py-2 rounded-lg text-sm font-medium cursor-not-allowed">
                       <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                      Processing
+                      {t('server_card.processing')} {/* <--- TRANSLATED */}
                     </button>
                   )}
 
@@ -496,4 +500,16 @@ export default function Dashboard() {
       <Footer />
     </div>
   );
+}
+
+// --- REQUIRED FOR NEXT-I18NEXT (Server Side Translation Loading) ---
+export async function getStaticProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, [
+        'common',
+        'dashboard'
+      ])),
+    },
+  };
 }

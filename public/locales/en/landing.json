@@ -1,0 +1,30 @@
+{
+  "hero": {
+    "title_prefix": "Spawn a server in",
+    "title_highlight": "seconds",
+    "subtitle": "Instant game server hosting with flexible, hourly billing. Pay only for what you use. No monthly contracts, no hidden fees.",
+    "get_started": "Get Started",
+    "view_pricing": "View Pricing"
+  },
+  "features": {
+    "label": "Features",
+    "heading": "Everything you need to play",
+    "instant": {
+      "title": "Instant Deployment",
+      "description": "Launch Minecraft, Valheim, or Rust servers in under 60 seconds. Our automated provisioning handles the heavy lifting."
+    },
+    "billing": {
+      "title": "Hourly Billing",
+      "description": "Stop paying for idle servers. Top up credits and only pay while your server is running. Perfect for weekend gaming sessions."
+    },
+    "storage": {
+      "title": "Persistent Storage",
+      "description": "Your world files are safe even when the server is stopped. We automatically back up your data to secure cloud storage."
+    }
+  },
+  "stats": {
+    "uptime": "Uptime",
+    "storage": "Fast Storage",
+    "protection": "Protection Included"
+  }
+}

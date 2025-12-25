@@ -1,7 +1,8 @@
 // pages/_app.js
 import { useState, useEffect, createContext, useContext } from 'react';
+import { appWithTranslation } from 'next-i18next'; // <--- IMPORTED
 import '../styles/globals.css';
-import CookieBanner from '../components/CookieBanner'; // <--- 1. Import the component
+import CookieBanner from '../components/CookieBanner';
 
 // 1. Create Context
 export const DarkModeContext = createContext();
@@ -59,11 +60,14 @@ function DarkModeProvider({ children }) {
   );
 }
 
-export default function App({ Component, pageProps }) {
+function App({ Component, pageProps }) {
   return (
     <DarkModeProvider>
       <Component {...pageProps} />
-      <CookieBanner /> {/* <--- 2. Add the banner here */}
+      <CookieBanner />
     </DarkModeProvider>
   );
 }
+
+// Wrap the App component with translation provider
+export default appWithTranslation(App);

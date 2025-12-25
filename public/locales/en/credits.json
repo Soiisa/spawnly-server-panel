@@ -1,0 +1,18 @@
+{
+  "title": "Billing & Credits",
+  "subtitle": "Manage your balance and view usage history",
+  "buy_credits": "Buy Credits",
+  "card": {
+    "title": "Current Balance",
+    "value_approx": "~€{{value}} value",
+    "info_title": "Real-time Billing",
+    "info_desc": "Servers are billed per minute of runtime. Credits are deducted automatically while your server is running."
+  },
+  "history": {
+    "title": "Transaction History",
+    "empty": "No transactions found.",
+    "session_runtime": "Session Runtime",
+    "detailed_charges": "Detailed Charges",
+    "manual_deduction": "Manual Deduction"
+  }
+}

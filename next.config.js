@@ -1,5 +1,8 @@
 // next.config.js
+const { i18n } = require('./next-i18next.config');
+
 module.exports = {
+  i18n,
   // Enable WebSocket support
   webpack: (config, { isServer }) => {
     if (isServer) {
@@ -24,8 +27,6 @@ module.exports = {
     ];
   },
   
-  // Other Next.js configuration options can go here
-  // For example, if you need to use environment variables on the client side:
   env: {
     // Add any client-side environment variables here
   }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-// CHANGED: Import shared client to prevent "Multiple GoTrueClient" warnings
 import { supabase } from '../lib/supabaseClient'; 
+import { useTranslation } from 'next-i18next'; // <--- IMPORTED
 import { 
   CommandLineIcon, 
   PaperAirplaneIcon, 
@@ -12,6 +12,8 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function ConsoleViewer({ server }) {
+  const { t } = useTranslation('server'); // <--- INITIALIZED
+  
   // --- State ---
   const logRef = useRef(null);
   const [lines, setLines] = useState([]);
@@ -19,7 +21,7 @@ export default function ConsoleViewer({ server }) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [paused, setPaused] = useState(false);
   const [command, setCommand] = useState('');
-  const [status, setStatus] = useState('Initializing...');
+  const [status, setStatus] = useState(t('console.status.connecting')); // <--- TRANSLATED INIT
   const [isSending, setIsSending] = useState(false);
 
   // --- Effects ---
@@ -29,7 +31,7 @@ export default function ConsoleViewer({ server }) {
 
     // Load initial console log
     const loadConsole = async () => {
-      setStatus('Fetching logs...');
+      setStatus(t('console.status.fetching')); // <--- TRANSLATED
       const { data, error } = await supabase
         .from('server_console')
         .select('console_log')
@@ -38,7 +40,7 @@ export default function ConsoleViewer({ server }) {
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading console:', error);
-        setStatus('Error loading logs');
+        setStatus(t('console.status.error')); // <--- TRANSLATED
         return;
       }
 
@@ -46,7 +48,7 @@ export default function ConsoleViewer({ server }) {
       if (logText) {
         setLines(logText.split('\n'));
       }
-      setStatus('Ready');
+      setStatus(t('console.status.ready')); // <--- TRANSLATED
     };
 
     loadConsole();
@@ -79,13 +81,14 @@ export default function ConsoleViewer({ server }) {
       .subscribe((state) => {
         const isConnected = state === 'SUBSCRIBED';
         setConnected(isConnected);
-        setStatus(isConnected ? 'Live Stream Active' : 'Connecting...');
+        // <--- TRANSLATED STATUS
+        setStatus(isConnected ? t('console.status.live') : t('console.status.connecting'));
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [server?.id, paused]);
+  }, [server?.id, paused, t]); // Added 't'
 
   // Handle Auto-scroll
   useEffect(() => {
@@ -94,13 +97,12 @@ export default function ConsoleViewer({ server }) {
     }
   }, [lines, autoScroll]);
 
-  // Detect manual scroll to disable auto-scroll
+  // Detect manual scroll
   const handleScroll = () => {
     if (!logRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = logRef.current;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
     
-    // Only update if the user manually scrolled away from bottom
     if (!isAtBottom && autoScroll) {
       setAutoScroll(false);
     } else if (isAtBottom && !autoScroll) {
@@ -115,23 +117,20 @@ export default function ConsoleViewer({ server }) {
     if (!command.trim() || isSending) return;
     
     const cmdToSend = command.trim();
-    setCommand(''); // Clear immediately for better UX
+    setCommand(''); 
     setIsSending(true);
     
-    // Optimistic UI update
     setLines(prev => [...prev, `> ${cmdToSend}`]);
 
     try {
-      // --- FIX: Get Session for Authorization ---
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("No active session");
-      // ------------------------------------------
+      if (!session) throw new Error(t('console.errors.no_session'));
 
       const resp = await fetch('/api/servers/rcon', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}` // <--- Added Header
+          'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({ 
           serverId: server.id, 
@@ -140,7 +139,7 @@ export default function ConsoleViewer({ server }) {
       });
       
       const json = await resp.json();
-      if (!resp.ok) throw new Error(json.error || 'Failed to send command');
+      if (!resp.ok) throw new Error(json.error || t('console.errors.failed_send'));
       
       if (json.response) {
         setLines(prev => [...prev, json.response]);
@@ -149,7 +148,6 @@ export default function ConsoleViewer({ server }) {
       setLines(prev => [...prev, `[Error] ${err.message}`]);
     } finally {
       setIsSending(false);
-      // Force scroll to bottom on command send
       setAutoScroll(true);
     }
   };
@@ -172,7 +170,7 @@ export default function ConsoleViewer({ server }) {
             <CommandLineIcon className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Terminal</h3>
+            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">{t('console.title')}</h3> {/* <--- TRANSLATED */}
             <div className="flex items-center gap-2">
               <span className={`relative flex h-2 w-2`}>
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${connected ? 'bg-green-400' : 'bg-red-400'}`}></span>
@@ -192,10 +190,10 @@ export default function ConsoleViewer({ server }) {
                 ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-600 dark:text-indigo-400' 
                 : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700'
               }`}
-            title="Toggle Auto-scroll"
+            title={t('console.controls.toggle_scroll')} // <--- TRANSLATED
           >
             {autoScroll ? <ArrowDownCircleIcon className="w-4 h-4" /> : <StopCircleIcon className="w-4 h-4" />}
-            <span className="hidden sm:inline">Auto-scroll</span>
+            <span className="hidden sm:inline">{t('console.controls.auto_scroll')}</span> {/* <--- TRANSLATED */}
           </button>
 
           <button
@@ -205,19 +203,19 @@ export default function ConsoleViewer({ server }) {
                 ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:border-amber-600 dark:text-amber-400' 
                 : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700'
               }`}
-            title={paused ? "Resume updates" : "Pause updates"}
+            title={paused ? t('console.controls.resume') : t('console.controls.pause')} // <--- TRANSLATED (tooltip logic)
           >
             {paused ? <PlayIcon className="w-4 h-4" /> : <PauseIcon className="w-4 h-4" />}
-            <span className="hidden sm:inline">{paused ? 'Resume' : 'Pause'}</span>
+            <span className="hidden sm:inline">{paused ? t('console.controls.resume') : t('console.controls.pause')}</span> {/* <--- TRANSLATED */}
           </button>
 
           <button
             onClick={clearConsole}
             className="p-2 rounded-md text-xs font-medium border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-red-600 hover:bg-red-50 hover:border-red-200 dark:hover:bg-red-900/20 dark:hover:border-red-600 transition-colors flex items-center gap-1.5"
-            title="Clear Console"
+            title={t('console.controls.clear')} // <--- TRANSLATED
           >
             <TrashIcon className="w-4 h-4" />
-            <span className="hidden sm:inline">Clear</span>
+            <span className="hidden sm:inline">{t('console.controls.clear')}</span> {/* <--- TRANSLATED */}
           </button>
         </div>
       </div>
@@ -232,12 +230,11 @@ export default function ConsoleViewer({ server }) {
           {lines.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-3 opacity-50">
               <CommandLineIcon className="w-12 h-12" />
-              <p>Waiting for logs...</p>
+              <p>{t('console.status.waiting')}</p> {/* <--- TRANSLATED */}
             </div>
           ) : (
             lines.map((line, i) => (
               <div key={i} className="break-words whitespace-pre-wrap hover:bg-slate-900/50 px-1 -mx-1 rounded">
-                {/* Basic coloring for common log levels */}
                 {line.includes('INFO') ? <span className="text-slate-300">{line}</span> :
                  line.includes('WARN') ? <span className="text-amber-400">{line}</span> :
                  line.includes('ERROR') || line.includes('Exception') ? <span className="text-red-400">{line}</span> :
@@ -247,7 +244,6 @@ export default function ConsoleViewer({ server }) {
               </div>
             ))
           )}
-          {/* Invisible element to scroll to */}
           {autoScroll && <div className="h-1" />} 
         </div>
       </div>
@@ -259,7 +255,7 @@ export default function ConsoleViewer({ server }) {
           <input
             type="text"
             className="w-full pl-7 pr-12 py-3 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg text-sm font-mono text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white dark:focus:bg-slate-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-            placeholder="Type a command (e.g. /op user, /time set day)..."
+            placeholder={t('console.input.placeholder')} // <--- TRANSLATED
             value={command}
             onChange={(e) => setCommand(e.target.value)}
             disabled={!connected}
@@ -278,7 +274,7 @@ export default function ConsoleViewer({ server }) {
         </form>
         {!connected && (
           <p className="text-xs text-red-500 mt-2 ml-1">
-            * Console is disconnected. Start the server to issue commands.
+            {t('console.input.disconnected')} {/* <--- TRANSLATED */}
           </p>
         )}
       </div>

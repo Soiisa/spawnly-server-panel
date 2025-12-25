@@ -1,0 +1,37 @@
+{
+  "loading": "Loading dashboard...",
+  "headers": {
+    "your_servers": "Your Servers",
+    "new_server": "New Server"
+  },
+  "stats": {
+    "total_servers": "Total Servers",
+    "active_now": "Active Now",
+    "total_ram": "Total RAM",
+    "hourly_cost": "Hourly Cost"
+  },
+  "empty_state": {
+    "title": "No servers found",
+    "description": "Get started by creating your first game server.",
+    "button": "Create Server"
+  },
+  "server_card": {
+    "memory": "Memory",
+    "address": "Address",
+    "start": "Start",
+    "stop": "Stop",
+    "processing": "Processing"
+  },
+  "messages": {
+    "confirm_delete": "Are you sure? This will delete the server and all data permanently.",
+    "dismiss": "Dismiss",
+    "error_create": "Failed to create server",
+    "error_delete": "Failed to delete server",
+    "error_start": "Failed to start server",
+    "error_stop": "Failed to stop server"
+  },
+  "software": {
+    "unknown": "Unknown",
+    "modpack": "Modpack"
+  }
+}

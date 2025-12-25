@@ -1,0 +1,34 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "billing": "Billing",
+    "logout": "Log out"
+  },
+  "theme": {
+    "switch_light": "Switch to Light Mode",
+    "switch_dark": "Switch to Dark Mode"
+  },
+  "brand": "Spawnly",
+  "wallet": {
+    "balance": "Balance"
+  },
+  "public_nav": {
+    "pricing": "Pricing",
+    "login": "Log in",
+    "get_started": "Get Started"
+  },
+  "footer": {
+    "rights": "All rights reserved.",
+    "imprint": "Imprint",
+    "terms": "Terms",
+    "privacy": "Privacy",
+    "aup": "AUP",
+    "refunds": "Refunds",
+    "support": "Support"
+  },
+  "cookie": {
+    "message": "We use cookies to ensure you get the best experience on Spawnly. By continuing, you agree to our",
+    "and": "and",
+    "accept": "Accept & Continue"
+  }
+}
