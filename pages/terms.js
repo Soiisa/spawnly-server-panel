@@ -3,6 +3,7 @@ import Head from "next/head";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import Link from "next/link";
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
 
 export default function TermsOfService() {
   const lastUpdated = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -135,4 +136,13 @@ export default function TermsOfService() {
       <Footer />
     </div>
   );
+}
+
+// --- REQUIRED FOR NAVBAR/FOOTER TRANSLATIONS ---
+export async function getStaticProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, ['common'])),
+    },
+  };
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { read, write } from 'nbtify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'next-i18next'; // <--- IMPORTED
 import { 
   CloudArrowDownIcon, 
   CloudArrowUpIcon, 
@@ -15,6 +16,8 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function WorldTab({ server, token }) {
+  const { t } = useTranslation('server'); // <--- INITIALIZED
+  
   // --- State ---
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
@@ -49,7 +52,7 @@ export default function WorldTab({ server, token }) {
   // --- Handlers ---
 
   const handleDownload = async () => {
-    if (!isServerStopped) return showError('Server must be stopped to download the world.');
+    if (!isServerStopped) return showError(t('world.errors.server_must_stop')); // <--- TRANSLATED
     
     setLoadingAction('download');
     setError(null);
@@ -57,7 +60,7 @@ export default function WorldTab({ server, token }) {
       const response = await fetch(`/api/servers/${server.id}/world`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) throw new Error((await response.json()).error || 'Failed to download');
+      if (!response.ok) throw new Error((await response.json()).error || t('world.errors.download_fail'));
       
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -68,7 +71,7 @@ export default function WorldTab({ server, token }) {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      showSuccess('World download started');
+      showSuccess(t('world.download.started')); // <--- TRANSLATED
     } catch (err) {
       showError(err.message);
     } finally {
@@ -79,8 +82,8 @@ export default function WorldTab({ server, token }) {
   const handleUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-    if (!isServerStopped) return showError('Server must be stopped to upload a world.');
-    if (!file.name.endsWith('.zip')) return showError('Please select a valid .zip file.');
+    if (!isServerStopped) return showError(t('world.errors.server_must_stop'));
+    if (!file.name.endsWith('.zip')) return showError(t('world.errors.invalid_zip'));
 
     setLoadingAction('upload');
     setError(null);
@@ -94,8 +97,8 @@ export default function WorldTab({ server, token }) {
         body: formData,
       });
       
-      if (!response.ok) throw new Error((await response.json()).error || 'Upload failed');
-      showSuccess('World uploaded and extracted successfully!');
+      if (!response.ok) throw new Error((await response.json()).error || t('world.errors.upload_fail'));
+      showSuccess(t('world.upload.success'));
     } catch (err) {
       showError(err.message);
     } finally {
@@ -114,9 +117,9 @@ export default function WorldTab({ server, token }) {
         body: JSON.stringify(formData),
       });
       
-      if (!response.ok) throw new Error((await response.json()).error || 'Generation failed');
+      if (!response.ok) throw new Error((await response.json()).error || t('world.errors.generate_fail'));
       
-      showSuccess('New world generated successfully!');
+      showSuccess(t('world.generate.success'));
       setIsGenerateModalOpen(false);
     } catch (err) {
       showError(err.message);
@@ -126,7 +129,7 @@ export default function WorldTab({ server, token }) {
   };
 
   const handleOpenOptions = async () => {
-    if (!isServerStopped) return showError('Server must be stopped to edit options.');
+    if (!isServerStopped) return showError(t('world.errors.server_must_stop'));
     
     setLoadingAction('options');
     setError(null);
@@ -135,7 +138,7 @@ export default function WorldTab({ server, token }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       
-      if (!res.ok) throw new Error('Could not find world/level.dat. Has the world been generated?');
+      if (!res.ok) throw new Error(t('world.errors.load_level_fail'));
       
       const content = await res.arrayBuffer();
       const nbtData = await read(new Uint8Array(content), { compression: 'gzip', endian: 'big' });
@@ -161,9 +164,9 @@ export default function WorldTab({ server, token }) {
         body: nbtBuffer,
       });
       
-      if (!response.ok) throw new Error('Failed to save level.dat');
+      if (!response.ok) throw new Error(t('world.errors.save_fail'));
       
-      showSuccess('World configuration saved!');
+      showSuccess(t('world.level_config.saved'));
       setIsOptionsOpen(false);
     } catch (err) {
       showError(err.message);
@@ -216,11 +219,11 @@ export default function WorldTab({ server, token }) {
 
   // --- Constants for UI ---
   const WORLD_TYPES = [
-    { value: 'default', label: 'Normal' },
-    { value: 'superflat', label: 'Superflat' },
-    { value: 'amplified', label: 'Amplified' },
-    { value: 'large_biomes', label: 'Large Biomes' },
-    { value: 'single_biome', label: 'Single Biome' },
+    { value: 'default', label: t('world.generate.types.default') },
+    { value: 'superflat', label: t('world.generate.types.superflat') },
+    { value: 'amplified', label: t('world.generate.types.amplified') },
+    { value: 'large_biomes', label: t('world.generate.types.large_biomes') },
+    { value: 'single_biome', label: t('world.generate.types.single_biome') },
   ];
 
   // Helper to resolve the game rules object and path
@@ -241,9 +244,9 @@ export default function WorldTab({ server, token }) {
         <div className="bg-amber-50 dark:bg-amber-900/30 border-l-4 border-amber-400 dark:border-amber-600 p-4 rounded-r-lg flex items-start gap-3">
           <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200">Server is Running</h3>
+            <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200">{t('world.warning_running_title')}</h3>
             <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-              You must stop the server to upload, download, or regenerate the world to prevent data corruption.
+              {t('world.warning_running_desc')}
             </p>
           </div>
         </div>
@@ -269,8 +272,8 @@ export default function WorldTab({ server, token }) {
             {loadingAction === 'download' && <div className="animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full" />}
           </div>
           <div>
-            <h3 className="font-bold text-gray-900 dark:text-gray-100">Download World</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Backup your current world as a .zip file</p>
+            <h3 className="font-bold text-gray-900 dark:text-gray-100">{t('world.download.title')}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('world.download.desc')}</p>
           </div>
         </button>
 
@@ -289,8 +292,8 @@ export default function WorldTab({ server, token }) {
             {loadingAction === 'upload' && <div className="animate-spin w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full" />}
           </div>
           <div>
-            <h3 className="font-bold text-gray-900 dark:text-gray-100">Upload World</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Restore a world from a .zip backup</p>
+            <h3 className="font-bold text-gray-900 dark:text-gray-100">{t('world.upload.title')}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('world.upload.desc')}</p>
           </div>
           <input 
             type="file" 
@@ -317,8 +320,8 @@ export default function WorldTab({ server, token }) {
             </div>
           </div>
           <div>
-            <h3 className="font-bold text-gray-900 dark:text-gray-100">Generate New</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Create a fresh world with custom seeds</p>
+            <h3 className="font-bold text-gray-900 dark:text-gray-100">{t('world.generate.title')}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('world.generate.desc')}</p>
           </div>
         </button>
 
@@ -339,8 +342,8 @@ export default function WorldTab({ server, token }) {
             {loadingAction === 'options' && <div className="animate-spin w-5 h-5 border-2 border-amber-600 border-t-transparent rounded-full" />}
           </div>
           <div>
-            <h3 className="font-bold text-gray-900 dark:text-gray-100">Level Config</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Edit level.dat, seeds, and game rules</p>
+            <h3 className="font-bold text-gray-900 dark:text-gray-100">{t('world.level_config.title')}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('world.level_config.desc')}</p>
           </div>
         </button>
       </div>
@@ -371,28 +374,28 @@ export default function WorldTab({ server, token }) {
               className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
             >
               <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-700">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Generate World</h2>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{t('world.generate.modal_title')}</h2>
                 <button onClick={() => setIsGenerateModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><XMarkIcon className="w-6 h-6" /></button>
               </div>
               
               <div className="p-6 overflow-y-auto space-y-5">
                 <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-3 rounded-lg text-sm border border-red-100 dark:border-red-800 flex gap-2">
                   <ExclamationTriangleIcon className="w-5 h-5 shrink-0" />
-                  Warning: This will permanently delete the current world folder.
+                  {t('world.generate.warning_delete')}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Level Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('world.generate.fields.level_name')}</label>
                   <input type="text" name="levelName" value={formData.levelName} onChange={handleInputChange} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="world" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Seed</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('world.generate.fields.seed')}</label>
                     <input type="text" name="seed" value={formData.seed} onChange={handleInputChange} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="Leave empty for random" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">World Type</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('world.generate.fields.world_type')}</label>
                     <select name="worldType" value={formData.worldType} onChange={handleInputChange} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                       {WORLD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
@@ -400,28 +403,28 @@ export default function WorldTab({ server, token }) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Datapacks (URLs)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('world.generate.fields.datapacks')}</label>
                   <input type="text" name="datapacks" value={formData.datapacks} onChange={handleInputChange} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="http://example.com/pack.zip" />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Comma separated direct download links.</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('world.generate.fields.datapacks_hint')}</p>
                 </div>
 
                 <div className="flex gap-6">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" name="generateStructures" checked={formData.generateStructures} onChange={handleInputChange} className="rounded text-indigo-600 focus:ring-indigo-500 dark:bg-slate-700 dark:border-slate-500" />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Structures</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{t('world.generate.fields.structures')}</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" name="hardcore" checked={formData.hardcore} onChange={handleInputChange} className="rounded text-indigo-600 focus:ring-indigo-500 dark:bg-slate-700 dark:border-slate-500" />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Hardcore</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{t('world.generate.fields.hardcore')}</span>
                   </label>
                 </div>
               </div>
 
               <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3">
-                <button onClick={() => setIsGenerateModalOpen(false)} className="px-4 py-2 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition">Cancel</button>
+                <button onClick={() => setIsGenerateModalOpen(false)} className="px-4 py-2 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition">{t('actions.cancel')}</button>
                 <button onClick={handleGenerate} disabled={loadingAction === 'generate'} className="px-4 py-2 bg-red-600 text-white font-medium hover:bg-red-700 rounded-lg shadow-sm transition disabled:opacity-50 flex items-center gap-2">
                   {loadingAction === 'generate' && <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />}
-                  Generate World
+                  {t('world.generate.modal_title')}
                 </button>
               </div>
             </motion.div>
@@ -441,7 +444,7 @@ export default function WorldTab({ server, token }) {
               className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]"
             >
               <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-700">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">World Configuration (level.dat)</h2>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{t('world.level_config.modal_title')}</h2>
                 <button onClick={() => setIsOptionsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><XMarkIcon className="w-6 h-6" /></button>
               </div>
 
@@ -450,34 +453,34 @@ export default function WorldTab({ server, token }) {
                 {/* General Section */}
                 <section>
                   <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-gray-200 dark:border-slate-700 pb-2">
-                    <DocumentTextIcon className="w-4 h-4" /> General
+                    <DocumentTextIcon className="w-4 h-4" /> {t('world.level_config.sections.general')}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Level Name</label>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('world.generate.fields.level_name')}</label>
                       <input type="text" value={levelData.Data?.LevelName || ''} onChange={(e) => handleLevelDataChange('Data.LevelName', e.target.value)} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Seed</label>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('world.generate.fields.seed')}</label>
                       <input type="text" value={(levelData.Data?.RandomSeed || '').toString()} onChange={(e) => handleLevelDataChange('Data.RandomSeed', e.target.value)} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm font-mono" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Difficulty</label>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('world.level_config.labels.difficulty')}</label>
                       <select value={levelData.Data?.Difficulty || 0} onChange={(e) => handleLevelDataChange('Data.Difficulty', e.target.value)} className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm">
-                        <option value={0}>Peaceful</option>
-                        <option value={1}>Easy</option>
-                        <option value={2}>Normal</option>
-                        <option value={3}>Hard</option>
+                        <option value={0}>{t('world.level_config.difficulties.peaceful')}</option>
+                        <option value={1}>{t('world.level_config.difficulties.easy')}</option>
+                        <option value={2}>{t('world.level_config.difficulties.normal')}</option>
+                        <option value={3}>{t('world.level_config.difficulties.hard')}</option>
                       </select>
                     </div>
                     <div className="flex items-end gap-4 pb-2">
                       <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                         <input type="checkbox" checked={!!levelData.Data?.hardcore} onChange={(e) => handleLevelDataChange('Data.hardcore', e.target.checked)} className="rounded text-indigo-600 dark:bg-slate-700 dark:border-slate-500" />
-                        Hardcore
+                        {t('world.generate.fields.hardcore')}
                       </label>
                       <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                         <input type="checkbox" checked={!!levelData.Data?.allowCommands} onChange={(e) => handleLevelDataChange('Data.allowCommands', e.target.checked)} className="rounded text-indigo-600 dark:bg-slate-700 dark:border-slate-500" />
-                        Cheats
+                        {t('world.level_config.labels.cheats')}
                       </label>
                     </div>
                   </div>
@@ -486,7 +489,7 @@ export default function WorldTab({ server, token }) {
                 {/* Spawn Section */}
                 <section>
                   <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-gray-200 dark:border-slate-700 pb-2">
-                    <MapPinIcon className="w-4 h-4" /> Spawn Point
+                    <MapPinIcon className="w-4 h-4" /> {t('world.level_config.sections.spawn')}
                   </h3>
                   <div className="grid grid-cols-3 gap-4">
                     {['X', 'Y', 'Z'].map((axis) => (
@@ -501,7 +504,7 @@ export default function WorldTab({ server, token }) {
                 {/* Game Rules Section */}
                 <section>
                   <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-gray-200 dark:border-slate-700 pb-2">
-                    <PuzzlePieceIcon className="w-4 h-4" /> Game Rules
+                    <PuzzlePieceIcon className="w-4 h-4" /> {t('world.level_config.sections.gamerules')}
                   </h3>
                   {gameRules ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
@@ -518,17 +521,17 @@ export default function WorldTab({ server, token }) {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-400 italic">No GameRules found in level.dat</p>
+                    <p className="text-sm text-gray-400 italic">{t('world.level_config.no_rules')}</p>
                   )}
                 </section>
 
               </div>
 
               <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3">
-                <button onClick={() => setIsOptionsOpen(false)} className="px-4 py-2 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition">Cancel</button>
+                <button onClick={() => setIsOptionsOpen(false)} className="px-4 py-2 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition">{t('actions.cancel')}</button>
                 <button onClick={handleSaveOptions} disabled={isLoading} className="px-4 py-2 bg-indigo-600 text-white font-medium hover:bg-indigo-700 rounded-lg shadow-sm transition disabled:opacity-50 flex items-center gap-2">
                   {isLoading && <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />}
-                  Save Changes
+                  {t('actions.save')}
                 </button>
               </div>
             </motion.div>

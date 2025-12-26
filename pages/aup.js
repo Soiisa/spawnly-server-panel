@@ -2,6 +2,7 @@
 import Head from "next/head";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
 
 export default function AcceptableUsePolicy() {
   return (
@@ -70,4 +71,13 @@ export default function AcceptableUsePolicy() {
       <Footer />
     </div>
   );
+}
+
+// --- REQUIRED FOR NAVBAR/FOOTER TRANSLATIONS ---
+export async function getStaticProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, ['common'])),
+    },
+  };
 }

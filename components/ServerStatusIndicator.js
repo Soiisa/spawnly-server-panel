@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
+import { useTranslation } from 'next-i18next'; 
 
 export default function ServerStatusIndicator({ server }) {
-  const { t } = useTranslation('server'); // <--- INITIALIZED
+  // CHANGED: Use 'dashboard' namespace because it's loaded on the dashboard page
+  const { t } = useTranslation('dashboard'); 
   const [status, setStatus] = useState(server.status || 'Unknown');
   const [connected, setConnected] = useState(false);
 
@@ -43,13 +44,13 @@ export default function ServerStatusIndicator({ server }) {
   // Helper to translate status safely
   const getTranslatedStatus = (s) => {
     const key = s?.toLowerCase();
-    return t(`status.${key}`, { defaultValue: s }); // Fallback to raw string if no translation
+    return t(`status.${key}`, { defaultValue: s }); 
   };
 
   if (!server.ipv4) {
     return (
       <span className="bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-gray-400 text-xs px-2 py-1 rounded">
-        {t('status.stopped')} {/* <--- TRANSLATED */}
+        {t('status.stopped', { defaultValue: 'Stopped' })} 
       </span>
     );
   }
@@ -63,8 +64,8 @@ export default function ServerStatusIndicator({ server }) {
             ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" 
             : "bg-gray-100 text-gray-800 dark:bg-slate-700 dark:text-gray-400"
       }`}>
-        {getTranslatedStatus(status)} {/* <--- TRANSLATED DISPLAY */}
-        {!connected && status !== "Stopped" && ` (${t('status.disconnected')})`}
+        {getTranslatedStatus(status)}
+        {!connected && status !== "Stopped" && ` (${t('status.disconnected', { defaultValue: 'Disconnected' })})`}
       </span>
     </div>
   );
