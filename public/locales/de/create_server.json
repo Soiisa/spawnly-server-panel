@@ -1,0 +1,79 @@
+{
+  "title": "Neuen Server erstellen",
+  "labels": {
+    "name": "Servername",
+    "game": "Spiel",
+    "software": "Software",
+    "ram": "RAM-Zuweisung",
+    "cost_est": "Geschätzte Kosten",
+    "your_credits": "Deine Credits"
+  },
+  "placeholders": {
+    "name": "mein-toller-server"
+  },
+  "hints": {
+    "name_rules": "3-20 Zeichen, nur Buchstaben, Zahlen und Bindestriche. Muss eindeutig sein.",
+    "cost_basis": "Basierend auf {{price}} Credits pro GB pro Stunde",
+    "insufficient_credits": "Du benötigst mindestens {{cost}} Credits für diesen Server",
+    "need_more": "Du benötigst {{cost}} Credits mehr"
+  },
+  "buttons": {
+    "cancel": "Abbrechen",
+    "create": "Server erstellen",
+    "creating": "Erstelle...",
+    "fix_errors": "Namensfehler beheben",
+    "insufficient": "Nicht genügend Credits"
+  },
+  "errors": {
+    "required": "Servername ist erforderlich",
+    "min_length": "Der Name muss mindestens 3 Zeichen lang sein",
+    "max_length": "Der Name darf maximal 20 Zeichen lang sein",
+    "invalid_chars": "Der Name darf nur Buchstaben, Zahlen und Bindestriche enthalten",
+    "exists": "Ein Server mit diesem Namen existiert bereits",
+    "credits": "Du hast nicht genügend Credits für diesen Server",
+    "valid_name": "Bitte gib einen gültigen Servernamen ein"
+  },
+  "games": {
+    "minecraft": "Minecraft",
+    "valheim": "Valheim",
+    "rust": "Rust",
+    "terraria": "Terraria",
+    "ark": "ARK: Survival Evolved"
+  },
+  "software_names": {
+    "vanilla": "Vanilla",
+    "paper": "Paper",
+    "purpur": "Purpur",
+    "folia": "Folia",
+    "spigot": "Spigot",
+    "forge": "Forge",
+    "neoforge": "NeoForge",
+    "fabric": "Fabric",
+    "quilt": "Quilt",
+    "velocity": "Velocity",
+    "waterfall": "Waterfall",
+    "plus": "Valheim Plus",
+    "oxide": "Oxide",
+    "tmodloader": "tModLoader"
+  },
+  "software_desc": {
+    "vanilla": "Offizielle Server-Software",
+    "paper": "High-Performance Spigot-Fork",
+    "purpur": "Paper-Fork mit mehr Funktionen",
+    "folia": "Experimenteller Multithread-Server",
+    "spigot": "Standard Plugin-Server",
+    "forge": "Klassischer Mod-Loader",
+    "neoforge": "Moderner Mod-Loader",
+    "fabric": "Leichtgewichtiger Mod-Loader",
+    "quilt": "Community-getriebener Mod-Loader",
+    "velocity": "Proxy-Server",
+    "waterfall": "Legacy Proxy-Server",
+    "modding": "Modding-Plattform",
+    "enhanced": "Verbessert mit Quality-of-Life-Features"
+  },
+  "units": {
+    "gb": "GB",
+    "credits": "Credits",
+    "credits_per_hour": "Credits/Std"
+  }
+}

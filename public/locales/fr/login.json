@@ -1,0 +1,27 @@
+{
+  "header": {
+    "title": "Bon retour",
+    "subtitle": "Connectez-vous pour gérer vos serveurs"
+  },
+  "buttons": {
+    "google_sign_in": "Se connecter avec Google",
+    "sign_in": "Se connecter",
+    "logging_in": "Connexion en cours...",
+    "create_account": "Créer un compte"
+  },
+  "divider": "Ou continuer avec un e-mail",
+  "fields": {
+    "email": {
+      "label": "Adresse e-mail",
+      "placeholder": "vous@exemple.com"
+    },
+    "password": {
+      "label": "Mot de passe",
+      "placeholder": "••••••••",
+      "forgot_link": "Mot de passe oublié ?"
+    }
+  },
+  "footer": {
+    "new_user": "Nouveau sur Spawnly ?"
+  }
+}

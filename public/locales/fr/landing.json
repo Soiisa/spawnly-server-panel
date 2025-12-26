@@ -1,0 +1,30 @@
+{
+  "hero": {
+    "title_prefix": "Premium",
+    "title_highlight": "Hébergement de Serveurs de Jeux",
+    "subtitle": "Déployez des serveurs de jeux haute performance instantanément. Profitez d'une facturation horaire simple, de matériel d'entreprise et d'une flexibilité illimitée.",
+    "get_started": "Commencer",
+    "view_pricing": "Voir les Tarifs"
+  },
+  "features": {
+    "label": "Fonctionnalités",
+    "heading": "Tout ce dont vous avez besoin pour évoluer",
+    "instant": {
+      "title": "Déploiement Instantané",
+      "description": "Votre serveur est en ligne quelques secondes après sa création. Pas de files d'attente, pas de provisionnement manuel."
+    },
+    "billing": {
+      "title": "Facturation à l'Heure",
+      "description": "Payez uniquement pour ce que vous utilisez. Mettez votre serveur en pause pour arrêter la facturation tout en gardant vos fichiers en sécurité."
+    },
+    "storage": {
+      "title": "Stockage NVMe",
+      "description": "Temps de chargement et génération de chunks ultra-rapides avec des disques NVMe de qualité entreprise."
+    }
+  },
+  "stats": {
+    "uptime": "Disponibilité Plateforme",
+    "storage": "Stockage NVMe",
+    "protection": "Protection DDoS"
+  }
+}

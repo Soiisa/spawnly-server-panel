@@ -1,0 +1,28 @@
+{
+  "title": "Abrechnung & Credits",
+  "subtitle": "Verwalte dein Guthaben und sieh dir den Nutzungsverlauf an",
+  "buy_credits": "Credits kaufen",
+  "card": {
+    "title": "Aktuelles Guthaben",
+    "value_approx": "~€{{value}} Wert",
+    "info_title": "Echtzeit-Abrechnung",
+    "info_desc": "Server werden pro Minute Laufzeit abgerechnet. Credits werden automatisch abgezogen, während dein Server läuft."
+  },
+  "history": {
+    "title": "Transaktionsverlauf",
+    "empty": "Keine Transaktionen gefunden.",
+    "session_runtime": "Sitzungslaufzeit",
+    "detailed_charges": "Detaillierte Gebühren",
+    "manual_deduction": "Manuelle Abbuchung",
+    "id_prefix": "ID:"
+  },
+  "units": {
+    "credits": "Credits",
+    "h": "Std",
+    "m": "Min",
+    "s": "Sek"
+  },
+  "tooltips": {
+    "payment_soon": "Zahlungsintegration kommt bald"
+  }
+}

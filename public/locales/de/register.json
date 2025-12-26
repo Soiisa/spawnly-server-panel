@@ -1,0 +1,35 @@
+{
+  "header": {
+    "title": "Konto erstellen",
+    "subtitle": "Starte deinen Server in Sekunden"
+  },
+  "buttons": {
+    "google_signup": "Mit Google registrieren",
+    "create_account": "Konto erstellen",
+    "creating_account": "Erstelle Konto...",
+    "sign_in": "Anmelden"
+  },
+  "divider": {
+    "email": "Oder mit E-Mail registrieren",
+    "existing_account": "Hast du schon ein Konto?"
+  },
+  "fields": {
+    "email": {
+      "label": "E-Mail-Adresse",
+      "placeholder": "du@beispiel.de"
+    },
+    "password": {
+      "label": "Passwort",
+      "placeholder": "Mindestens 6 Zeichen"
+    }
+  },
+  "legal": {
+    "prefix": "Mit der Erstellung eines Kontos stimmst du unseren",
+    "terms": "Nutzungsbedingungen",
+    "and": "und der",
+    "privacy": "Datenschutzerklärung zu"
+  },
+  "messages": {
+    "success": "Erfolg! Bitte überprüfe deine E-Mails, um dein Konto zu bestätigen."
+  }
+}

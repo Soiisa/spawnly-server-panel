@@ -352,5 +352,73 @@
       "saved_reinstall": "Configuration saved. Server will be completely re-installed on next restart.",
       "saved": "Configuration saved successfully."
     }
+  },
+  "world": {
+    "warning_running_title": "Server is Running",
+    "warning_running_desc": "You must stop the server to upload, download, or regenerate the world to prevent data corruption.",
+    "download": {
+      "title": "Download World",
+      "desc": "Backup your current world as a .zip file",
+      "started": "World download started"
+    },
+    "upload": {
+      "title": "Upload World",
+      "desc": "Restore a world from a .zip backup",
+      "success": "World uploaded and extracted successfully!"
+    },
+    "generate": {
+      "title": "Generate New",
+      "desc": "Create a fresh world with custom seeds",
+      "modal_title": "Generate World",
+      "warning_delete": "Warning: This will permanently delete the current world folder.",
+      "success": "New world generated successfully!",
+      "fields": {
+        "level_name": "Level Name",
+        "seed": "Seed",
+        "world_type": "World Type",
+        "datapacks": "Datapacks (URLs)",
+        "datapacks_hint": "Comma separated direct download links.",
+        "structures": "Structures",
+        "hardcore": "Hardcore"
+      },
+      "types": {
+        "default": "Normal",
+        "superflat": "Superflat",
+        "amplified": "Amplified",
+        "large_biomes": "Large Biomes",
+        "single_biome": "Single Biome"
+      }
+    },
+    "level_config": {
+      "title": "Level Config",
+      "desc": "Edit level.dat, seeds, and game rules",
+      "modal_title": "World Configuration (level.dat)",
+      "saved": "World configuration saved!",
+      "sections": {
+        "general": "General",
+        "spawn": "Spawn Point",
+        "gamerules": "Game Rules"
+      },
+      "labels": {
+        "difficulty": "Difficulty",
+        "cheats": "Cheats"
+      },
+      "difficulties": {
+        "peaceful": "Peaceful",
+        "easy": "Easy",
+        "normal": "Normal",
+        "hard": "Hard"
+      },
+      "no_rules": "No GameRules found in level.dat"
+    },
+    "errors": {
+      "server_must_stop": "Server must be stopped to perform this action.",
+      "invalid_zip": "Please select a valid .zip file.",
+      "download_fail": "Failed to download",
+      "upload_fail": "Upload failed",
+      "generate_fail": "Generation failed",
+      "load_level_fail": "Could not find world/level.dat. Has the world been generated?",
+      "save_fail": "Failed to save level.dat"
+    }
   }
 }

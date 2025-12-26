@@ -1,0 +1,75 @@
+{
+  "loading": "Chargement de vos serveurs...",
+  "headers": {
+    "your_servers": "Vos Serveurs",
+    "new_server": "Nouveau Serveur"
+  },
+  "stats": {
+    "total_servers": "Total Serveurs",
+    "active_now": "Actifs maintenant",
+    "total_ram": "RAM Totale",
+    "hourly_cost": "Coût horaire"
+  },
+  "server_card": {
+    "memory": "Mémoire",
+    "address": "Adresse",
+    "start": "Démarrer",
+    "stop": "Arrêter",
+    "processing": "Traitement...",
+    "connection": "Connexion",
+    "players": "Joueurs",
+    "copy_ip": "Copier l'IP",
+    "ram_label": "RAM"
+  },
+  "status": {
+    "stopped": "Arrêté",
+    "starting": "Démarrage",
+    "running": "En ligne",
+    "stopping": "Arrêt en cours",
+    "restarting": "Redémarrage",
+    "provisioning": "Provisionnement",
+    "unknown": "Inconnu",
+    "disconnected": "Déconnecté"
+  },
+  "empty_state": {
+    "title": "Pas encore de serveurs",
+    "description": "Commencez par créer votre premier serveur de jeu haute performance.",
+    "button": "Créer un Serveur"
+  },
+  "messages": {
+    "error_create": "Échec de la création du serveur",
+    "error_delete": "Échec de la suppression du serveur",
+    "error_start": "Échec du démarrage du serveur",
+    "error_stop": "Échec de l'arrêt du serveur",
+    "confirm_delete": "Êtes-vous sûr de vouloir supprimer ce serveur ? Cette action est irréversible.",
+    "dismiss": "Fermer"
+  },
+  "software": {
+    "unknown": "Inconnu",
+    "modpack": "Modpack"
+  },
+  "software_names": {
+    "vanilla": "Vanilla",
+    "paper": "Paper",
+    "purpur": "Purpur",
+    "folia": "Folia",
+    "spigot": "Spigot",
+    "forge": "Forge",
+    "neoforge": "NeoForge",
+    "fabric": "Fabric",
+    "quilt": "Quilt",
+    "velocity": "Velocity",
+    "waterfall": "Waterfall",
+    "plus": "Valheim Plus",
+    "oxide": "Oxide",
+    "tmodloader": "tModLoader"
+  },
+  "tooltips": {
+    "console_files": "Console et Fichiers",
+    "settings": "Paramètres",
+    "delete_server": "Supprimer le Serveur"
+  },
+  "units": {
+    "gb": "Gb"
+  }
+}

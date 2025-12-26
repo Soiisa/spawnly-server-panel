@@ -1,0 +1,79 @@
+{
+  "title": "Criar Novo Servidor",
+  "labels": {
+    "name": "Nome do Servidor",
+    "game": "Jogo",
+    "software": "Software",
+    "ram": "Alocação de RAM",
+    "cost_est": "Custo Estimado",
+    "your_credits": "Os Seus Créditos"
+  },
+  "placeholders": {
+    "name": "o-meu-servidor-espetacular"
+  },
+  "hints": {
+    "name_rules": "3-20 caracteres, apenas letras, números e hífenes. Deve ser único.",
+    "cost_basis": "Baseado em {{price}} créditos por GB por hora",
+    "insufficient_credits": "Precisa de pelo menos {{cost}} créditos para este servidor",
+    "need_more": "Precisa de mais {{cost}} créditos"
+  },
+  "buttons": {
+    "cancel": "Cancelar",
+    "create": "Criar Servidor",
+    "creating": "A criar...",
+    "fix_errors": "Corrigir Erros no Nome",
+    "insufficient": "Créditos Insuficientes"
+  },
+  "errors": {
+    "required": "O nome do servidor é obrigatório",
+    "min_length": "O nome deve ter pelo menos 3 caracteres",
+    "max_length": "O nome deve ter no máximo 20 caracteres",
+    "invalid_chars": "O nome só pode conter letras, números e hífenes",
+    "exists": "Já existe um servidor com este nome",
+    "credits": "Não tem créditos suficientes para este servidor",
+    "valid_name": "Por favor, insira um nome de servidor válido"
+  },
+  "games": {
+    "minecraft": "Minecraft",
+    "valheim": "Valheim",
+    "rust": "Rust",
+    "terraria": "Terraria",
+    "ark": "ARK: Survival Evolved"
+  },
+  "software_names": {
+    "vanilla": "Vanilla",
+    "paper": "Paper",
+    "purpur": "Purpur",
+    "folia": "Folia",
+    "spigot": "Spigot",
+    "forge": "Forge",
+    "neoforge": "NeoForge",
+    "fabric": "Fabric",
+    "quilt": "Quilt",
+    "velocity": "Velocity",
+    "waterfall": "Waterfall",
+    "plus": "Valheim Plus",
+    "oxide": "Oxide",
+    "tmodloader": "tModLoader"
+  },
+  "software_desc": {
+    "vanilla": "Software oficial do servidor",
+    "paper": "Fork do Spigot de alto desempenho",
+    "purpur": "Fork do Paper com mais funcionalidades",
+    "folia": "Servidor experimental multi-thread",
+    "spigot": "Servidor padrão de plugins",
+    "forge": "Carregador de mods clássico",
+    "neoforge": "Carregador de mods moderno",
+    "fabric": "Carregador de mods leve",
+    "quilt": "Carregador de mods impulsionado pela comunidade",
+    "velocity": "Servidor Proxy",
+    "waterfall": "Servidor Proxy legado",
+    "modding": "Plataforma de modding",
+    "enhanced": "Melhorado com funcionalidades de qualidade de vida"
+  },
+  "units": {
+    "gb": "GB",
+    "credits": "créditos",
+    "credits_per_hour": "créditos/hora"
+  }
+}

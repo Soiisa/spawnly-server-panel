@@ -1,0 +1,30 @@
+{
+  "hero": {
+    "title_prefix": "Premium",
+    "title_highlight": "Alojamento de Servidores de Jogo",
+    "subtitle": "Implemente servidores de jogo de alto desempenho instantaneamente. Experimente faturação simples à hora, hardware empresarial e flexibilidade ilimitada.",
+    "get_started": "Começar",
+    "view_pricing": "Ver Preços"
+  },
+  "features": {
+    "label": "Funcionalidades",
+    "heading": "Tudo o que precisa para escalar",
+    "instant": {
+      "title": "Implementação Instantânea",
+      "description": "O seu servidor fica online segundos após a criação. Sem filas de espera, sem aprovisionamento manual."
+    },
+    "billing": {
+      "title": "Faturação à Hora",
+      "description": "Pague apenas pelo que usa. Pause o seu servidor para parar a faturação enquanto mantém os seus ficheiros seguros."
+    },
+    "storage": {
+      "title": "Armazenamento NVMe",
+      "description": "Tempos de carregamento e geração de chunks ultra-rápidos com unidades NVMe de nível empresarial."
+    }
+  },
+  "stats": {
+    "uptime": "Uptime da Plataforma",
+    "storage": "Armazenamento NVMe",
+    "protection": "Proteção DDoS"
+  }
+}

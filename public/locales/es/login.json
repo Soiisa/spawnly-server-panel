@@ -1,0 +1,27 @@
+{
+  "header": {
+    "title": "Bienvenido de nuevo",
+    "subtitle": "Inicia sesión para gestionar tus servidores"
+  },
+  "buttons": {
+    "google_sign_in": "Iniciar sesión con Google",
+    "sign_in": "Iniciar sesión",
+    "logging_in": "Iniciando sesión...",
+    "create_account": "Crear una cuenta"
+  },
+  "divider": "O continúa con email",
+  "fields": {
+    "email": {
+      "label": "Correo electrónico",
+      "placeholder": "tu@ejemplo.com"
+    },
+    "password": {
+      "label": "Contraseña",
+      "placeholder": "••••••••",
+      "forgot_link": "¿Olvidaste tu contraseña?"
+    }
+  },
+  "footer": {
+    "new_user": "¿Nuevo en Spawnly?"
+  }
+}

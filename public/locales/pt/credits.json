@@ -1,0 +1,28 @@
+{
+  "title": "Faturação e Créditos",
+  "subtitle": "Gira o seu saldo e veja o histórico de utilização",
+  "buy_credits": "Comprar Créditos",
+  "card": {
+    "title": "Saldo Atual",
+    "value_approx": "~€{{value}} valor",
+    "info_title": "Faturação em Tempo Real",
+    "info_desc": "Os servidores são faturados por minuto de execução. Os créditos são deduzidos automaticamente enquanto o servidor estiver a correr."
+  },
+  "history": {
+    "title": "Histórico de Transações",
+    "empty": "Nenhuma transação encontrada.",
+    "session_runtime": "Tempo de Sessão",
+    "detailed_charges": "Cobranças Detalhadas",
+    "manual_deduction": "Dedução Manual",
+    "id_prefix": "ID:"
+  },
+  "units": {
+    "credits": "créditos",
+    "h": "h",
+    "m": "m",
+    "s": "s"
+  },
+  "tooltips": {
+    "payment_soon": "Integração de pagamentos em breve"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "title": "Facturation et Crédits",
+  "subtitle": "Gérez votre solde et consultez l'historique d'utilisation",
+  "buy_credits": "Acheter des Crédits",
+  "card": {
+    "title": "Solde Actuel",
+    "value_approx": "~€{{value}} valeur",
+    "info_title": "Facturation en temps réel",
+    "info_desc": "Les serveurs sont facturés par minute de fonctionnement. Les crédits sont déduits automatiquement lorsque votre serveur est en ligne."
+  },
+  "history": {
+    "title": "Historique des Transactions",
+    "empty": "Aucune transaction trouvée.",
+    "session_runtime": "Durée de la session",
+    "detailed_charges": "Détail des frais",
+    "manual_deduction": "Déduction Manuelle",
+    "id_prefix": "ID:"
+  },
+  "units": {
+    "credits": "crédits",
+    "h": "h",
+    "m": "m",
+    "s": "s"
+  },
+  "tooltips": {
+    "payment_soon": "Intégration des paiements bientôt disponible"
+  }
+}

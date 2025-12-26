@@ -1,0 +1,424 @@
+{
+  "loading": "Cargando Centro de Comandos...",
+  "not_found": "Servidor no encontrado.",
+  "actions": {
+    "start": "Iniciar Servidor",
+    "stop": "Detener",
+    "restart": "Reiniciar",
+    "copy_ip": "Clic para copiar",
+    "copied": "¡Copiado!",
+    "edit_motd": "Editar MOTD",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar"
+  },
+  "tabs": {
+    "overview": "Resumen",
+    "schedules": "Programación",
+    "properties": "Propiedades",
+    "console": "Consola",
+    "players": "Jugadores",
+    "software": "Software",
+    "mods": "Mods",
+    "plugins": "Plugins",
+    "mods_plugins": "Mods/Plugins",
+    "world": "Mundo",
+    "files": "Archivos",
+    "backups": "Copias de seguridad"
+  },
+  "connection": {
+    "title": "Conexión",
+    "address": "Dirección del Servidor",
+    "software": "Software",
+    "version": "Versión"
+  },
+  "resources": {
+    "title": "Recursos en Vivo",
+    "active_players": "Jugadores Activos",
+    "server_offline": "El servidor está offline. Inícialo para ver métricas."
+  },
+  "config": {
+    "title": "Configuración",
+    "auto_stop": "Parada Automática (Vacío)",
+    "auto_stop_never": "Nunca",
+    "auto_stop_5m": "5 minutos",
+    "auto_stop_15m": "15 minutos",
+    "auto_stop_30m": "30 minutos",
+    "auto_stop_1h": "1 hora",
+    "stopping_soon": "Deteniendo pronto...",
+    "stopping_in": "Deteniendo en {{time}}",
+    "ram_allocation": "Asignación de RAM",
+    "edit_ram": "Editar"
+  },
+  "billing": {
+    "title": "Estado de Facturación",
+    "hourly_cost": "Costo Horario",
+    "credits_hr": "créditos/h",
+    "est_runtime": "Tiempo Est. de Ejecución",
+    "hours_left": "horas restantes",
+    "warning_low": "Advertencia: Saldo bajo. El servidor podría detenerse pronto."
+  },
+  "errors": {
+    "load_session": "Error al cargar datos de sesión.",
+    "timeout": "La operación expiró. Por favor actualiza.",
+    "update_auto_stop": "Error al actualizar la configuración de parada automática",
+    "failed_action": "Error al {{action}}: {{message}}",
+    "stop_ram": "El servidor debe estar detenido para cambiar la RAM.",
+    "ram_range": "La RAM debe estar entre 2 y 32 GB.",
+    "save_motd": "Error al guardar MOTD"
+  },
+  "notifications": {
+    "ready_title": "¡{{serverName}} está LISTO!",
+    "ready_body": "Tu servidor \"{{serverName}}\" ha terminado de iniciar y está ahora En Ejecución."
+  },
+  "status": {
+    "starting": "Iniciando",
+    "stopping": "Deteniendo",
+    "restarting": "Reiniciando",
+    "running": "En ejecución",
+    "stopped": "Detenido",
+    "offline": "Offline",
+    "initializing": "Inicializando",
+    "unknown": "Desconocido",
+    "provisioning": "Aprovisionando",
+    "disconnected": "Desconectado"
+  },
+  "console": {
+    "title": "Terminal",
+    "status": {
+      "fetching": "Obteniendo registros...",
+      "error": "Error al cargar registros",
+      "ready": "Listo",
+      "live": "Transmisión en Vivo Activa",
+      "connecting": "Conectando...",
+      "waiting": "Esperando registros..."
+    },
+    "controls": {
+      "auto_scroll": "Desplazamiento auto",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "clear": "Limpiar",
+      "toggle_scroll": "Alternar desplazamiento auto"
+    },
+    "input": {
+      "placeholder": "Escribe un comando (ej. /op usuario, /time set day)...",
+      "disconnected": "* La consola está desconectada. Inicia el servidor para enviar comandos."
+    },
+    "errors": {
+      "failed_send": "Error al enviar comando",
+      "no_session": "Sin sesión activa"
+    }
+  },
+  "metrics": {
+    "cpu": "Uso de CPU",
+    "ram": "Uso de RAM",
+    "usage": "Uso"
+  },
+  "properties": {
+    "groups": {
+      "gameplay": "Jugabilidad",
+      "world": "Generación de Mundo",
+      "performance": "Rendimiento y Límites",
+      "security": "Seguridad y Red",
+      "advanced": "Avanzado / Otros"
+    },
+    "labels": {
+      "max-players": "Máx Jugadores",
+      "gamemode": "Modo de Juego",
+      "difficulty": "Dificultad",
+      "online-mode": "Modo Online (Premium)",
+      "white-list": "Activar Whitelist",
+      "pvp": "PvP Activado",
+      "allow-flight": "Permitir Vuelo",
+      "enable-command-block": "Bloques de Comando",
+      "spawn-animals": "Generar Animales",
+      "spawn-monsters": "Generar Monstruos",
+      "spawn-npcs": "Generar NPCs",
+      "force-gamemode": "Forzar Modo de Juego",
+      "player-idle-timeout": "Tiempo de inactividad (min)",
+      "require-resource-pack": "Requerir Paquete de Recursos",
+      "resource-pack": "URL Paquete de Recursos",
+      "resource-pack-prompt": "Aviso Paquete de Recursos",
+      "spawn-protection": "Radio Protección Spawn",
+      "simulation-distance": "Distancia Simulación (Chunks)",
+      "view-distance": "Distancia Visión (Chunks)",
+      "level-seed": "Semilla del Nivel",
+      "level-name": "Nombre del Nivel",
+      "motd": "MOTD",
+      "hardcore": "Modo Hardcore",
+      "rate-limit": "Límite de Tasa",
+      "server-port": "Puerto del Servidor",
+      "enforce-whitelist": "Forzar Whitelist",
+      "enable-rcon": "Habilitar RCON",
+      "level-type": "Tipo de Nivel",
+      "generate-structures": "Generar Estructuras"
+    },
+    "options": {
+      "survival": "Supervivencia",
+      "creative": "Creativo",
+      "adventure": "Aventura",
+      "spectator": "Espectador",
+      "peaceful": "Pacífico",
+      "easy": "Fácil",
+      "normal": "Normal",
+      "hard": "Difícil"
+    },
+    "ui": {
+      "search_placeholder": "Buscar configuraciones...",
+      "visual_view": "Visual",
+      "raw_view": "Archivo Raw",
+      "file_name": "server.properties",
+      "other_matches": "Otras Coincidencias",
+      "unsaved_title": "Cambios sin Guardar",
+      "unsaved_desc": "Los cambios se aplicarán tras reiniciar el servidor.",
+      "discard": "Descartar",
+      "save": "Guardar Cambios",
+      "confirm_discard": "¿Descartar todos los cambios sin guardar?",
+      "save_success": "¡Propiedades guardadas! Reinicia el servidor para aplicar."
+    }
+  },
+  "files": {
+    "upload": "Subir",
+    "empty": "Esta carpeta está vacía",
+    "filter_tooltip": "Alternar archivos ocultos",
+    "refresh": "Actualizar",
+    "download_fail": "Error en descarga",
+    "upload_fail": "Error en subida",
+    "load_fail": "Error al cargar archivos",
+    "save_fail": "Error al guardar",
+    "delete_fail": "Error al eliminar",
+    "delete_confirm": "¿Eliminar {{name}}? Esta acción no se puede deshacer.",
+    "columns": {
+      "name": "Nombre",
+      "size": "Tamaño",
+      "modified": "Modificado",
+      "actions": "Acciones"
+    },
+    "editor": {
+      "save_changes": "Guardar Cambios",
+      "saving": "Guardando..."
+    }
+  },
+  "backups": {
+    "title": "Copias de seguridad",
+    "subtitle": "Gestiona instantáneas y configura copias automáticas.",
+    "create": "Crear Copia",
+    "refresh": "Actualizar Lista",
+    "settings_title": "Configuración de Copia Automática",
+    "enable_auto": "Activar Copia Automática",
+    "frequency": "Frecuencia (Horas)",
+    "retention": "Retención (Cantidad)",
+    "save_settings": "Guardar Configuración",
+    "empty_title": "No se encontraron copias",
+    "empty_desc": "Crea una copia manualmente o activa las copias automáticas.",
+    "restore": "Restaurar",
+    "stop_to_restore": "Detener para Restaurar",
+    "pending_title": "Restauración Pendiente",
+    "pending_desc": "Una restauración está en cola. La próxima vez que hagas clic en Iniciar, el servidor se borrará y se restaurará desde:",
+    "alerts": {
+      "started": "¡Copia iniciada! Aparecerá en la lista pronto.",
+      "queued": "¡Restauración en Cola! La copia se aplicará automáticamente cuando INICIES el servidor.",
+      "stop_required": "El servidor debe estar TOTALMENTE DETENIDO para programar una restauración.",
+      "confirm_restore": "ADVERTENCIA: Esto programará una restauración.\n\nLa PRÓXIMA vez que hagas clic en 'Iniciar', tus archivos actuales serán ELIMINADOS y reemplazados con esta copia.\n\n¿Continuar?"
+    }
+  },
+  "players": {
+    "online_title": "Jugadores Online",
+    "no_online": "Sin jugadores online",
+    "tabs": {
+      "whitelist": "Whitelist",
+      "ops": "Operadores",
+      "banned_players": "Jugadores Baneados",
+      "banned_ips": "IPs Baneadas"
+    },
+    "empty_list": "No se encontraron entradas para esta lista.",
+    "add_new": "Añadir Nuevo",
+    "search_placeholder": "Buscar...",
+    "form": {
+      "player_name": "Nombre del Jugador",
+      "ip_address": "Dirección IP",
+      "op_level": "Nivel de Op",
+      "bypass_limit": "Ignorar Límite de Jugadores",
+      "reason": "Razón",
+      "expires": "Expira",
+      "forever": "Para siempre",
+      "specific_date": "Fecha Específica",
+      "confirm": "Confirmar"
+    },
+    "levels": {
+      "l1": "Nivel 1 (Ignorar protección)",
+      "l2": "Nivel 2 (Bloques de comando)",
+      "l3": "Nivel 3 (Expulsar/Banear)",
+      "l4": "Nivel 4 (Detener/Operador)"
+    }
+  },
+  "schedules": {
+    "title": "Automatización",
+    "subtitle": "Programa reinicios, comandos y acciones de energía.",
+    "new_task": "Nueva Tarea",
+    "cancel": "Cancelar",
+    "create": "Crear Tarea",
+    "form": {
+      "action": "Acción",
+      "when": "Cuándo",
+      "start_immediately": "Iniciar Inmediatamente",
+      "command": "Comando",
+      "repeat_every": "Repetir Cada",
+      "immediate_warning": "La tarea se ejecutará en 1 minuto.",
+      "placeholder_command": "say Servidor reiniciando pronto...",
+      "hours": "Horas",
+      "minutes": "Minutos"
+    },
+    "actions": {
+      "start": "Iniciar Servidor",
+      "stop": "Detener Servidor",
+      "restart": "Reiniciar Servidor",
+      "command": "Enviar Comando"
+    },
+    "list": {
+      "empty_title": "Sin tareas programadas",
+      "empty_desc": "Crea una tarea para automatizar tu servidor.",
+      "runs_prefix": "Ejecuta",
+      "processing": "Procesando...",
+      "last_result": "Último:"
+    }
+  },
+  "software": {
+    "tabs": {
+      "standard": "Servidor Estándar",
+      "modpacks": "Modpacks"
+    },
+    "titles": {
+      "platform": "Plataforma de Software",
+      "version": "Versión del Juego",
+      "provider": "Elige un Proveedor"
+    },
+    "badges": {
+      "vanilla": "Vanilla",
+      "plugins": "Plugins",
+      "mods": "Mods",
+      "proxy": "Proxy",
+      "release": "Lanzamiento",
+      "beta": "Beta",
+      "alpha": "Alpha",
+      "server_pack": "Server Pack"
+    },
+    "buttons": {
+      "show_all": "Mostrar Todo",
+      "show_stable": "Mostrar Estables",
+      "search": "Buscar",
+      "select_pack": "Seleccionar Pack",
+      "change_pack": "Cambiar Pack",
+      "install": "Instalar Modpack",
+      "save": "Guardar Cambios",
+      "confirm_install": "Confirmar e Instalar",
+      "resolving": "Resolviendo Archivos del Servidor..."
+    },
+    "placeholders": {
+      "search_version": "Buscar versión...",
+      "search_modpack": "Buscar modpacks {{provider}}...",
+      "custom_url": "https://ejemplo.com/modpack.zip"
+    },
+    "modpacks": {
+      "custom_zip": "Zip Personalizado",
+      "url_label": "URL de Descarga Directa (Zip)",
+      "url_hint": "Debe ser un enlace directo a un archivo zip que contenga los archivos del servidor.",
+      "java_label": "Versión de Java Objetivo",
+      "java_hint": "Esto determina qué Java Runtime Environment se instalará en el servidor.",
+      "no_desc": "Sin descripción proporcionada.",
+      "select_version": "Selecciona una versión para instalar",
+      "released": "Lanzado:",
+      "no_files": "No se encontraron archivos de servidor para este modpack."
+    },
+    "impact": {
+      "high": "Cambio de Alto Impacto",
+      "confirm": "Confirmar Cambio",
+      "clean_install": "Cambiar de {{old}} a {{new}} requiere una instalación limpia. TODOS los archivos existentes serán eliminados.",
+      "modpack_install": "Instalar un Modpack requiere una reinstalación completa del servidor. TODOS los archivos existentes (mundo, configuraciones) serán eliminados.",
+      "version_change": "Cambiando versión de {{old}} a {{new}}. Los archivos existentes se preservan, pero bajar de versión puede corromper tu mundo.",
+      "backup_download": "¡Descarga los archivos de tu mundo antes de proceder!",
+      "backup_recommend": "Recomendamos hacer una copia de seguridad de tu mundo antes de cambiar versiones.",
+      "new_config": "Nueva configuración del servidor."
+    },
+    "errors": {
+      "invalid_url": "Por favor ingresa una URL HTTP/HTTPS válida para el archivo zip.",
+      "no_download": "Este archivo no tiene una URL de descarga.",
+      "resolve_fail": "Error al resolver Server Pack: {{error}}.",
+      "fetch_fail": "Error al cargar versiones: {{error}}",
+      "modpack_fail": "Error al obtener modpacks: {{error}}",
+      "versions_fail": "Error al cargar versiones del modpack"
+    },
+    "messages": {
+      "saved_reinstall": "Configuración guardada. El servidor se reinstalará completamente en el próximo reinicio.",
+      "saved": "Configuración guardada exitosamente."
+    }
+  },
+  "world": {
+    "warning_running_title": "Servidor en Ejecución",
+    "warning_running_desc": "Debes detener el servidor para subir, descargar o regenerar el mundo para evitar corrupción de datos.",
+    "download": {
+      "title": "Descargar Mundo",
+      "desc": "Haz una copia de tu mundo actual como archivo .zip",
+      "started": "Descarga del mundo iniciada"
+    },
+    "upload": {
+      "title": "Subir Mundo",
+      "desc": "Restaura un mundo desde una copia .zip",
+      "success": "¡Mundo subido y extraído exitosamente!"
+    },
+    "generate": {
+      "title": "Generar Nuevo",
+      "desc": "Crea un mundo fresco con semillas personalizadas",
+      "modal_title": "Generar Mundo",
+      "warning_delete": "Advertencia: Esto eliminará permanentemente la carpeta del mundo actual.",
+      "success": "¡Nuevo mundo generado exitosamente!",
+      "fields": {
+        "level_name": "Nombre del Nivel",
+        "seed": "Semilla (Seed)",
+        "world_type": "Tipo de Mundo",
+        "datapacks": "Datapacks (URLs)",
+        "datapacks_hint": "Enlaces de descarga directa separados por comas.",
+        "structures": "Estructuras",
+        "hardcore": "Hardcore"
+      },
+      "types": {
+        "default": "Normal",
+        "superflat": "Superplano",
+        "amplified": "Amplificado",
+        "large_biomes": "Biomas Grandes",
+        "single_biome": "Bioma Único"
+      }
+    },
+    "level_config": {
+      "title": "Configuración del Nivel",
+      "desc": "Edita level.dat, semillas y reglas del juego",
+      "modal_title": "Configuración del Mundo (level.dat)",
+      "saved": "¡Configuración del mundo guardada!",
+      "sections": {
+        "general": "General",
+        "spawn": "Punto de Spawn",
+        "gamerules": "Reglas del Juego"
+      },
+      "labels": {
+        "difficulty": "Dificultad",
+        "cheats": "Trucos"
+      },
+      "difficulties": {
+        "peaceful": "Pacífico",
+        "easy": "Fácil",
+        "normal": "Normal",
+        "hard": "Difícil"
+      },
+      "no_rules": "No se encontraron GameRules en level.dat"
+    },
+    "errors": {
+      "server_must_stop": "El servidor debe estar detenido para realizar esta acción.",
+      "invalid_zip": "Por favor selecciona un archivo .zip válido.",
+      "download_fail": "Error al descargar",
+      "upload_fail": "Error al subir",
+      "generate_fail": "Error en generación",
+      "load_level_fail": "No se pudo encontrar world/level.dat. ¿Se ha generado el mundo?",
+      "save_fail": "Error al guardar level.dat"
+    }
+  }
+}

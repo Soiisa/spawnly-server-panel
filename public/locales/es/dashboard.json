@@ -1,0 +1,75 @@
+{
+  "loading": "Cargando tus servidores...",
+  "headers": {
+    "your_servers": "Tus Servidores",
+    "new_server": "Nuevo Servidor"
+  },
+  "stats": {
+    "total_servers": "Total de Servidores",
+    "active_now": "Activos Ahora",
+    "total_ram": "RAM Total",
+    "hourly_cost": "Costo por Hora"
+  },
+  "server_card": {
+    "memory": "Memoria",
+    "address": "Dirección",
+    "start": "Iniciar",
+    "stop": "Detener",
+    "processing": "Procesando...",
+    "connection": "Conexión",
+    "players": "Jugadores",
+    "copy_ip": "Copiar IP",
+    "ram_label": "RAM"
+  },
+  "status": {
+    "stopped": "Detenido",
+    "starting": "Iniciando",
+    "running": "En ejecución",
+    "stopping": "Deteniendo",
+    "restarting": "Reiniciando",
+    "provisioning": "Aprovisionando",
+    "unknown": "Desconocido",
+    "disconnected": "Desconectado"
+  },
+  "empty_state": {
+    "title": "Sin Servidores Aún",
+    "description": "Comienza creando tu primer servidor de juegos de alto rendimiento.",
+    "button": "Crear Servidor"
+  },
+  "messages": {
+    "error_create": "Error al crear el servidor",
+    "error_delete": "Error al eliminar el servidor",
+    "error_start": "Error al iniciar el servidor",
+    "error_stop": "Error al detener el servidor",
+    "confirm_delete": "¿Estás seguro de que quieres eliminar este servidor? Esta acción no se puede deshacer.",
+    "dismiss": "Descartar"
+  },
+  "software": {
+    "unknown": "Desconocido",
+    "modpack": "Modpack"
+  },
+  "software_names": {
+    "vanilla": "Vanilla",
+    "paper": "Paper",
+    "purpur": "Purpur",
+    "folia": "Folia",
+    "spigot": "Spigot",
+    "forge": "Forge",
+    "neoforge": "NeoForge",
+    "fabric": "Fabric",
+    "quilt": "Quilt",
+    "velocity": "Velocity",
+    "waterfall": "Waterfall",
+    "plus": "Valheim Plus",
+    "oxide": "Oxide",
+    "tmodloader": "tModLoader"
+  },
+  "tooltips": {
+    "console_files": "Consola y Archivos",
+    "settings": "Configuración",
+    "delete_server": "Eliminar Servidor"
+  },
+  "units": {
+    "gb": "GB"
+  }
+}

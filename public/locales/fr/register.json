@@ -1,0 +1,35 @@
+{
+  "header": {
+    "title": "Créer un compte",
+    "subtitle": "Démarrez votre serveur en quelques secondes"
+  },
+  "buttons": {
+    "google_signup": "S'inscrire avec Google",
+    "create_account": "Créer un Compte",
+    "creating_account": "Création du Compte...",
+    "sign_in": "Se connecter"
+  },
+  "divider": {
+    "email": "Ou s'inscrire avec un e-mail",
+    "existing_account": "Vous avez déjà un compte ?"
+  },
+  "fields": {
+    "email": {
+      "label": "Adresse e-mail",
+      "placeholder": "vous@exemple.com"
+    },
+    "password": {
+      "label": "Mot de passe",
+      "placeholder": "Minimum 6 caractères"
+    }
+  },
+  "legal": {
+    "prefix": "En créant un compte, vous acceptez nos",
+    "terms": "Conditions d'utilisation",
+    "and": "et",
+    "privacy": "Politique de confidentialité"
+  },
+  "messages": {
+    "success": "Succès ! Veuillez vérifier votre e-mail pour confirmer votre compte."
+  }
+}

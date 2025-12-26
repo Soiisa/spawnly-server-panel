@@ -15,7 +15,21 @@
     "address": "Address",
     "start": "Start",
     "stop": "Stop",
-    "processing": "Processing..."
+    "processing": "Processing...",
+    "connection": "Connection",
+    "players": "Players",
+    "copy_ip": "Copy IP",
+    "ram_label": "RAM"
+  },
+  "status": {
+    "stopped": "Stopped",
+    "starting": "Starting",
+    "running": "Running",
+    "stopping": "Stopping",
+    "restarting": "Restarting",
+    "provisioning": "Provisioning",
+    "unknown": "Unknown",
+    "disconnected": "Disconnected"
   },
   "empty_state": {
     "title": "No Servers Yet",

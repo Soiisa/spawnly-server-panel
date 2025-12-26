@@ -1,0 +1,35 @@
+{
+  "title": "Tarification Simple et Transparente",
+  "subtitle": "Nous croyons au paiement uniquement pour les ressources que vous utilisez.",
+  "credit_explanation": "1 Crédit = 1 Go de RAM par heure.",
+  "calculator": {
+    "title": "Personnalisez votre Serveur",
+    "subtitle": "Glissez pour ajuster l'allocation de RAM",
+    "ram_label": "Mémoire (RAM)",
+    "capabilities": "Capacités :",
+    "estimated_cost": "Coût Estimé",
+    "hourly_rate": "Taux Horaire",
+    "deploy_btn": "Déployer Serveur {{ram}}Go",
+    "no_card": "Pas de carte de crédit requise pour s'inscrire."
+  },
+  "recommendations": {
+    "small": "Bon pour les petits serveurs Vanilla jusqu'à 5 amis. Non recommandé pour les mods.",
+    "medium": "Parfait pour Vanilla jusqu'à 10 amis, ou modpacks légers (env. 50 mods).",
+    "standard": "Idéal pour les modpacks standard (100+ mods) ou serveurs Vanilla avec 20+ joueurs.",
+    "heavy": "Idéal pour les modpacks lourds (200+ mods) ou les communautés plus larges (40+ joueurs).",
+    "very_heavy": "Performance puissante pour les modpacks très lourds (300+ mods) ou 60+ joueurs.",
+    "massive": "Puissance d'entreprise pour les réseaux massifs, 100+ joueurs, ou les modpacks les plus exigeants."
+  },
+  "features": {
+    "ddos": "Protection DDoS Incluse",
+    "slots": "Slots de Joueurs Illimités",
+    "files": "Accès aux Fichiers",
+    "mods": "Support Mods et Plugins",
+    "setup": "Configuration Instantanée",
+    "uptime": "Disponibilité Plateforme 99.9%"
+  },
+  "faq": {
+    "title": "Comment fonctionne la facturation ?",
+    "answer": "Spawnly utilise un système basé sur des crédits. Vous achetez des crédits (1 Crédit ≈ 0,01 €), et nous les déduisons de votre solde chaque minute où votre serveur est <1>En ligne</1>. Si vous <3>Arrêtez</3> votre serveur, la facturation s'arrête immédiatement, mais vos fichiers sont conservés gratuitement."
+  }
+}

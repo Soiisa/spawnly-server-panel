@@ -1,0 +1,75 @@
+{
+  "loading": "A carregar os seus servidores...",
+  "headers": {
+    "your_servers": "Os Seus Servidores",
+    "new_server": "Novo Servidor"
+  },
+  "stats": {
+    "total_servers": "Total de Servidores",
+    "active_now": "Ativos Agora",
+    "total_ram": "RAM Total",
+    "hourly_cost": "Custo por Hora"
+  },
+  "server_card": {
+    "memory": "Memória",
+    "address": "Endereço",
+    "start": "Iniciar",
+    "stop": "Parar",
+    "processing": "A processar...",
+    "connection": "Ligação",
+    "players": "Jogadores",
+    "copy_ip": "Copiar IP",
+    "ram_label": "RAM"
+  },
+  "status": {
+    "stopped": "Parado",
+    "starting": "A iniciar",
+    "running": "Em execução",
+    "stopping": "A parar",
+    "restarting": "A reiniciar",
+    "provisioning": "A aprovisionar",
+    "unknown": "Desconhecido",
+    "disconnected": "Desligado"
+  },
+  "empty_state": {
+    "title": "Ainda Sem Servidores",
+    "description": "Comece por criar o seu primeiro servidor de jogo de alto desempenho.",
+    "button": "Criar Servidor"
+  },
+  "messages": {
+    "error_create": "Falha ao criar servidor",
+    "error_delete": "Falha ao eliminar servidor",
+    "error_start": "Falha ao iniciar servidor",
+    "error_stop": "Falha ao parar servidor",
+    "confirm_delete": "Tem a certeza que deseja eliminar este servidor? Esta ação não pode ser desfeita.",
+    "dismiss": "Dispensar"
+  },
+  "software": {
+    "unknown": "Desconhecido",
+    "modpack": "Modpack"
+  },
+  "software_names": {
+    "vanilla": "Vanilla",
+    "paper": "Paper",
+    "purpur": "Purpur",
+    "folia": "Folia",
+    "spigot": "Spigot",
+    "forge": "Forge",
+    "neoforge": "NeoForge",
+    "fabric": "Fabric",
+    "quilt": "Quilt",
+    "velocity": "Velocity",
+    "waterfall": "Waterfall",
+    "plus": "Valheim Plus",
+    "oxide": "Oxide",
+    "tmodloader": "tModLoader"
+  },
+  "tooltips": {
+    "console_files": "Consola e Ficheiros",
+    "settings": "Definições",
+    "delete_server": "Eliminar Servidor"
+  },
+  "units": {
+    "gb": "GB"
+  }
+}

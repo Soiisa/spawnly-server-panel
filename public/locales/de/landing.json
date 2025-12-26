@@ -1,0 +1,30 @@
+{
+  "hero": {
+    "title_prefix": "Premium",
+    "title_highlight": "Gameserver-Hosting",
+    "subtitle": "Erstelle Hochleistungs-Gameserver sofort. Erlebe einfache stündliche Abrechnung, Enterprise-Hardware und unbegrenzte Flexibilität.",
+    "get_started": "Loslegen",
+    "view_pricing": "Preise ansehen"
+  },
+  "features": {
+    "label": "Funktionen",
+    "heading": "Alles, was du zum Skalieren brauchst",
+    "instant": {
+      "title": "Sofortige Bereitstellung",
+      "description": "Dein Server ist Sekunden nach der Erstellung online. Keine Warteschlangen, keine manuelle Einrichtung."
+    },
+    "billing": {
+      "title": "Stündliche Abrechnung",
+      "description": "Zahle nur für das, was du nutzt. Pausiere deinen Server, um die Abrechnung zu stoppen, während deine Dateien sicher bleiben."
+    },
+    "storage": {
+      "title": "NVMe Speicher",
+      "description": "Blitzschnelle Ladezeiten und Chunk-Generierung mit Enterprise-Grade NVMe-Laufwerken."
+    }
+  },
+  "stats": {
+    "uptime": "Plattform-Verfügbarkeit",
+    "storage": "NVMe Speicher",
+    "protection": "DDoS-Schutz"
+  }
+}

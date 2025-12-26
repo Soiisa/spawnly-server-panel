@@ -1,0 +1,27 @@
+{
+  "header": {
+    "title": "Willkommen zurück",
+    "subtitle": "Melde dich an, um deine Server zu verwalten"
+  },
+  "buttons": {
+    "google_sign_in": "Mit Google anmelden",
+    "sign_in": "Anmelden",
+    "logging_in": "Anmeldung...",
+    "create_account": "Konto erstellen"
+  },
+  "divider": "Oder mit E-Mail fortfahren",
+  "fields": {
+    "email": {
+      "label": "E-Mail-Adresse",
+      "placeholder": "du@beispiel.de"
+    },
+    "password": {
+      "label": "Passwort",
+      "placeholder": "••••••••",
+      "forgot_link": "Passwort vergessen?"
+    }
+  },
+  "footer": {
+    "new_user": "Neu bei Spawnly?"
+  }
+}
