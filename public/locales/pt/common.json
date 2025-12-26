@@ -2,7 +2,8 @@
   "nav": {
     "dashboard": "Dashboard",
     "billing": "Faturação",
-    "logout": "Terminar sessão"
+    "logout": "Terminar sessão",
+    "settings": "Definições"
   },
   "theme": {
     "switch_light": "Mudar para Modo Claro",
@@ -30,5 +31,15 @@
     "message": "Utilizamos cookies para garantir a melhor experiência no Spawnly. Ao continuar, concorda com o nosso",
     "and": "e",
     "accept": "Aceitar e Continuar"
+  },
+  "settings": {
+    "title": "Definições de Utilizador",
+    "language": "Idioma",
+    "language_desc": "Selecione o seu idioma preferido",
+    "appearance": "Aparência",
+    "appearance_desc": "Alternar modo escuro",
+    "security": "Segurança",
+    "security_desc": "Gerir a sua palavra-passe e segurança da conta",
+    "change_password": "Alterar Palavra-passe"
   }
 }
