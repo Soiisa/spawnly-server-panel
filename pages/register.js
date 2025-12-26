@@ -6,8 +6,11 @@ import { useRouter } from "next/router";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { EnvelopeIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { useTranslation, Trans } from "next-i18next"; // <--- IMPORTED Trans
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
 
 export default function Register() {
+  const { t } = useTranslation('auth'); // <--- INITIALIZED
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,8 +32,7 @@ export default function Register() {
     if (error) {
       setMessage(error.message);
     } else {
-      setMessage("Success! Please check your email to confirm your account.");
-      // Optional: redirect to login after a delay
+      setMessage(t('success_check_email')); // <--- TRANSLATED
       setTimeout(() => router.push("/login"), 3000);
     }
   };
@@ -53,10 +55,10 @@ export default function Register() {
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-              Create an account
+              {t('create_account')} {/* <--- TRANSLATED */}
             </h2>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Start your server in seconds
+              {t('register_desc')} {/* <--- TRANSLATED */}
             </p>
           </div>
 
@@ -64,7 +66,7 @@ export default function Register() {
             <form className="space-y-6" onSubmit={handleRegister}>
               {message && (
                 <div className={`p-3 rounded-lg text-sm text-center border ${
-                  message.includes("Success") 
+                  message.includes("Success") || message === t('success_check_email')
                     ? "bg-green-50 dark:bg-green-900/30 border-green-100 dark:border-green-900/50 text-green-700 dark:text-green-300" 
                     : "bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-900/50 text-red-600 dark:text-red-300"
                 }`}>
@@ -95,7 +97,7 @@ export default function Register() {
                     fill="#EA4335"
                   />
                 </svg>
-                Sign up with Google
+                {t('google_sign_up')} {/* <--- TRANSLATED */}
               </button>
 
               <div className="relative">
@@ -104,14 +106,14 @@ export default function Register() {
                 </div>
                 <div className="relative flex justify-center text-sm">
                   <span className="px-2 bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400">
-                    Or register with email
+                    {t('or_email_register')} {/* <--- TRANSLATED */}
                   </span>
                 </div>
               </div>
 
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Email address
+                  {t('email_label')} {/* <--- TRANSLATED */}
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -126,14 +128,14 @@ export default function Register() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-teal-500 focus:border-teal-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
-                    placeholder="you@example.com"
+                    placeholder={t('placeholders.email')}
                   />
                 </div>
               </div>
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Password
+                  {t('password_label')} {/* <--- TRANSLATED */}
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -149,21 +151,23 @@ export default function Register() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-teal-500 focus:border-teal-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
-                    placeholder="Minimum 6 characters"
+                    placeholder={t('placeholders.min_chars')}
                   />
                 </div>
               </div>
 
-              {/* Legal Disclaimer */}
+              {/* Legal Disclaimer with Trans component for links */}
               <p className="text-xs text-center text-gray-500 dark:text-gray-400 px-4">
-                By creating an account, you agree to our{' '}
-                <Link href="/terms" className="text-teal-600 dark:text-teal-400 hover:underline">
-                  Terms of Service
-                </Link>{' '}
-                and{' '}
-                <Link href="/privacy" className="text-teal-600 dark:text-teal-400 hover:underline">
-                  Privacy Policy
-                </Link>.
+                <Trans
+                  i18nKey="terms_agreement"
+                  ns="auth"
+                  components={[
+                    <span key="0" />,
+                    <Link href="/terms" key="1" className="text-teal-600 dark:text-teal-400 hover:underline" />,
+                    <span key="2" />,
+                    <Link href="/privacy" key="3" className="text-teal-600 dark:text-teal-400 hover:underline" />
+                  ]}
+                />
               </p>
 
               <button
@@ -171,7 +175,7 @@ export default function Register() {
                 disabled={busy}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-teal-500 hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all disabled:opacity-50"
               >
-                {busy ? "Creating Account..." : "Create Account"}
+                {busy ? t('creating_account') : t('create_account_btn')} {/* <--- TRANSLATED */}
               </button>
             </form>
 
@@ -182,7 +186,7 @@ export default function Register() {
                 </div>
                 <div className="relative flex justify-center text-sm">
                   <span className="px-2 bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400">
-                    Already have an account?
+                    {t('existing_user')} {/* <--- TRANSLATED */}
                   </span>
                 </div>
               </div>
@@ -192,7 +196,7 @@ export default function Register() {
                   href="/login"
                   className="w-full flex justify-center py-3 px-4 border border-gray-300 dark:border-slate-600 rounded-lg shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none transition-all"
                 >
-                  Sign in
+                  {t('sign_in_link')} {/* <--- TRANSLATED */}
                 </Link>
               </div>
             </div>
@@ -202,4 +206,16 @@ export default function Register() {
       <Footer />
     </div>
   );
+}
+
+// --- REQUIRED FOR NEXT-I18NEXT ---
+export async function getStaticProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, [
+        'common',
+        'auth'
+      ])),
+    },
+  };
 }

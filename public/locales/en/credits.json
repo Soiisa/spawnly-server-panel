@@ -13,6 +13,16 @@
     "empty": "No transactions found.",
     "session_runtime": "Session Runtime",
     "detailed_charges": "Detailed Charges",
-    "manual_deduction": "Manual Deduction"
+    "manual_deduction": "Manual Deduction",
+    "id_prefix": "ID:"
+  },
+  "units": {
+    "credits": "credits",
+    "h": "h",
+    "m": "m",
+    "s": "s"
+  },
+  "tooltips": {
+    "payment_soon": "Payment integration coming soon"
   }
 }

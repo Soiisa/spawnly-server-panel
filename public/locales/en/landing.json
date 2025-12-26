@@ -1,30 +1,30 @@
 {
   "hero": {
-    "title_prefix": "Spawn a server in",
-    "title_highlight": "seconds",
-    "subtitle": "Instant game server hosting with flexible, hourly billing. Pay only for what you use. No monthly contracts, no hidden fees.",
+    "title_prefix": "Premium",
+    "title_highlight": "Game Server Hosting",
+    "subtitle": "Deploy high-performance game servers instantly. Experience simple hourly billing, enterprise hardware, and unlimited flexibility.",
     "get_started": "Get Started",
     "view_pricing": "View Pricing"
   },
   "features": {
     "label": "Features",
-    "heading": "Everything you need to play",
+    "heading": "Everything you need to scale",
     "instant": {
       "title": "Instant Deployment",
-      "description": "Launch Minecraft, Valheim, or Rust servers in under 60 seconds. Our automated provisioning handles the heavy lifting."
+      "description": "Your server is online seconds after creation. No waiting queues, no manual provisioning."
     },
     "billing": {
       "title": "Hourly Billing",
-      "description": "Stop paying for idle servers. Top up credits and only pay while your server is running. Perfect for weekend gaming sessions."
+      "description": "Pay only for what you use. Pause your server to stop billing while keeping your files safe."
     },
     "storage": {
-      "title": "Persistent Storage",
-      "description": "Your world files are safe even when the server is stopped. We automatically back up your data to secure cloud storage."
+      "title": "NVMe Storage",
+      "description": "Lightning fast load times and chunk generation with enterprise-grade NVMe drives."
     }
   },
   "stats": {
-    "uptime": "Uptime",
-    "storage": "Fast Storage",
-    "protection": "Protection Included"
+    "uptime": "Platform Uptime",
+    "storage": "NVMe Storage",
+    "protection": "DDoS Protection"
   }
 }

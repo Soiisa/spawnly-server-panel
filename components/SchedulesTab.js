@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { format, formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'next-i18next'; // <--- IMPORTED
 import { 
   PlusIcon, TrashIcon, ArrowPathIcon, CommandLineIcon, 
   PowerIcon, ClockIcon, CalendarDaysIcon, PlayIcon, StopIcon,
@@ -9,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function SchedulesTab({ server }) {
+  const { t } = useTranslation('server'); // <--- INITIALIZED
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -20,7 +22,7 @@ export default function SchedulesTab({ server }) {
   const [isRepeat, setIsRepeat] = useState(false);
   const [interval, setInterval] = useState(24);
   const [unit, setUnit] = useState('hours');
-  const [startImmediately, setStartImmediately] = useState(false); // <--- NEW STATE
+  const [startImmediately, setStartImmediately] = useState(false);
 
   useEffect(() => {
     fetchSchedules();
@@ -88,10 +90,10 @@ export default function SchedulesTab({ server }) {
 
   const getActionStyle = (act) => {
     switch(act) {
-      case 'start': return { icon: PlayIcon, color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400', label: 'Start Server' };
-      case 'stop': return { icon: StopIcon, color: 'text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400', label: 'Stop Server' };
-      case 'restart': return { icon: ArrowPathIcon, color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400', label: 'Restart Server' };
-      case 'command': return { icon: CommandLineIcon, color: 'text-slate-600 bg-slate-100 dark:bg-slate-700 dark:text-slate-300', label: 'Send Command' };
+      case 'start': return { icon: PlayIcon, color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400', label: t('schedules.actions.start') };
+      case 'stop': return { icon: StopIcon, color: 'text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400', label: t('schedules.actions.stop') };
+      case 'restart': return { icon: ArrowPathIcon, color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400', label: t('schedules.actions.restart') };
+      case 'command': return { icon: CommandLineIcon, color: 'text-slate-600 bg-slate-100 dark:bg-slate-700 dark:text-slate-300', label: t('schedules.actions.command') };
       default: return { icon: PowerIcon, color: 'text-gray-600 bg-gray-100', label: act };
     }
   };
@@ -101,8 +103,8 @@ export default function SchedulesTab({ server }) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Automation</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Schedule restarts, commands, and power actions.</p>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('schedules.title')}</h2> {/* <--- TRANSLATED */}
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t('schedules.subtitle')}</p> {/* <--- TRANSLATED */}
         </div>
         <button
           onClick={() => setIsCreating(!isCreating)}
@@ -113,7 +115,7 @@ export default function SchedulesTab({ server }) {
           }`}
         >
           <PlusIcon className={`w-5 h-5 transition-transform ${isCreating ? 'rotate-45' : ''}`} />
-          {isCreating ? 'Cancel' : 'New Task'}
+          {isCreating ? t('schedules.cancel') : t('schedules.new_task')} {/* <--- TRANSLATED */}
         </button>
       </div>
 
@@ -131,7 +133,7 @@ export default function SchedulesTab({ server }) {
                 
                 {/* Action Selection */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Action</label>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('schedules.form.action')}</label>
                   <div className="grid grid-cols-2 gap-2">
                     {['restart', 'start', 'stop', 'command'].map((act) => {
                       const style = getActionStyle(act);
@@ -148,7 +150,7 @@ export default function SchedulesTab({ server }) {
                           }`}
                         >
                           <style.icon className={`w-5 h-5 ${isSelected ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`} />
-                          {act.charAt(0).toUpperCase() + act.slice(1)}
+                          {style.label}
                         </button>
                       );
                     })}
@@ -158,7 +160,7 @@ export default function SchedulesTab({ server }) {
                 {/* Timing & Details */}
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">When</label>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('schedules.form.when')}</label>
                     
                     {/* START IMMEDIATELY TOGGLE */}
                     <div className="flex items-center gap-2 mb-3">
@@ -169,7 +171,7 @@ export default function SchedulesTab({ server }) {
                         >
                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${startImmediately ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Start Immediately</span>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('schedules.form.start_immediately')}</span>
                     </div>
 
                     {!startImmediately && (
@@ -184,19 +186,19 @@ export default function SchedulesTab({ server }) {
                     {startImmediately && (
                         <div className="p-2.5 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-sm text-indigo-700 dark:text-indigo-300 flex items-center gap-2 animate-in fade-in">
                             <BoltIcon className="w-4 h-4" />
-                            <span>Task will run within 1 minute.</span>
+                            <span>{t('schedules.form.immediate_warning')}</span>
                         </div>
                     )}
                   </div>
 
                   {action === 'command' && (
                     <div className="animate-in fade-in slide-in-from-top-2">
-                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Command</label>
+                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('schedules.form.command')}</label>
                       <div className="relative">
                         <span className="absolute left-3 top-2.5 text-gray-400">/</span>
                         <input 
                           type="text" 
-                          placeholder="say Server restarting soon..."
+                          placeholder={t('schedules.form.placeholder_command')}
                           value={payload}
                           onChange={(e) => setPayload(e.target.value)}
                           className="w-full pl-6 px-3 py-2.5 rounded-lg border border-gray-300 dark:bg-slate-900 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-indigo-500 text-sm font-mono"
@@ -213,7 +215,7 @@ export default function SchedulesTab({ server }) {
                         onChange={(e) => setIsRepeat(e.target.checked)}
                         className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 bg-gray-100 dark:bg-slate-700 border-gray-300 dark:border-slate-600"
                       />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Repeat Every</span>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('schedules.form.repeat_every')}</span>
                     </label>
                     
                     {isRepeat && (
@@ -230,8 +232,8 @@ export default function SchedulesTab({ server }) {
                           onChange={(e) => setUnit(e.target.value)}
                           className="px-2 py-1 rounded-md border border-gray-300 dark:bg-slate-900 dark:border-slate-600 dark:text-white text-sm"
                         >
-                          <option value="hours">Hours</option>
-                          <option value="minutes">Minutes</option>
+                          <option value="hours">{t('schedules.form.hours')}</option>
+                          <option value="minutes">{t('schedules.form.minutes')}</option>
                         </select>
                       </div>
                     )}
@@ -244,7 +246,7 @@ export default function SchedulesTab({ server }) {
                   type="submit"
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
                 >
-                  Create Schedule
+                  {t('schedules.create')}
                 </button>
               </div>
             </form>
@@ -261,8 +263,8 @@ export default function SchedulesTab({ server }) {
         ) : schedules.length === 0 ? (
           <div className="text-center py-16 bg-gray-50 dark:bg-slate-800/50 rounded-2xl border-2 border-dashed border-gray-200 dark:border-slate-700">
             <ClockIcon className="w-12 h-12 mx-auto text-gray-300 dark:text-slate-600 mb-3" />
-            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">No tasks scheduled</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Create a task to automate your server.</p>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('schedules.list.empty_title')}</h3> {/* <--- TRANSLATED */}
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('schedules.list.empty_desc')}</p> {/* <--- TRANSLATED */}
           </div>
         ) : (
           <div className="grid gap-3">
@@ -308,12 +310,12 @@ export default function SchedulesTab({ server }) {
                       <div className="flex items-center gap-1.5">
                         <CalendarDaysIcon className="w-4 h-4" />
                         <span title={format(nextRun, 'PPP p')}>
-                          {isPast ? 'Processing...' : `Runs ${formatDistanceToNow(nextRun, { addSuffix: true })}`}
+                          {isPast ? t('schedules.list.processing') : `${t('schedules.list.runs_prefix')} ${formatDistanceToNow(nextRun, { addSuffix: true })}`} {/* <--- TRANSLATED */}
                         </span>
                       </div>
                       {task.last_result && (
                          <span className={`text-xs ${task.last_result === 'Success' ? 'text-green-600' : 'text-red-500'}`}>
-                           Last: {task.last_result}
+                           {t('schedules.list.last_result')} {task.last_result}
                          </span>
                       )}
                     </div>

@@ -1,3 +1,4 @@
+// pages/pricing.js
 import { useState } from "react";
 import Link from "next/link";
 import Navbar from "../components/Navbar";
@@ -7,8 +8,11 @@ import {
   CurrencyDollarIcon, 
   AdjustmentsHorizontalIcon 
 } from "@heroicons/react/24/outline";
+import { useTranslation, Trans } from "next-i18next"; // <--- IMPORTED
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
 
 export default function Pricing() {
+  const { t } = useTranslation('pricing'); // <--- INITIALIZED
   const [ram, setRam] = useState(4);
 
   // Pricing Logic: 1 Credit = 1 GB RAM per hour
@@ -16,22 +20,22 @@ export default function Pricing() {
   const pricePerHourEuro = (creditsPerHour * 0.01).toFixed(2);
 
   const features = [
-    "DDoS Protection Included",
-    "Unlimited Player Slots",
-    "File Access",
-    "Mod & Plugin Support",
-    "Instant Setup",
-    "99.9% Platform Uptime", // Changed from "24/7 Uptime" to be more accurate for on-demand
+    t('features.ddos'),
+    t('features.slots'),
+    t('features.files'),
+    t('features.mods'),
+    t('features.setup'),
+    t('features.uptime'),
   ];
 
   // Dynamic recommendation text based on RAM
   const getRecommendation = (gb) => {
-    if (gb <= 2) return "Good for small Vanilla servers with up to 5 friends. Not recommended for mods.";
-    if (gb <= 4) return "Perfect for Vanilla with up to 10 friends, or lightweight modpacks (approx. 50 mods).";
-    if (gb <= 8) return "Great for standard modpacks (100+ mods) or Vanilla servers with 20+ players.";
-    if (gb <= 12) return "Ideal for heavy modpacks (200+ mods) or larger communities (40+ players).";
-    if (gb <= 16) return "Powerful performance for very heavy modpacks (300+ mods) or 60+ players.";
-    return "Enterprise-grade power for massive networks, 100+ players, or the most demanding modpacks.";
+    if (gb <= 2) return t('recommendations.small');
+    if (gb <= 4) return t('recommendations.medium');
+    if (gb <= 8) return t('recommendations.standard');
+    if (gb <= 12) return t('recommendations.heavy');
+    if (gb <= 16) return t('recommendations.very_heavy');
+    return t('recommendations.massive');
   };
 
   return (
@@ -49,12 +53,12 @@ export default function Pricing() {
           </div>
           <div className="relative z-10 max-w-3xl mx-auto">
             <h1 className="text-4xl font-extrabold sm:text-5xl mb-6">
-              Simple, Transparent Pricing
+              {t('title')}
             </h1>
             <p className="text-xl text-indigo-100 max-w-2xl mx-auto">
-              We believe in paying only for the resources you use. 
+              {t('subtitle')}
               <br />
-              <span className="font-semibold text-white">1 Credit = 1 GB RAM per hour.</span>
+              <span className="font-semibold text-white">{t('credit_explanation')}</span>
             </p>
           </div>
         </section>
@@ -71,15 +75,15 @@ export default function Pricing() {
                     <AdjustmentsHorizontalIcon className="w-8 h-8" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Customize Your Server</h2>
-                    <p className="text-gray-500 dark:text-gray-400">Slide to adjust RAM allocation</p>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{t('calculator.title')}</h2>
+                    <p className="text-gray-500 dark:text-gray-400">{t('calculator.subtitle')}</p>
                   </div>
                 </div>
 
                 <div className="mb-10">
                   <div className="flex justify-between items-end mb-4">
                     <label htmlFor="ram-slider" className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                      Memory (RAM)
+                      {t('calculator.ram_label')}
                     </label>
                     <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
                       {ram} <span className="text-lg text-gray-500 dark:text-gray-400 font-medium">GB</span>
@@ -104,7 +108,7 @@ export default function Pricing() {
                 </div>
 
                 <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-6 border border-gray-100 dark:border-slate-600 transition-all duration-300">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Capabilities:</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">{t('calculator.capabilities')}</h3>
                   <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed font-medium">
                     {getRecommendation(ram)}
                   </p>
@@ -114,13 +118,13 @@ export default function Pricing() {
               {/* Right: Cost Breakdown */}
               <div className="bg-slate-900 p-8 md:p-12 text-white flex flex-col justify-between">
                 <div>
-                  <h3 className="text-lg font-medium text-slate-300 mb-6">Estimated Cost</h3>
+                  <h3 className="text-lg font-medium text-slate-300 mb-6">{t('calculator.estimated_cost')}</h3>
                   
                   <div className="space-y-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <CurrencyDollarIcon className="w-6 h-6 text-teal-400" />
-                        <span className="text-lg">Hourly Rate</span>
+                        <span className="text-lg">{t('calculator.hourly_rate')}</span>
                       </div>
                       <div className="text-right">
                         <p className="text-3xl font-bold text-white">{creditsPerHour} <span className="text-base font-normal text-slate-400">credits</span></p>
@@ -135,10 +139,10 @@ export default function Pricing() {
                     href="/register"
                     className="block w-full text-center bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-4 px-6 rounded-xl transition-all transform hover:-translate-y-1 shadow-lg shadow-teal-900/20"
                   >
-                    Deploy {ram}GB Server Now
+                    {t('calculator.deploy_btn', { ram })}
                   </Link>
                   <p className="text-center text-xs text-slate-500 mt-4">
-                    No credit card required to sign up.
+                    {t('calculator.no_card')}
                   </p>
                 </div>
               </div>
@@ -164,10 +168,18 @@ export default function Pricing() {
         {/* FAQ Section */}
         <section className="bg-gray-100 dark:bg-slate-900 py-16 px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">How does billing work?</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{t('faq.title')}</h2>
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-              Spawnly uses a credit-based system. You purchase credits (1 Credit ≈ €0.01), and we deduct them from your balance every minute your server is <strong>Running</strong>. 
-              If you <strong>Stop</strong> your server, billing pauses immediately, but your files are kept safe for free.
+              <Trans
+                i18nKey="faq.answer"
+                ns="pricing"
+                components={[
+                  <span key="0" />,
+                  <strong key="1" />,
+                  <span key="2" />,
+                  <strong key="3" />
+                ]}
+              />
             </p>
           </div>
         </section>
@@ -177,4 +189,16 @@ export default function Pricing() {
       <Footer />
     </div>
   );
+}
+
+// --- REQUIRED FOR NEXT-I18NEXT ---
+export async function getStaticProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, [
+        'common',
+        'pricing'
+      ])),
+    },
+  };
 }

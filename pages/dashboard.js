@@ -24,11 +24,12 @@ import {
 } from '@heroicons/react/24/outline';
 
 // --- NEW: Helper for Displaying Software/Version ---
-// Updated to accept 't' for translation
 const getDisplayInfo = (server, t) => {
   if (!server) return { software: t('software.unknown'), version: t('software.unknown') };
 
-  let software = server.type || 'Vanilla';
+  // Try to translate the type, fallback to capitalized raw type if no translation found
+  let typeKey = server.type || 'vanilla';
+  let software = t(`software_names.${typeKey}`, { defaultValue: server.type || 'Vanilla' });
   let version = server.version || '';
 
   // Handle Modpacks
@@ -263,12 +264,12 @@ export default function Dashboard() {
       if (newServerId) router.push(`/server/${newServerId}`);
     } catch (err) {
       setServers((prev) => prev.filter((s) => s.id !== tempServerId));
-      setError(`${t('messages.error_create')}: ${err.message}`); // <--- TRANSLATED
+      setError(`${t('messages.error_create')}: ${err.message}`); 
     }
   };
 
   const handleDeleteServer = async (serverId) => {
-    if (!confirm(t('messages.confirm_delete'))) return; // <--- TRANSLATED
+    if (!confirm(t('messages.confirm_delete'))) return; 
     try {
       await fetch('/api/servers/action', {
         method: 'POST',
@@ -276,7 +277,7 @@ export default function Dashboard() {
         body: JSON.stringify({ serverId, action: 'delete' }),
       });
     } catch (err) {
-      setError(t('messages.error_delete')); // <--- TRANSLATED
+      setError(t('messages.error_delete')); 
     }
   };
 
@@ -292,7 +293,7 @@ export default function Dashboard() {
       });
       if (!res.ok) throw new Error(await res.text());
     } catch (err) {
-      setError(`${t('messages.error_start')}: ${err.message}`); // <--- TRANSLATED
+      setError(`${t('messages.error_start')}: ${err.message}`); 
     }
   };
 
@@ -304,7 +305,7 @@ export default function Dashboard() {
         body: JSON.stringify({ serverId, action: 'stop' }),
       });
     } catch (err) {
-      setError(t('messages.error_stop')); // <--- TRANSLATED
+      setError(t('messages.error_stop')); 
     }
   };
 
@@ -314,7 +315,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-        <p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">{t('loading')}</p> {/* <--- TRANSLATED */}
+        <p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">{t('loading')}</p> 
       </div>
     </div>
   );
@@ -332,7 +333,7 @@ export default function Dashboard() {
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
               {error}
             </span>
-            <button onClick={() => setError(null)} className="text-sm font-semibold hover:underline">{t('messages.dismiss')}</button> {/* <--- TRANSLATED */}
+            <button onClick={() => setError(null)} className="text-sm font-semibold hover:underline">{t('messages.dismiss')}</button> 
           </div>
         )}
 
@@ -341,28 +342,28 @@ export default function Dashboard() {
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><ServerIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.total_servers')}</p> {/* <--- TRANSLATED */}
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.total_servers')}</p> 
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.length}</p>
             </div>
           </div>
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-green-50 text-green-600 rounded-xl"><PlayIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.active_now')}</p> {/* <--- TRANSLATED */}
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.active_now')}</p> 
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.filter(s => s.status === 'Running').length}</p>
             </div>
           </div>
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-purple-50 text-purple-600 rounded-xl"><CpuChipIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.total_ram')}</p> {/* <--- TRANSLATED */}
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.reduce((a, b) => a + b.ram, 0)} GB</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.total_ram')}</p> 
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.reduce((a, b) => a + b.ram, 0)} {t('units.gb')}</p>
             </div>
           </div>
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><CurrencyDollarIcon className="w-6 h-6" /></div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.hourly_cost')}</p> {/* <--- TRANSLATED */}
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.hourly_cost')}</p> 
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.reduce((a, b) => a + b.cost_per_hour, 0).toFixed(2)}</p>
             </div>
           </div>
@@ -370,13 +371,13 @@ export default function Dashboard() {
 
         {/* Action Bar */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('headers.your_servers')}</h2> {/* <--- TRANSLATED */}
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('headers.your_servers')}</h2> 
           <button
             onClick={() => setShowModal(true)}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium shadow-sm transition-all hover:-translate-y-0.5"
           >
             <PlusIcon className="w-5 h-5" />
-            {t('headers.new_server')} {/* <--- TRANSLATED */}
+            {t('headers.new_server')} 
           </button>
         </div>
 
@@ -388,9 +389,9 @@ export default function Dashboard() {
             <div className="mx-auto w-16 h-16 bg-gray-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
               <ServerIcon className="w-8 h-8 text-gray-400" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">{t('empty_state.title')}</h3> {/* <--- TRANSLATED */}
-            <p className="text-gray-500 dark:text-gray-400 mt-1 mb-6">{t('empty_state.description')}</p> {/* <--- TRANSLATED */}
-            <button onClick={() => setShowModal(true)} className="text-indigo-600 font-medium hover:underline">{t('empty_state.button')} &rarr;</button> {/* <--- TRANSLATED */}
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">{t('empty_state.title')}</h3> 
+            <p className="text-gray-500 dark:text-gray-400 mt-1 mb-6">{t('empty_state.description')}</p> 
+            <button onClick={() => setShowModal(true)} className="text-indigo-600 font-medium hover:underline">{t('empty_state.button')} &rarr;</button> 
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -423,11 +424,11 @@ export default function Dashboard() {
                   
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.memory')}</p> {/* <--- TRANSLATED */}
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">{server.ram} GB</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.memory')}</p> 
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{server.ram} {t('units.gb')}</p>
                     </div>
                     <div>
-                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.address')}</p> {/* <--- TRANSLATED */}
+                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.address')}</p> 
                       <p className="font-mono text-gray-700 dark:text-gray-300 truncate" title={`${server.name}.spawnly.net`}>{server.name}.spawnly.net</p>
                     </div>
                   </div>
@@ -441,26 +442,26 @@ export default function Dashboard() {
                       disabled={server.id.startsWith('temp')}
                       className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-sm font-medium transition-colors"
                     >
-                      <PlayIcon className="w-4 h-4" /> {t('server_card.start')} {/* <--- TRANSLATED */}
+                      <PlayIcon className="w-4 h-4" /> {t('server_card.start')} 
                     </button>
                   ) : server.status === "Running" ? (
                     <button 
                       onClick={() => handleStopServer(server.id)}
                       className="flex-1 flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/20 dark:hover:border-red-600 py-2 rounded-lg text-sm font-medium transition-colors"
                     >
-                      <StopIcon className="w-4 h-4" /> {t('server_card.stop')} {/* <--- TRANSLATED */}
+                      <StopIcon className="w-4 h-4" /> {t('server_card.stop')} 
                     </button>
                   ) : (
                     <button disabled className="flex-1 flex items-center justify-center gap-2 bg-gray-200 dark:bg-slate-600 text-gray-500 py-2 rounded-lg text-sm font-medium cursor-not-allowed">
                       <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                      {t('server_card.processing')} {/* <--- TRANSLATED */}
+                      {t('server_card.processing')} 
                     </button>
                   )}
 
                   <Link 
                     href={server.id.startsWith('temp') ? '#' : `/server/${server.id}`}
                     className={`p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
-                    title="Console & Files"
+                    title={t('tooltips.console_files')}
                   >
                     <CommandLineIcon className="w-5 h-5" />
                   </Link>
@@ -468,7 +469,7 @@ export default function Dashboard() {
                   <Link 
                     href={server.id.startsWith('temp') ? '#' : `/server/${server.id}?tab=properties`}
                     className={`p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
-                    title="Settings"
+                    title={t('tooltips.settings')}
                   >
                     <AdjustmentsHorizontalIcon className="w-5 h-5" />
                   </Link>
@@ -477,7 +478,7 @@ export default function Dashboard() {
                     onClick={() => handleDeleteServer(server.id)}
                     disabled={!['Stopped', 'Running'].includes(server.status)}
                     className="p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-400 hover:text-red-600 hover:border-red-200 dark:hover:border-red-600 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
-                    title="Delete Server"
+                    title={t('tooltips.delete_server')}
                   >
                     <TrashIcon className="w-5 h-5" />
                   </button>
@@ -508,7 +509,8 @@ export async function getStaticProps({ locale }) {
     props: {
       ...(await serverSideTranslations(locale, [
         'common',
-        'dashboard'
+        'dashboard',
+        'create_server' // Include create_server namespace for the modal
       ])),
     },
   };

@@ -5,8 +5,11 @@ import { useRouter } from "next/router";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { LockClosedIcon } from "@heroicons/react/24/outline";
+import { useTranslation } from "next-i18next"; // <--- IMPORTED
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
 
 export default function UpdatePassword() {
+  const { t } = useTranslation('auth'); // <--- INITIALIZED
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
@@ -36,7 +39,7 @@ export default function UpdatePassword() {
       setError(error.message);
       setLoading(false);
     } else {
-      setMessage("Password updated successfully!");
+      setMessage(t('update.success')); // <--- TRANSLATED
       setLoading(false);
       setTimeout(() => router.push("/dashboard"), 2000);
     }
@@ -50,10 +53,10 @@ export default function UpdatePassword() {
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-              Set New Password
+              {t('update.title')} {/* <--- TRANSLATED */}
             </h2>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Enter your new secure password below
+              {t('update.desc')} {/* <--- TRANSLATED */}
             </p>
           </div>
 
@@ -72,7 +75,7 @@ export default function UpdatePassword() {
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  New Password
+                  {t('new_password_label')} {/* <--- TRANSLATED */}
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -87,7 +90,7 @@ export default function UpdatePassword() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
-                    placeholder="Minimum 6 characters"
+                    placeholder={t('placeholders.min_chars')} // <--- TRANSLATED
                   />
                 </div>
               </div>
@@ -97,7 +100,7 @@ export default function UpdatePassword() {
                 disabled={loading}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-50"
               >
-                {loading ? "Updating..." : "Update Password"}
+                {loading ? t('update.btn_updating') : t('update.btn_update')} {/* <--- TRANSLATED */}
               </button>
             </form>
           </div>
@@ -106,4 +109,16 @@ export default function UpdatePassword() {
       <Footer />
     </div>
   );
+}
+
+// --- REQUIRED FOR NEXT-I18NEXT ---
+export async function getStaticProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, [
+        'common',
+        'auth'
+      ])),
+    },
+  };
 }

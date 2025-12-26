@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabaseClient'; 
+import { useTranslation } from 'next-i18next'; // <--- IMPORTED
 import { 
   MagnifyingGlassIcon, 
   CommandLineIcon, 
@@ -13,87 +14,6 @@ import {
   CheckCircleIcon,
   ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
-
-// --- Configuration Constants ---
-
-const GROUPS = {
-  GAMEPLAY: {
-    id: 'gameplay',
-    label: 'Gameplay',
-    icon: PuzzlePieceIcon,
-    keys: ['gamemode', 'difficulty', 'pvp', 'allow-flight', 'force-gamemode', 'hardcore']
-  },
-  WORLD: {
-    id: 'world',
-    label: 'World Generation',
-    icon: GlobeAmericasIcon,
-    keys: ['level-name', 'level-seed', 'level-type', 'generate-structures', 'spawn-protection', 'spawn-animals', 'spawn-monsters', 'spawn-npcs']
-  },
-  PERFORMANCE: {
-    id: 'performance',
-    label: 'Performance & Limits',
-    icon: CpuChipIcon,
-    keys: ['max-players', 'view-distance', 'simulation-distance', 'player-idle-timeout', 'rate-limit']
-  },
-  SECURITY: {
-    id: 'security',
-    label: 'Security & Network',
-    icon: ShieldCheckIcon,
-    keys: ['online-mode', 'white-list', 'enable-command-block', 'enforce-whitelist', 'server-port', 'enable-rcon']
-  },
-  ADVANCED: {
-    id: 'advanced',
-    label: 'Advanced / Other',
-    icon: AdjustmentsHorizontalIcon,
-    keys: ['resource-pack', 'resource-pack-prompt', 'require-resource-pack', 'motd']
-  }
-};
-
-// Map keys to their group (helper)
-const KEY_TO_GROUP = Object.values(GROUPS).reduce((acc, group) => {
-  group.keys.forEach(k => acc[k] = group.id);
-  return acc;
-}, {});
-
-const PRETTY_LABELS = {
-  'max-players': 'Max Players',
-  'gamemode': 'Game Mode',
-  'difficulty': 'Difficulty',
-  'online-mode': 'Online Mode (Premium)',
-  'white-list': 'Enable Whitelist',
-  'pvp': 'PvP Enabled',
-  'allow-flight': 'Allow Flight',
-  'enable-command-block': 'Command Blocks',
-  'spawn-animals': 'Spawn Animals',
-  'spawn-monsters': 'Spawn Monsters',
-  'spawn-npcs': 'Spawn NPCs',
-  'force-gamemode': 'Force Game Mode',
-  'player-idle-timeout': 'Idle Timeout (min)',
-  'require-resource-pack': 'Require Resource Pack',
-  'resource-pack': 'Resource Pack URL',
-  'resource-pack-prompt': 'Resource Pack Prompt',
-  'spawn-protection': 'Spawn Protection Radius',
-  'simulation-distance': 'Sim Distance (Chunks)',
-  'view-distance': 'View Distance (Chunks)',
-  'level-seed': 'Level Seed',
-  'level-name': 'Level Name',
-  'motd': 'MOTD',
-  'hardcore': 'Hardcore Mode'
-};
-
-const GAMEMODE_OPTIONS = [
-  { label: 'Survival', value: 'survival' },
-  { label: 'Creative', value: 'creative' },
-  { label: 'Adventure', value: 'adventure' },
-  { label: 'Spectator', value: 'spectator' },
-];
-
-const DIFFICULTY_OPTIONS = [
-  { label: 'Peaceful', value: 'peaceful' },
-  { label: 'Easy', value: 'easy' },
-  { label: 'Normal', value: 'normal' },
-  { label: 'Hard', value: 'hard' },
-];
 
 // --- Helper Functions ---
 
@@ -122,12 +42,10 @@ const toNum = (val, def = 0) => {
 // --- Sub-components ---
 
 const ToggleInput = ({ label, value, onChange }) => (
-  // UPDATED: Added dark mode classes
   <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600">
     <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{label}</span>
     <button
       onClick={() => onChange(!value)}
-      // UPDATED: Added dark mode class for off state track
       className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${value ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-slate-600'}`}
     >
       <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${value ? 'translate-x-5' : 'translate-x-0'}`} />
@@ -136,13 +54,11 @@ const ToggleInput = ({ label, value, onChange }) => (
 );
 
 const SelectInput = ({ label, value, options, onChange }) => (
-  // UPDATED: Added dark mode classes
   <div className="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600">
     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{label}</label>
     <select
       value={value || options[0].value}
       onChange={(e) => onChange(e.target.value)}
-      // UPDATED: Added dark mode classes
       className="block w-full rounded-lg border-gray-300 dark:border-slate-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 dark:bg-slate-800 dark:text-gray-100"
     >
       {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
@@ -151,25 +67,21 @@ const SelectInput = ({ label, value, options, onChange }) => (
 );
 
 const NumberInput = ({ label, value, min = 0, max = 9999, onChange }) => (
-  // UPDATED: Added dark mode classes
   <div className="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600">
     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{label}</label>
     <div className="flex items-center">
       <button 
         onClick={() => onChange(Math.max(min, Number(value) - 1))}
-        // UPDATED: Added dark mode classes
         className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-600 border border-gray-300 dark:border-slate-500 rounded-l-lg hover:bg-gray-100 dark:hover:bg-slate-500 text-gray-600 dark:text-gray-200"
       >-</button>
       <input
         type="number"
         value={value}
         onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value))))}
-        // UPDATED: Added dark mode classes
         className="block w-full border-y border-gray-300 dark:border-slate-500 text-center focus:ring-0 focus:border-indigo-500 sm:text-sm py-1.5 z-10 dark:bg-slate-800 dark:text-gray-100"
       />
       <button 
         onClick={() => onChange(Math.min(max, Number(value) + 1))}
-        // UPDATED: Added dark mode classes
         className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-600 border border-gray-300 dark:border-slate-500 rounded-r-lg hover:bg-gray-100 dark:hover:bg-slate-500 text-gray-600 dark:text-gray-200"
       >+</button>
     </div>
@@ -177,7 +89,6 @@ const NumberInput = ({ label, value, min = 0, max = 9999, onChange }) => (
 );
 
 const TextInput = ({ label, value, placeholder, onChange }) => (
-  // UPDATED: Added dark mode classes
   <div className="p-4 bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600 md:col-span-2">
     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{label}</label>
     <input
@@ -185,7 +96,6 @@ const TextInput = ({ label, value, placeholder, onChange }) => (
       value={value || ''}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      // UPDATED: Added dark mode classes
       className="block w-full rounded-lg border-gray-300 dark:border-slate-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm dark:bg-slate-800 dark:text-gray-100"
     />
   </div>
@@ -194,6 +104,8 @@ const TextInput = ({ label, value, placeholder, onChange }) => (
 // --- Main Component ---
 
 export default function ServerPropertiesEditor({ server }) {
+  const { t } = useTranslation('server'); // <--- INITIALIZED
+  
   const [propertiesText, setPropertiesText] = useState('');
   const [originalText, setOriginalText] = useState('');
   const [viewMode, setViewMode] = useState('visual'); // 'visual' | 'raw'
@@ -206,6 +118,96 @@ export default function ServerPropertiesEditor({ server }) {
   // Derived state
   const properties = useMemo(() => parseProperties(propertiesText), [propertiesText]);
   const hasChanges = propertiesText !== originalText;
+
+  // --- Configuration Data (Memoized for Translation) ---
+  const CONFIG = useMemo(() => {
+    const GROUPS = {
+      GAMEPLAY: {
+        id: 'gameplay',
+        label: t('properties.groups.gameplay'),
+        icon: PuzzlePieceIcon,
+        keys: ['gamemode', 'difficulty', 'pvp', 'allow-flight', 'force-gamemode', 'hardcore']
+      },
+      WORLD: {
+        id: 'world',
+        label: t('properties.groups.world'),
+        icon: GlobeAmericasIcon,
+        keys: ['level-name', 'level-seed', 'level-type', 'generate-structures', 'spawn-protection', 'spawn-animals', 'spawn-monsters', 'spawn-npcs']
+      },
+      PERFORMANCE: {
+        id: 'performance',
+        label: t('properties.groups.performance'),
+        icon: CpuChipIcon,
+        keys: ['max-players', 'view-distance', 'simulation-distance', 'player-idle-timeout', 'rate-limit']
+      },
+      SECURITY: {
+        id: 'security',
+        label: t('properties.groups.security'),
+        icon: ShieldCheckIcon,
+        keys: ['online-mode', 'white-list', 'enable-command-block', 'enforce-whitelist', 'server-port', 'enable-rcon']
+      },
+      ADVANCED: {
+        id: 'advanced',
+        label: t('properties.groups.advanced'),
+        icon: AdjustmentsHorizontalIcon,
+        keys: ['resource-pack', 'resource-pack-prompt', 'require-resource-pack', 'motd']
+      }
+    };
+
+    // Map keys to their group (helper)
+    const KEY_TO_GROUP = Object.values(GROUPS).reduce((acc, group) => {
+      group.keys.forEach(k => acc[k] = group.id);
+      return acc;
+    }, {});
+
+    const PRETTY_LABELS = {
+      'max-players': t('properties.labels.max-players'),
+      'gamemode': t('properties.labels.gamemode'),
+      'difficulty': t('properties.labels.difficulty'),
+      'online-mode': t('properties.labels.online-mode'),
+      'white-list': t('properties.labels.white-list'),
+      'pvp': t('properties.labels.pvp'),
+      'allow-flight': t('properties.labels.allow-flight'),
+      'enable-command-block': t('properties.labels.enable-command-block'),
+      'spawn-animals': t('properties.labels.spawn-animals'),
+      'spawn-monsters': t('properties.labels.spawn-monsters'),
+      'spawn-npcs': t('properties.labels.spawn-npcs'),
+      'force-gamemode': t('properties.labels.force-gamemode'),
+      'player-idle-timeout': t('properties.labels.player-idle-timeout'),
+      'require-resource-pack': t('properties.labels.require-resource-pack'),
+      'resource-pack': t('properties.labels.resource-pack'),
+      'resource-pack-prompt': t('properties.labels.resource-pack-prompt'),
+      'spawn-protection': t('properties.labels.spawn-protection'),
+      'simulation-distance': t('properties.labels.simulation-distance'),
+      'view-distance': t('properties.labels.view-distance'),
+      'level-seed': t('properties.labels.level-seed'),
+      'level-name': t('properties.labels.level-name'),
+      'motd': t('properties.labels.motd'),
+      'hardcore': t('properties.labels.hardcore'),
+      'rate-limit': t('properties.labels.rate-limit'),
+      'server-port': t('properties.labels.server-port'),
+      'enforce-whitelist': t('properties.labels.enforce-whitelist'),
+      'enable-rcon': t('properties.labels.enable-rcon'),
+      'level-type': t('properties.labels.level-type'),
+      'generate-structures': t('properties.labels.generate-structures')
+    };
+
+    const GAMEMODE_OPTIONS = [
+      { label: t('properties.options.survival'), value: 'survival' },
+      { label: t('properties.options.creative'), value: 'creative' },
+      { label: t('properties.options.adventure'), value: 'adventure' },
+      { label: t('properties.options.spectator'), value: 'spectator' },
+    ];
+
+    const DIFFICULTY_OPTIONS = [
+      { label: t('properties.options.peaceful'), value: 'peaceful' },
+      { label: t('properties.options.easy'), value: 'easy' },
+      { label: t('properties.options.normal'), value: 'normal' },
+      { label: t('properties.options.hard'), value: 'hard' },
+    ];
+
+    return { GROUPS, KEY_TO_GROUP, PRETTY_LABELS, GAMEMODE_OPTIONS, DIFFICULTY_OPTIONS };
+  }, [t]);
 
   // --- Fetch Data ---
   useEffect(() => {
@@ -250,10 +252,8 @@ export default function ServerPropertiesEditor({ server }) {
       setError(null);
       setMessage(null);
       
-      // --- AUTH FIX: Get Token ---
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
-      // --------------------------
 
       const res = await fetch(`/api/servers/${server.id}/properties`, {
         method: 'POST',
@@ -266,7 +266,6 @@ export default function ServerPropertiesEditor({ server }) {
       
       if (!res.ok) throw new Error('Failed to save properties');
       
-      // Update whitelist_enabled status in Supabase
       const propsMap = parseProperties(propertiesText);
       const isWhitelistOn = toBool(propsMap['white-list']);
       
@@ -276,7 +275,7 @@ export default function ServerPropertiesEditor({ server }) {
         .eq('id', server.id);
 
       setOriginalText(propertiesText);
-      setMessage('Properties saved successfully! Restart server to apply.');
+      setMessage(t('properties.ui.save_success')); // <--- TRANSLATED
       setTimeout(() => setMessage(null), 5000);
     } catch (err) {
       setError(err.message);
@@ -286,7 +285,7 @@ export default function ServerPropertiesEditor({ server }) {
   };
 
   const handleReset = () => {
-    if (confirm('Discard all unsaved changes?')) {
+    if (confirm(t('properties.ui.confirm_discard'))) { // <--- TRANSLATED
       setPropertiesText(originalText);
     }
   };
@@ -295,7 +294,7 @@ export default function ServerPropertiesEditor({ server }) {
 
   const renderField = (key) => {
     const val = properties[key];
-    const label = PRETTY_LABELS[key] || key;
+    const label = CONFIG.PRETTY_LABELS[key] || key;
 
     // Toggle Types
     if ([
@@ -308,8 +307,8 @@ export default function ServerPropertiesEditor({ server }) {
     }
 
     // Select Types
-    if (key === 'gamemode') return <SelectInput key={key} label={label} value={val} options={GAMEMODE_OPTIONS} onChange={(v) => updateProperty(key, v)} />;
-    if (key === 'difficulty') return <SelectInput key={key} label={label} value={val} options={DIFFICULTY_OPTIONS} onChange={(v) => updateProperty(key, v)} />;
+    if (key === 'gamemode') return <SelectInput key={key} label={label} value={val} options={CONFIG.GAMEMODE_OPTIONS} onChange={(v) => updateProperty(key, v)} />;
+    if (key === 'difficulty') return <SelectInput key={key} label={label} value={val} options={CONFIG.DIFFICULTY_OPTIONS} onChange={(v) => updateProperty(key, v)} />;
 
     // Number Types
     if ([
@@ -320,11 +319,10 @@ export default function ServerPropertiesEditor({ server }) {
     }
 
     // Text Types
-    return <TextInput key={key} label={label} value={val} placeholder={`Enter ${label}...`} onChange={(v) => updateProperty(key, v)} />;
+    return <TextInput key={key} label={label} value={val} placeholder={`...`} onChange={(v) => updateProperty(key, v)} />;
   };
 
   if (isLoading) return (
-    // UPDATED: Added dark mode classes
     <div className="flex justify-center items-center py-20 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
       <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
     </div>
@@ -334,67 +332,58 @@ export default function ServerPropertiesEditor({ server }) {
     <div className="space-y-6">
       
       {/* Header & Controls */}
-      {/* UPDATED: Added dark mode classes */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
         <div className="relative flex-1 w-full md:w-auto md:max-w-md">
-          {/* UPDATED: Added dark mode class for icon */}
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
           <input 
             type="text" 
-            placeholder="Search settings..." 
+            placeholder={t('properties.ui.search_placeholder')} // <--- TRANSLATED
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            // UPDATED: Added dark mode classes for input
             className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
           />
         </div>
         
-        {/* UPDATED: Added dark mode class for button container */}
         <div className="flex items-center gap-2 w-full md:w-auto bg-gray-100 dark:bg-slate-700 p-1 rounded-xl">
           <button
             onClick={() => setViewMode('visual')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              // UPDATED: Added dark mode classes for active and inactive buttons
               viewMode === 'visual' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
-            <AdjustmentsHorizontalIcon className="w-4 h-4" /> Visual
+            <AdjustmentsHorizontalIcon className="w-4 h-4" /> {t('properties.ui.visual_view')} {/* <--- TRANSLATED */}
           </button>
           <button
             onClick={() => setViewMode('raw')}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              // UPDATED: Added dark mode classes for active and inactive buttons
               viewMode === 'raw' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
-            <CommandLineIcon className="w-4 h-4" /> Raw File
+            <CommandLineIcon className="w-4 h-4" /> {t('properties.ui.raw_view')} {/* <--- TRANSLATED */}
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
-      {/* UPDATED: Added dark mode classes */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden min-h-[500px]">
         {viewMode === 'raw' ? (
           <div className="h-full flex flex-col">
-            {/* UPDATED: Added dark mode classes */}
             <div className="bg-gray-50 dark:bg-slate-700 px-6 py-3 border-b border-gray-200 dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400 font-mono">
-              server.properties
+              {t('properties.ui.file_name')} {/* <--- TRANSLATED */}
             </div>
             <textarea
               value={propertiesText}
               onChange={(e) => setPropertiesText(e.target.value)}
-              // UPDATED: Added dark mode classes
               className="w-full h-[600px] p-6 font-mono text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-300 border-none outline-none resize-y"
               spellCheck="false"
             />
           </div>
         ) : (
           <div className="p-6 space-y-8">
-            {Object.values(GROUPS).map((group) => {
+            {Object.values(CONFIG.GROUPS).map((group) => {
               // Filter keys based on search
               const activeKeys = group.keys.filter(k => {
-                const label = PRETTY_LABELS[k] || k;
+                const label = CONFIG.PRETTY_LABELS[k] || k;
                 return !searchQuery || 
                        k.toLowerCase().includes(searchQuery.toLowerCase()) || 
                        label.toLowerCase().includes(searchQuery.toLowerCase());
@@ -404,7 +393,6 @@ export default function ServerPropertiesEditor({ server }) {
 
               return (
                 <div key={group.id} className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                  {/* UPDATED: Added dark mode classes for group title */}
                   <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2 border-b border-gray-100 dark:border-slate-700 pb-2">
                     <group.icon className="w-5 h-5 text-indigo-500" />
                     {group.label}
@@ -419,11 +407,10 @@ export default function ServerPropertiesEditor({ server }) {
             {/* Show "Other" properties not in our strict groups if searched */}
             {searchQuery && (
               <div className="pt-4">
-                {/* UPDATED: Added dark mode class for sub-title */}
-                <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase">Other Matches</h4>
+                <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase">{t('properties.ui.other_matches')}</h4> {/* <--- TRANSLATED */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {Object.keys(properties)
-                    .filter(k => !KEY_TO_GROUP[k] && k.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .filter(k => !CONFIG.KEY_TO_GROUP[k] && k.toLowerCase().includes(searchQuery.toLowerCase()))
                     .map(key => <TextInput key={key} label={key} value={properties[key]} onChange={(v) => updateProperty(key, v)} />)
                   }
                 </div>
@@ -440,23 +427,19 @@ export default function ServerPropertiesEditor({ server }) {
             initial={{ y: 100, opacity: 0 }} 
             animate={{ y: 0, opacity: 1 }} 
             exit={{ y: 100, opacity: 0 }}
-            // UPDATED: Added dark mode classes
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border border-indigo-200 dark:border-indigo-900 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 max-w-lg w-[90%]"
           >
             <div className="flex-1">
-              {/* UPDATED: Added dark mode class for text */}
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Unsaved Changes</p>
-              {/* UPDATED: Added dark mode class for text */}
-              <p className="text-xs text-gray-500 dark:text-gray-400">Changes will apply after a server restart.</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('properties.ui.unsaved_title')}</p> {/* <--- TRANSLATED */}
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('properties.ui.unsaved_desc')}</p> {/* <--- TRANSLATED */}
             </div>
             <div className="flex items-center gap-3">
               <button 
                 onClick={handleReset}
                 disabled={isSaving}
-                // UPDATED: Added dark mode class for button text
                 className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-red-600 transition-colors"
               >
-                Discard
+                {t('properties.ui.discard')} {/* <--- TRANSLATED */}
               </button>
               <button
                 onClick={handleSave}
@@ -464,7 +447,7 @@ export default function ServerPropertiesEditor({ server }) {
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <CheckCircleIcon className="w-4 h-4" />}
-                Save Changes
+                {t('properties.ui.save')} {/* <--- TRANSLATED */}
               </button>
             </div>
           </motion.div>

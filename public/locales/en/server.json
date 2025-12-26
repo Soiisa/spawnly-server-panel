@@ -9,7 +9,8 @@
     "copied": "Copied!",
     "edit_motd": "Edit MOTD",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "confirm": "Confirm"
   },
   "tabs": {
     "overview": "Overview",
@@ -112,5 +113,244 @@
     "cpu": "CPU Usage",
     "ram": "RAM Usage",
     "usage": "Usage"
+  },
+  "properties": {
+    "groups": {
+      "gameplay": "Gameplay",
+      "world": "World Generation",
+      "performance": "Performance & Limits",
+      "security": "Security & Network",
+      "advanced": "Advanced / Other"
+    },
+    "labels": {
+      "max-players": "Max Players",
+      "gamemode": "Game Mode",
+      "difficulty": "Difficulty",
+      "online-mode": "Online Mode (Premium)",
+      "white-list": "Enable Whitelist",
+      "pvp": "PvP Enabled",
+      "allow-flight": "Allow Flight",
+      "enable-command-block": "Command Blocks",
+      "spawn-animals": "Spawn Animals",
+      "spawn-monsters": "Spawn Monsters",
+      "spawn-npcs": "Spawn NPCs",
+      "force-gamemode": "Force Game Mode",
+      "player-idle-timeout": "Idle Timeout (min)",
+      "require-resource-pack": "Require Resource Pack",
+      "resource-pack": "Resource Pack URL",
+      "resource-pack-prompt": "Resource Pack Prompt",
+      "spawn-protection": "Spawn Protection Radius",
+      "simulation-distance": "Sim Distance (Chunks)",
+      "view-distance": "View Distance (Chunks)",
+      "level-seed": "Level Seed",
+      "level-name": "Level Name",
+      "motd": "MOTD",
+      "hardcore": "Hardcore Mode",
+      "rate-limit": "Rate Limit",
+      "server-port": "Server Port",
+      "enforce-whitelist": "Enforce Whitelist",
+      "enable-rcon": "Enable RCON",
+      "level-type": "Level Type",
+      "generate-structures": "Generate Structures"
+    },
+    "options": {
+      "survival": "Survival",
+      "creative": "Creative",
+      "adventure": "Adventure",
+      "spectator": "Spectator",
+      "peaceful": "Peaceful",
+      "easy": "Easy",
+      "normal": "Normal",
+      "hard": "Hard"
+    },
+    "ui": {
+      "search_placeholder": "Search settings...",
+      "visual_view": "Visual",
+      "raw_view": "Raw File",
+      "file_name": "server.properties",
+      "other_matches": "Other Matches",
+      "unsaved_title": "Unsaved Changes",
+      "unsaved_desc": "Changes will apply after a server restart.",
+      "discard": "Discard",
+      "save": "Save Changes",
+      "confirm_discard": "Discard all unsaved changes?",
+      "save_success": "Properties saved successfully! Restart server to apply."
+    }
+  },
+  "files": {
+    "upload": "Upload",
+    "empty": "This folder is empty",
+    "filter_tooltip": "Toggle masked files",
+    "refresh": "Refresh",
+    "download_fail": "Download failed",
+    "upload_fail": "Upload failed",
+    "load_fail": "Failed to load files",
+    "save_fail": "Failed to save",
+    "delete_fail": "Delete failed",
+    "delete_confirm": "Delete {{name}}? This cannot be undone.",
+    "columns": {
+      "name": "Name",
+      "size": "Size",
+      "modified": "Modified",
+      "actions": "Actions"
+    },
+    "editor": {
+      "save_changes": "Save Changes",
+      "saving": "Saving..."
+    }
+  },
+  "backups": {
+    "title": "Backups",
+    "subtitle": "Manage snapshots and configure auto-backups.",
+    "create": "Create Backup",
+    "refresh": "Refresh List",
+    "settings_title": "Auto-Backup Configuration",
+    "enable_auto": "Enable Auto-Backup",
+    "frequency": "Frequency (Hours)",
+    "retention": "Retention (Count)",
+    "save_settings": "Save Settings",
+    "empty_title": "No backups found",
+    "empty_desc": "Create a backup manually or enable auto-backups.",
+    "restore": "Restore",
+    "stop_to_restore": "Stop to Restore",
+    "pending_title": "Restore Pending",
+    "pending_desc": "A backup restore is queued. The next time you click Start, the server will be wiped and restored from:",
+    "alerts": {
+      "started": "Backup started! It will appear in the list shortly.",
+      "queued": "Restore Queued! The backup will be applied automatically when you next START the server.",
+      "stop_required": "Server must be FULLY STOPPED to queue a restore.",
+      "confirm_restore": "WARNING: This will queue a restore.\n\nThe NEXT time you click 'Start', your current files will be DELETED and replaced with this backup.\n\nContinue?"
+    }
+  },
+  "players": {
+    "online_title": "Online Players",
+    "no_online": "No players online",
+    "tabs": {
+      "whitelist": "Whitelist",
+      "ops": "Operators",
+      "banned_players": "Banned Players",
+      "banned_ips": "Banned IPs"
+    },
+    "empty_list": "No entries found for this list.",
+    "add_new": "Add New",
+    "search_placeholder": "Search...",
+    "form": {
+      "player_name": "Player Name",
+      "ip_address": "IP Address",
+      "op_level": "Op Level",
+      "bypass_limit": "Bypass Player Limit",
+      "reason": "Reason",
+      "expires": "Expires",
+      "forever": "Forever",
+      "specific_date": "Specific Date",
+      "confirm": "Confirm Add"
+    },
+    "levels": {
+      "l1": "Level 1 (Bypass protection)",
+      "l2": "Level 2 (Command blocks)",
+      "l3": "Level 3 (Kick/Ban)",
+      "l4": "Level 4 (Stop/Operator)"
+    }
+  },
+  "schedules": {
+    "title": "Automation",
+    "subtitle": "Schedule restarts, commands, and power actions.",
+    "new_task": "New Task",
+    "cancel": "Cancel",
+    "create": "Create Schedule",
+    "form": {
+      "action": "Action",
+      "when": "When",
+      "start_immediately": "Start Immediately",
+      "command": "Command",
+      "repeat_every": "Repeat Every",
+      "immediate_warning": "Task will run within 1 minute.",
+      "placeholder_command": "say Server restarting soon...",
+      "hours": "Hours",
+      "minutes": "Minutes"
+    },
+    "actions": {
+      "start": "Start Server",
+      "stop": "Stop Server",
+      "restart": "Restart Server",
+      "command": "Send Command"
+    },
+    "list": {
+      "empty_title": "No tasks scheduled",
+      "empty_desc": "Create a task to automate your server.",
+      "runs_prefix": "Runs",
+      "processing": "Processing...",
+      "last_result": "Last:"
+    }
+  },
+  "software": {
+    "tabs": {
+      "standard": "Standard Server",
+      "modpacks": "Modpacks"
+    },
+    "titles": {
+      "platform": "Software Platform",
+      "version": "Game Version",
+      "provider": "Choose a Provider"
+    },
+    "badges": {
+      "vanilla": "Vanilla",
+      "plugins": "Plugins",
+      "mods": "Mods",
+      "proxy": "Proxy",
+      "release": "Release",
+      "beta": "Beta",
+      "alpha": "Alpha",
+      "server_pack": "Server Pack"
+    },
+    "buttons": {
+      "show_all": "Show All",
+      "show_stable": "Show Stable",
+      "search": "Search",
+      "select_pack": "Select Pack",
+      "change_pack": "Change Pack",
+      "install": "Install Modpack",
+      "save": "Save Changes",
+      "confirm_install": "Confirm & Install",
+      "resolving": "Resolving Server Files..."
+    },
+    "placeholders": {
+      "search_version": "Search version...",
+      "search_modpack": "Search {{provider}} modpacks...",
+      "custom_url": "https://example.com/modpack.zip"
+    },
+    "modpacks": {
+      "custom_zip": "Custom Zip",
+      "url_label": "Direct Download URL (Zip)",
+      "url_hint": "Must be a direct link to a zip file containing the server files.",
+      "java_label": "Target Java Version",
+      "java_hint": "This determines which Java Runtime Environment will be installed on the server.",
+      "no_desc": "No description provided.",
+      "select_version": "Select a version to install",
+      "released": "Released:",
+      "no_files": "No server files found for this modpack."
+    },
+    "impact": {
+      "high": "High Impact Change",
+      "confirm": "Confirm Change",
+      "clean_install": "Switching from {{old}} to {{new}} requires a clean install. ALL existing files will be deleted.",
+      "modpack_install": "Installing a Modpack requires a complete server reinstall. ALL existing files (world, configs) will be deleted.",
+      "version_change": "Changing version from {{old}} to {{new}}. Existing files are preserved, but downgrading may corrupt your world.",
+      "backup_download": "Download your world files before proceeding!",
+      "backup_recommend": "We recommend backing up your world before changing versions.",
+      "new_config": "New server configuration."
+    },
+    "errors": {
+      "invalid_url": "Please enter a valid HTTP/HTTPS URL for the zip file.",
+      "no_download": "This file does not have a download URL.",
+      "resolve_fail": "Failed to resolve Server Pack: {{error}}.",
+      "fetch_fail": "Failed to load versions: {{error}}",
+      "modpack_fail": "Failed to fetch modpacks: {{error}}",
+      "versions_fail": "Failed to load modpack versions"
+    },
+    "messages": {
+      "saved_reinstall": "Configuration saved. Server will be completely re-installed on next restart.",
+      "saved": "Configuration saved successfully."
+    }
   }
 }

@@ -1,0 +1,35 @@
+{
+  "title": "Simple, Transparent Pricing",
+  "subtitle": "We believe in paying only for the resources you use.",
+  "credit_explanation": "1 Credit = 1 GB RAM per hour.",
+  "calculator": {
+    "title": "Customize Your Server",
+    "subtitle": "Slide to adjust RAM allocation",
+    "ram_label": "Memory (RAM)",
+    "capabilities": "Capabilities:",
+    "estimated_cost": "Estimated Cost",
+    "hourly_rate": "Hourly Rate",
+    "deploy_btn": "Deploy {{ram}}GB Server Now",
+    "no_card": "No credit card required to sign up."
+  },
+  "recommendations": {
+    "small": "Good for small Vanilla servers with up to 5 friends. Not recommended for mods.",
+    "medium": "Perfect for Vanilla with up to 10 friends, or lightweight modpacks (approx. 50 mods).",
+    "standard": "Great for standard modpacks (100+ mods) or Vanilla servers with 20+ players.",
+    "heavy": "Ideal for heavy modpacks (200+ mods) or larger communities (40+ players).",
+    "very_heavy": "Powerful performance for very heavy modpacks (300+ mods) or 60+ players.",
+    "massive": "Enterprise-grade power for massive networks, 100+ players, or the most demanding modpacks."
+  },
+  "features": {
+    "ddos": "DDoS Protection Included",
+    "slots": "Unlimited Player Slots",
+    "files": "File Access",
+    "mods": "Mod & Plugin Support",
+    "setup": "Instant Setup",
+    "uptime": "99.9% Platform Uptime"
+  },
+  "faq": {
+    "title": "How does billing work?",
+    "answer": "Spawnly uses a credit-based system. You purchase credits (1 Credit ≈ €0.01), and we deduct them from your balance every minute your server is <1>Running</1>. If you <3>Stop</3> your server, billing pauses immediately, but your files are kept safe for free."
+  }
+}

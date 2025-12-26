@@ -78,7 +78,8 @@ export default function CreditsPage() {
   // --- Logic for Grouping & Display ---
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString("en-US", {
+    // Note: Ideally pass router.locale here instead of hardcoding "en-US"
+    return new Date(dateString).toLocaleString(router.locale || "en-US", {
       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
     });
   };
@@ -97,8 +98,9 @@ export default function CreditsPage() {
     if (s == null) return null;
     const hrs = Math.floor(s / 3600);
     const mins = Math.floor((s % 3600) / 60);
-    if (hrs > 0) return `${hrs}h ${mins}m`;
-    return `${mins}m ${s % 60}s`;
+    // Updated to use translated units
+    if (hrs > 0) return `${hrs}${t('units.h')} ${mins}${t('units.m')}`;
+    return `${mins}${t('units.m')} ${s % 60}${t('units.s')}`;
   };
 
   const groupedTransactions = () => {
@@ -169,7 +171,7 @@ export default function CreditsPage() {
               </div>
               <div>
                 <h4 className="font-semibold text-gray-900 dark:text-gray-100">
-                  {t('history.session_runtime')} {/* <--- TRANSLATED */}
+                  {t('history.session_runtime')}
                   <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">
                     {fmtSeconds(item.meta.totalSeconds)}
                   </span>
@@ -180,14 +182,16 @@ export default function CreditsPage() {
                   <span>{formatDate(item.endDate)}</span>
                 </div>
                 {item.meta.serverId && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono">ID: {item.meta.serverId.split('-')[0]}...</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono">
+                    {t('history.id_prefix')} {item.meta.serverId.split('-')[0]}...
+                  </p>
                 )}
               </div>
             </div>
             
             <div className="flex items-center gap-4">
               <span className="font-bold text-gray-900 dark:text-gray-100">
-                {item.amount.toFixed(4)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">credits</span>
+                {item.amount.toFixed(4)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits')}</span>
               </span>
               {isOpen ? <ChevronUpIcon className="w-5 h-5 text-gray-400" /> : <ChevronDownIcon className="w-5 h-5 text-gray-400" />}
             </div>
@@ -196,7 +200,7 @@ export default function CreditsPage() {
           {isOpen && (
             <div className="bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 px-4 py-3 space-y-2">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                {t('history.detailed_charges')} {/* <--- TRANSLATED */}
+                {t('history.detailed_charges')}
               </p>
               {item.details.map((tx) => (
                 <div key={tx.id} className="flex justify-between text-sm text-gray-600 dark:text-gray-300 pl-4 border-l-2 border-indigo-200 dark:border-indigo-800">
@@ -218,14 +222,14 @@ export default function CreditsPage() {
           </div>
           <div>
             <h4 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">
-              {item.type === 'usage' ? t('history.manual_deduction') : item.type} {/* <--- TRANSLATED */}
+              {item.type === 'usage' ? t('history.manual_deduction') : item.type}
             </h4>
             <p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(item.date)}</p>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{item.description}</p>
           </div>
         </div>
         <span className={`font-bold ${!isNegative ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}>
-          {item.amount > 0 ? '+' : ''}{item.amount.toFixed(2)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">credits</span>
+          {item.amount > 0 ? '+' : ''}{item.amount.toFixed(2)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits')}</span>
         </span>
       </div>
     );
@@ -246,7 +250,7 @@ export default function CreditsPage() {
           <button
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             disabled
-            title="Payment integration coming soon"
+            title={t('tooltips.payment_soon')} 
           >
             <CurrencyDollarIcon className="w-5 h-5" />
             {t('buy_credits')}
@@ -263,10 +267,10 @@ export default function CreditsPage() {
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('card.title')}</p>
             <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-400 mt-2">
               {loadingData ? "..." : credits.toFixed(2)} 
-              <span className="text-lg font-medium text-gray-500 dark:text-gray-400 ml-2">credits</span>
+              <span className="text-lg font-medium text-gray-500 dark:text-gray-400 ml-2">{t('units.credits')}</span>
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              {t('card.value_approx', { value: (credits * 0.01).toFixed(2) })} {/* <--- TRANSLATED */}
+              {t('card.value_approx', { value: (credits * 0.01).toFixed(2) })}
             </p>
           </div>
 

@@ -22,35 +22,35 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
   const creditsNum = Number(credits); 
   const canCreate = creditsNum >= costPerHour && !nameError && name.trim();
 
-  // Updated software options with Translations
+  // Updated software options with Translations for Names AND Descriptions
   const gameSoftwareOptions = {
     minecraft: [
-      { id: "vanilla", name: "Vanilla", description: t('software_desc.vanilla') },
-      { id: "paper", name: "Paper", description: t('software_desc.paper') },
-      { id: "purpur", name: "Purpur", description: t('software_desc.purpur') },
-      { id: "folia", name: "Folia", description: t('software_desc.folia') },
-      { id: "spigot", name: "Spigot", description: t('software_desc.spigot') },
-      { id: "forge", name: "Forge", description: t('software_desc.forge') },
-      { id: "neoforge", name: "NeoForge", description: t('software_desc.neoforge') },
-      { id: "fabric", name: "Fabric", description: t('software_desc.fabric') },
-      { id: "quilt", name: "Quilt", description: t('software_desc.quilt') },
-      { id: "velocity", name: "Velocity", description: t('software_desc.velocity') },
-      { id: "waterfall", name: "Waterfall", description: t('software_desc.waterfall') },
+      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
+      { id: "paper", name: t('software_names.paper'), description: t('software_desc.paper') },
+      { id: "purpur", name: t('software_names.purpur'), description: t('software_desc.purpur') },
+      { id: "folia", name: t('software_names.folia'), description: t('software_desc.folia') },
+      { id: "spigot", name: t('software_names.spigot'), description: t('software_desc.spigot') },
+      { id: "forge", name: t('software_names.forge'), description: t('software_desc.forge') },
+      { id: "neoforge", name: t('software_names.neoforge'), description: t('software_desc.neoforge') },
+      { id: "fabric", name: t('software_names.fabric'), description: t('software_desc.fabric') },
+      { id: "quilt", name: t('software_names.quilt'), description: t('software_desc.quilt') },
+      { id: "velocity", name: t('software_names.velocity'), description: t('software_desc.velocity') },
+      { id: "waterfall", name: t('software_names.waterfall'), description: t('software_desc.waterfall') },
     ],
     valheim: [
-      { id: "vanilla", name: "Vanilla", description: t('software_desc.vanilla') },
-      { id: "plus", name: "Valheim Plus", description: t('software_desc.enhanced') },
+      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
+      { id: "plus", name: t('software_names.plus'), description: t('software_desc.enhanced') },
     ],
     rust: [
-      { id: "vanilla", name: "Vanilla", description: t('software_desc.vanilla') },
-      { id: "oxide", name: "Oxide", description: t('software_desc.modding') },
+      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
+      { id: "oxide", name: t('software_names.oxide'), description: t('software_desc.modding') },
     ],
     terraria: [
-      { id: "vanilla", name: "Vanilla", description: t('software_desc.vanilla') },
-      { id: "tmodloader", name: "tModLoader", description: t('software_desc.modding') },
+      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
+      { id: "tmodloader", name: t('software_names.tmodloader'), description: t('software_desc.modding') },
     ],
     ark: [
-      { id: "vanilla", name: "Vanilla", description: t('software_desc.vanilla') },
+      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
     ],
   };
 
@@ -76,7 +76,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
       setSoftware(gameSoftwareOptions[game][0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game]); // Removed gameSoftwareOptions dependency to avoid loop, strictly usually safe here if t doesn't change often
+  }, [game, t]); // Added 't' as dependency to refresh options on language change
 
   const validateName = (value) => {
     const trimmed = value.trim();
@@ -146,7 +146,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
         className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 w-full max-w-lg space-y-6 dark:text-gray-100"
       >
         <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h2> {/* <--- TRANSLATED */}
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -161,7 +161,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
         <div className="space-y-6">
           <div className="block">
             <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              {t('labels.name')} {/* <--- TRANSLATED */}
+              {t('labels.name')}
             </label>
             <input
               id="name"
@@ -174,14 +174,14 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
             />
             {nameError && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{nameError}</p>}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {t('hints.name_rules')} {/* <--- TRANSLATED */}
+              {t('hints.name_rules')}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="block">
               <label htmlFor="game" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {t('labels.game')} {/* <--- TRANSLATED */}
+                {t('labels.game')}
               </label>
               <select
                 id="game"
@@ -190,14 +190,14 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
                 className="block w-full rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500"
               >
                 {Object.keys(gameSoftwareOptions).map(key => (
-                  <option key={key} value={key}>{t(`games.${key}`)}</option> // <--- TRANSLATED
+                  <option key={key} value={key}>{t(`games.${key}`)}</option>
                 ))}
               </select>
             </div>
             
             <div className="block">
               <label htmlFor="software" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {t('labels.software')} {/* <--- TRANSLATED */}
+                {t('labels.software')}
               </label>
               <select
                 id="software"
@@ -226,10 +226,10 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
           <div className="block">
             <div className="flex justify-between items-center mb-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {t('labels.ram')} {/* <--- TRANSLATED */}
+                {t('labels.ram')}
               </label>
               <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded-full">
-                {ram} GB
+                {ram} {t('units.gb')}
               </span>
             </div>
             <input
@@ -239,8 +239,8 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
               className="w-full h-2 bg-gray-200 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-600"
             />
             <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-              <span>2 GB</span>
-              <span>32 GB</span>
+              <span>2 {t('units.gb')}</span>
+              <span>32 {t('units.gb')}</span>
             </div>
           </div>
 
@@ -248,23 +248,23 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('labels.cost_est')}</span>
               <span className="text-lg font-bold text-indigo-700 dark:text-indigo-300">
-                {costPerHour} credits/hr
+                {costPerHour} {t('units.credits_per_hour')}
               </span>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {t('hints.cost_basis', { price: pricePerGB.toFixed(2) })} {/* <--- TRANSLATED */}
+              {t('hints.cost_basis', { price: pricePerGB.toFixed(2) })}
             </p>
             
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('labels.your_credits')}</span>
               <span className={`text-sm font-medium ${creditsNum >= costPerHour ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                {creditsNum.toFixed(2)} credits
+                {creditsNum.toFixed(2)} {t('units.credits')}
               </span>
             </div>
             
             {creditsNum < costPerHour && (
               <p className="text-red-500 dark:text-red-400 text-sm">
-                 {t('hints.insufficient_credits', { cost: costPerHour })} {/* <--- TRANSLATED */}
+                 {t('hints.insufficient_credits', { cost: costPerHour })}
               </p>
             )}
           </div>
@@ -276,7 +276,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
             onClick={onClose}
             className="bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-200 py-3 px-6 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 transition font-medium"
           >
-            {t('buttons.cancel')} {/* <--- TRANSLATED */}
+            {t('buttons.cancel')}
           </button>
           <button
             type="submit"

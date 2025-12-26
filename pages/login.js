@@ -6,8 +6,11 @@ import { useRouter } from "next/router";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { EnvelopeIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { useTranslation } from "next-i18next"; // <--- IMPORTED
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
 
 export default function Login() {
+  const { t } = useTranslation('auth'); // <--- INITIALIZED
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,10 +53,10 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-              Welcome back
+              {t('welcome_back')} {/* <--- TRANSLATED */}
             </h2>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Sign in to manage your servers
+              {t('sign_in_desc')} {/* <--- TRANSLATED */}
             </p>
           </div>
 
@@ -89,7 +92,7 @@ export default function Login() {
                     fill="#EA4335"
                   />
                 </svg>
-                Sign in with Google
+                {t('google_sign_in')} {/* <--- TRANSLATED */}
               </button>
 
               <div className="relative">
@@ -98,14 +101,14 @@ export default function Login() {
                 </div>
                 <div className="relative flex justify-center text-sm">
                   <span className="px-2 bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400">
-                    Or continue with email
+                    {t('or_email_login')} {/* <--- TRANSLATED */}
                   </span>
                 </div>
               </div>
 
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Email address
+                  {t('email_label')} {/* <--- TRANSLATED */}
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -120,7 +123,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
-                    placeholder="you@example.com"
+                    placeholder={t('placeholders.email')} // <--- TRANSLATED
                   />
                 </div>
               </div>
@@ -128,11 +131,11 @@ export default function Login() {
               <div>
                 <div className="flex items-center justify-between">
                   <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Password
+                    {t('password_label')} {/* <--- TRANSLATED */}
                   </label>
                   <div className="text-sm">
                     <Link href="/forgot-password" className="font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500">
-                      Forgot your password?
+                      {t('forgot_password')} {/* <--- TRANSLATED */}
                     </Link>
                   </div>
                 </div>
@@ -149,7 +152,7 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
-                    placeholder="••••••••"
+                    placeholder={t('placeholders.password')} // <--- TRANSLATED
                   />
                 </div>
               </div>
@@ -159,7 +162,7 @@ export default function Login() {
                 disabled={busy}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-50"
               >
-                {busy ? "Logging in..." : "Sign in"}
+                {busy ? t('logging_in') : t('sign_in_btn')} {/* <--- TRANSLATED */}
               </button>
             </form>
 
@@ -170,7 +173,7 @@ export default function Login() {
                 </div>
                 <div className="relative flex justify-center text-sm">
                   <span className="px-2 bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400">
-                    New to Spawnly?
+                    {t('new_user')} {/* <--- TRANSLATED */}
                   </span>
                 </div>
               </div>
@@ -180,7 +183,7 @@ export default function Login() {
                   href="/register"
                   className="w-full flex justify-center py-3 px-4 border border-gray-300 dark:border-slate-600 rounded-lg shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none transition-all"
                 >
-                  Create an account
+                  {t('create_account_link')} {/* <--- TRANSLATED */}
                 </Link>
               </div>
             </div>
@@ -190,4 +193,16 @@ export default function Login() {
       <Footer />
     </div>
   );
+}
+
+// --- REQUIRED FOR NEXT-I18NEXT ---
+export async function getStaticProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, [
+        'common',
+        'auth'
+      ])),
+    },
+  };
 }

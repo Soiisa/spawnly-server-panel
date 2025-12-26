@@ -5,8 +5,11 @@ import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { EnvelopeIcon } from "@heroicons/react/24/outline";
+import { useTranslation } from "next-i18next"; // <--- IMPORTED
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
 
 export default function ForgotPassword() {
+  const { t } = useTranslation('auth'); // <--- INITIALIZED
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
@@ -25,7 +28,7 @@ export default function ForgotPassword() {
     if (error) {
       setError(error.message);
     } else {
-      setMessage("Password reset link sent! Check your email.");
+      setMessage(t('reset.success_sent')); // <--- TRANSLATED
     }
     setLoading(false);
   };
@@ -38,10 +41,10 @@ export default function ForgotPassword() {
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-              Reset Password
+              {t('reset.title')} {/* <--- TRANSLATED */}
             </h2>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Enter your email to receive a reset link
+              {t('reset.desc')} {/* <--- TRANSLATED */}
             </p>
           </div>
 
@@ -52,7 +55,7 @@ export default function ForgotPassword() {
                   {message}
                 </div>
                 <Link href="/login" className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-medium">
-                  Return to Login
+                  {t('reset.return_login')} {/* <--- TRANSLATED */}
                 </Link>
               </div>
             ) : (
@@ -65,7 +68,7 @@ export default function ForgotPassword() {
 
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Email address
+                    {t('email_label')} {/* <--- TRANSLATED */}
                   </label>
                   <div className="mt-1 relative rounded-md shadow-sm">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -80,7 +83,7 @@ export default function ForgotPassword() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
-                      placeholder="you@example.com"
+                      placeholder={t('placeholders.email')} // <--- TRANSLATED
                     />
                   </div>
                 </div>
@@ -90,12 +93,12 @@ export default function ForgotPassword() {
                   disabled={loading}
                   className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-50"
                 >
-                  {loading ? "Sending..." : "Send Reset Link"}
+                  {loading ? t('reset.btn_sending') : t('reset.btn_send')} {/* <--- TRANSLATED */}
                 </button>
 
                 <div className="text-center mt-4">
                   <Link href="/login" className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
-                    Back to Login
+                    {t('reset.back_login')} {/* <--- TRANSLATED */}
                   </Link>
                 </div>
               </form>
@@ -106,4 +109,16 @@ export default function ForgotPassword() {
       <Footer />
     </div>
   );
+}
+
+// --- REQUIRED FOR NEXT-I18NEXT ---
+export async function getStaticProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, [
+        'common',
+        'auth'
+      ])),
+    },
+  };
 }

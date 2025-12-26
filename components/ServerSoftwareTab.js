@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'next-i18next'; // <--- IMPORTED
 import { 
   CubeTransparentIcon, 
   DocumentTextIcon, 
@@ -44,6 +45,7 @@ const parseMavenXml = (text) => {
 const sanitizePackName = (name) => name ? name.replace(/::/g, ' ').trim() : 'Modpack';
 
 export default function ServerSoftwareTab({ server, onSoftwareChange }) {
+  const { t } = useTranslation('server'); // <--- INITIALIZED
   // --- State ---
   const isModpack = server?.type?.startsWith('modpack');
   const [activeTab, setActiveTab] = useState(isModpack ? 'modpacks' : 'types');
@@ -75,27 +77,27 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   
   const isInitialMount = useRef(true);
 
-  // --- Definitions ---
-  const softwareOptions = [
-    { id: 'vanilla', label: 'Vanilla', icon: CubeTransparentIcon, color: 'bg-green-50 text-green-700', badge: 'Vanilla' },
-    { id: 'paper', label: 'Paper', icon: DocumentTextIcon, color: 'bg-blue-50 text-blue-700', badge: 'Plugins' },
-    { id: 'purpur', label: 'Purpur', icon: BeakerIcon, color: 'bg-purple-50 text-purple-700', badge: 'Plugins' },
-    { id: 'folia', label: 'Folia', icon: BoltIcon, color: 'bg-rose-50 text-rose-700', badge: 'Plugins' },
-    { id: 'spigot', label: 'Spigot', icon: ArchiveBoxIcon, color: 'bg-orange-50 text-orange-700', badge: 'Plugins' },
-    { id: 'forge', label: 'Forge', icon: WrenchScrewdriverIcon, color: 'bg-amber-50 text-amber-700', badge: 'Mods' },
-    { id: 'neoforge', label: 'NeoForge', icon: WrenchScrewdriverIcon, color: 'bg-orange-100 text-orange-800', badge: 'Mods' },
-    { id: 'fabric', label: 'Fabric', icon: ChipIcon, color: 'bg-indigo-50 text-indigo-700', badge: 'Mods' },
-    { id: 'quilt', label: 'Quilt', icon: ChipIcon, color: 'bg-teal-50 text-teal-700', badge: 'Mods' },
-    { id: 'velocity', label: 'Velocity', icon: GlobeAltIcon, color: 'bg-sky-50 text-sky-700', badge: 'Proxy' },
-    { id: 'waterfall', label: 'Waterfall', icon: GlobeAltIcon, color: 'bg-blue-100 text-blue-800', badge: 'Proxy' },
-  ];
+  // --- Definitions (Memoized with Translations) ---
+  const softwareOptions = useMemo(() => [
+    { id: 'vanilla', label: 'Vanilla', icon: CubeTransparentIcon, color: 'bg-green-50 text-green-700', badge: t('software.badges.vanilla') },
+    { id: 'paper', label: 'Paper', icon: DocumentTextIcon, color: 'bg-blue-50 text-blue-700', badge: t('software.badges.plugins') },
+    { id: 'purpur', label: 'Purpur', icon: BeakerIcon, color: 'bg-purple-50 text-purple-700', badge: t('software.badges.plugins') },
+    { id: 'folia', label: 'Folia', icon: BoltIcon, color: 'bg-rose-50 text-rose-700', badge: t('software.badges.plugins') },
+    { id: 'spigot', label: 'Spigot', icon: ArchiveBoxIcon, color: 'bg-orange-50 text-orange-700', badge: t('software.badges.plugins') },
+    { id: 'forge', label: 'Forge', icon: WrenchScrewdriverIcon, color: 'bg-amber-50 text-amber-700', badge: t('software.badges.mods') },
+    { id: 'neoforge', label: 'NeoForge', icon: WrenchScrewdriverIcon, color: 'bg-orange-100 text-orange-800', badge: t('software.badges.mods') },
+    { id: 'fabric', label: 'Fabric', icon: ChipIcon, color: 'bg-indigo-50 text-indigo-700', badge: t('software.badges.mods') },
+    { id: 'quilt', label: 'Quilt', icon: ChipIcon, color: 'bg-teal-50 text-teal-700', badge: t('software.badges.mods') },
+    { id: 'velocity', label: 'Velocity', icon: GlobeAltIcon, color: 'bg-sky-50 text-sky-700', badge: t('software.badges.proxy') },
+    { id: 'waterfall', label: 'Waterfall', icon: GlobeAltIcon, color: 'bg-blue-100 text-blue-800', badge: t('software.badges.proxy') },
+  ], [t]);
 
-  const modpackProviders = [
+  const modpackProviders = useMemo(() => [
     { id: 'curseforge', label: 'CurseForge', icon: CloudArrowDownIcon },
     { id: 'modrinth', label: 'Modrinth', icon: CubeTransparentIcon },
     { id: 'ftb', label: 'FTB', icon: WrenchScrewdriverIcon },
-    { id: 'custom', label: 'Custom Zip', icon: PuzzlePieceIcon },
-  ];
+    { id: 'custom', label: t('software.modpacks.custom_zip'), icon: PuzzlePieceIcon },
+  ], [t]);
 
   // --- Helpers ---
 
@@ -141,15 +143,15 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   };
 
   const checkVersionChangeImpact = (newType, newVersion, isModpackSwitch) => {
-    if (!server?.id) return { severity: 'none', message: 'New server configuration.', requiresRecreation: false };
+    if (!server?.id) return { severity: 'none', message: t('software.impact.new_config'), requiresRecreation: false };
 
     if (serverType !== server?.type && !isModpackSwitch) {
       return {
         severity: 'high',
         requiresRecreation: !!server?.hetzner_id,
         requiresFileDeletion: true,
-        message: `Switching from ${server.type} to ${newType} requires a clean install. ALL existing files will be deleted.`,
-        backupMessage: 'Download your world files before proceeding!'
+        message: t('software.impact.clean_install', { old: server.type, new: newType }), // <--- TRANSLATED
+        backupMessage: t('software.impact.backup_download') // <--- TRANSLATED
       };
     } 
     
@@ -158,8 +160,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         severity: 'high',
         requiresRecreation: !!server?.hetzner_id,
         requiresFileDeletion: true,
-        message: `Installing a Modpack requires a complete server reinstall. ALL existing files (world, configs) will be deleted.`,
-        backupMessage: 'Download your world files before proceeding!'
+        message: t('software.impact.modpack_install'), // <--- TRANSLATED
+        backupMessage: t('software.impact.backup_download')
        };
     }
 
@@ -168,8 +170,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         severity: 'medium',
         requiresRecreation: !!server?.hetzner_id,
         requiresFileDeletion: false,
-        message: `Changing version from ${server.version} to ${newVersion}. Existing files are preserved, but downgrading may corrupt your world.`,
-        backupMessage: 'We recommend backing up your world before changing versions.'
+        message: t('software.impact.version_change', { old: server.version, new: newVersion }), // <--- TRANSLATED
+        backupMessage: t('software.impact.backup_recommend') // <--- TRANSLATED
       };
     }
     return { severity: 'none' };
@@ -249,7 +251,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
       } catch (err) {
         console.error(err);
-        setError(`Could not load versions: ${err.message}`);
+        setError(t('software.errors.fetch_fail', { error: err.message })); // <--- TRANSLATED
       } finally {
         setLoadingVersions(false);
       }
@@ -309,7 +311,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             else setModpackList([]);
         }
     } catch (err) {
-        setError("Failed to fetch modpacks: " + err.message);
+        setError(t('software.errors.modpack_fail', { error: err.message })); // <--- TRANSLATED
     } finally {
         setLoadingVersions(false);
     }
@@ -379,7 +381,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         }
         setModpackFiles(files);
     } catch (err) {
-        setError("Failed to load modpack versions");
+        setError(t('software.errors.versions_fail')); // <--- TRANSLATED
     } finally {
         setLoadingVersions(false);
     }
@@ -387,9 +389,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   const getReleaseBadge = (type) => {
     switch (type) {
-        case 1: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-600 uppercase tracking-wide">Release</span>;
-        case 2: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-600 uppercase tracking-wide">Beta</span>;
-        case 3: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-600 uppercase tracking-wide">Alpha</span>;
+        case 1: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-600 uppercase tracking-wide">{t('software.badges.release')}</span>;
+        case 2: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-600 uppercase tracking-wide">{t('software.badges.beta')}</span>;
+        case 3: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-600 uppercase tracking-wide">{t('software.badges.alpha')}</span>;
         default: return null;
     }
   };
@@ -419,7 +421,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
     if (modpackProvider === 'custom') {
         if (!customZipUrl || !customZipUrl.startsWith('http')) {
-            setError("Please enter a valid HTTP/HTTPS URL for the zip file.");
+            setError(t('software.errors.invalid_url')); // <--- TRANSLATED
             return;
         }
         let mcVerMeta = '1.20.1';
@@ -463,15 +465,15 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     }
                 } catch (e) {
                     console.error("Server pack resolution failed:", e);
-                    setError(`Failed to resolve Server Pack: ${e.message}.`);
+                    setError(t('software.errors.resolve_fail', { error: e.message })); // <--- TRANSLATED
                     setIsInstalling(false);
-                    return; // Stop here, don't fallback silently to broken client pack
+                    return; 
                 } finally {
                     setIsInstalling(false);
                 }
             } else {
                 if (!verObj.downloadUrl) {
-                    setError("This file does not have a download URL.");
+                    setError(t('software.errors.no_download')); // <--- TRANSLATED
                     return;
                 }
                 payloadVersion = `${verObj.downloadUrl}::${mcVer}::${packName}`;
@@ -479,7 +481,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
         } else if (modpackProvider === 'modrinth') {
             if (!verObj.downloadUrl) {
-                 setError("No file found for this version.");
+                 setError(t('software.errors.no_download')); // <--- TRANSLATED
                  return;
             }
             payloadVersion = `${verObj.downloadUrl}::${mcVer}::${packName}`;
@@ -513,8 +515,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       if (onSoftwareChange) onSoftwareChange(versionChangeInfo.payload);
       
       setSuccess(versionChangeInfo.payload.needs_recreation 
-        ? 'Configuration saved. Server will be completely re-installed on next restart.' 
-        : 'Configuration saved successfully.'
+        ? t('software.messages.saved_reinstall') 
+        : t('software.messages.saved')
       );
     } catch (err) {
       setError(err.message);
@@ -530,13 +532,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
            onClick={() => setActiveTab('types')}
            className={`px-4 py-2 font-bold text-sm rounded-lg transition-all ${activeTab === 'types' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
          >
-            Standard Server
+            {t('software.tabs.standard')}
          </button>
          <button 
            onClick={() => setActiveTab('modpacks')}
            className={`px-4 py-2 font-bold text-sm rounded-lg transition-all ${activeTab === 'modpacks' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
          >
-            Modpacks
+            {t('software.tabs.modpacks')}
          </button>
       </div>
 
@@ -545,7 +547,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             {/* Standard Software Grid (Unchanged) */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                <ChipIcon className="w-5 h-5 text-gray-500" /> Software Platform
+                <ChipIcon className="w-5 h-5 text-gray-500" /> {t('software.titles.platform')}
                 </h2>
                 
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -581,14 +583,14 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                    <ArchiveBoxIcon className="w-5 h-5 text-gray-500" /> Game Version
+                    <ArchiveBoxIcon className="w-5 h-5 text-gray-500" /> {t('software.titles.version')}
                 </h2>
                 
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                     <div className="relative flex-1 sm:flex-none">
                     <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input 
-                        type="text" placeholder="Search version..." 
+                        type="text" placeholder={t('software.placeholders.search_version')} 
                         value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 w-full sm:w-48"
                     />
@@ -599,7 +601,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                         showAllVersions ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-slate-700 dark:text-gray-300 dark:border-slate-600'
                     }`}
                     >
-                    {showAllVersions ? 'Show All' : 'Show Stable'}
+                    {showAllVersions ? t('software.buttons.show_stable') : t('software.buttons.show_all')}
                     </button>
                 </div>
                 </div>
@@ -625,7 +627,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     })}
                 </div>
                 ) : (
-                <div className="text-center py-10 text-gray-500 dark:text-gray-400">No versions found</div>
+                <div className="text-center py-10 text-gray-500 dark:text-gray-400">{t('software.buttons.no_versions')}</div>
                 )}
             </div>
         </>
@@ -636,7 +638,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             
             {/* Provider Selector */}
             <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Choose a Provider</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('software.titles.provider')}</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     {modpackProviders.map(p => (
                         <div key={p.id} onClick={() => { setModpackProvider(p.id); setModpackList([]); setModpackFiles([]); setSelectedModpack(null); }}
@@ -652,19 +654,19 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             {modpackProvider === 'custom' ? (
                 <div className="space-y-4 bg-gray-50 dark:bg-slate-700/50 p-6 rounded-xl border border-dashed border-gray-300 dark:border-slate-600">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Direct Download URL (Zip)</label>
-                        <input type="text" value={customZipUrl} onChange={e => setCustomZipUrl(e.target.value)} placeholder="https://example.com/modpack.zip" className="w-full p-2.5 border rounded-lg dark:bg-slate-700 dark:text-white dark:border-slate-600"/>
-                        <p className="text-xs text-gray-500 mt-1">Must be a direct link to a zip file containing the server files.</p>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('software.modpacks.url_label')}</label>
+                        <input type="text" value={customZipUrl} onChange={e => setCustomZipUrl(e.target.value)} placeholder={t('software.placeholders.custom_url')} className="w-full p-2.5 border rounded-lg dark:bg-slate-700 dark:text-white dark:border-slate-600"/>
+                        <p className="text-xs text-gray-500 mt-1">{t('software.modpacks.url_hint')}</p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target Java Version</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('software.modpacks.java_label')}</label>
                         <select value={customJavaVer} onChange={e => setCustomJavaVer(e.target.value)} className="w-full p-2.5 border rounded-lg dark:bg-slate-700 dark:text-white dark:border-slate-600">
                             <option value="8">Java 8 (Minecraft 1.12.2 and older)</option>
                             <option value="11">Java 11 (Minecraft 1.13 - 1.16.5)</option>
                             <option value="17">Java 17 (Minecraft 1.17 - 1.20.4)</option>
                             <option value="21">Java 21 (Minecraft 1.20.5+)</option>
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">This determines which Java Runtime Environment will be installed on the server.</p>
+                        <p className="text-xs text-gray-500 mt-1">{t('software.modpacks.java_hint')}</p>
                     </div>
                 </div>
             ) : (
@@ -673,13 +675,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     <div className="flex gap-2">
                         <input 
                             type="text" 
-                            placeholder={`Search ${modpackProvider} modpacks...`}
+                            placeholder={t('software.placeholders.search_modpack', { provider: modpackProvider })}
                             value={modpackSearch}
                             onChange={(e) => setModpackSearch(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && searchModpacks()}
                             className="flex-1 p-2.5 border rounded-lg dark:bg-slate-700 dark:text-white dark:border-slate-600"
                         />
-                        <button onClick={searchModpacks} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Search</button>
+                        <button onClick={searchModpacks} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">{t('software.buttons.search')}</button>
                     </div>
 
                     {/* Modpack Results Grid */}
@@ -705,13 +707,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                                         </div>
                                     </div>
                                     <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mb-4 flex-1">
-                                        {pack.summary || pack.description || "No description provided."}
+                                        {pack.summary || pack.description || t('software.modpacks.no_desc')}
                                     </p>
                                     <button 
                                         onClick={() => selectModpack(pack)} 
                                         className="w-full py-2 bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 font-medium rounded-lg text-sm border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors"
                                     >
-                                        Select Pack
+                                        {t('software.buttons.select_pack')}
                                     </button>
                                 </div>
                             ))}
@@ -728,10 +730,10 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                                     ) : null}
                                     <div>
                                         <span className="block font-bold dark:text-white">{selectedModpack.name || selectedModpack.title}</span>
-                                        <span className="text-xs text-gray-500">Select a version to install</span>
+                                        <span className="text-xs text-gray-500">{t('software.modpacks.select_version')}</span>
                                     </div>
                                 </div>
-                                <button onClick={() => { setSelectedModpack(null); setModpackFiles([]); }} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">Change Pack</button>
+                                <button onClick={() => { setSelectedModpack(null); setModpackFiles([]); }} className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">{t('software.buttons.change_pack')}</button>
                             </div>
 
                             {loadingVersions ? (
@@ -751,7 +753,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                                                             {getReleaseBadge(file.releaseType)}
                                                         </div>
                                                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                            Released: {new Date(file.fileDate).toLocaleDateString()}
+                                                            {t('software.modpacks.released')} {new Date(file.fileDate).toLocaleDateString()}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -760,7 +762,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                                                 <div className="flex items-center gap-3 text-right">
                                                     {file.serverPackFileId && (
                                                         <span className="text-[10px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full border border-green-200 flex items-center gap-1">
-                                                            <ServerIcon className="w-3 h-3"/> Server Pack
+                                                            <ServerIcon className="w-3 h-3"/> {t('software.badges.server_pack')}
                                                         </span>
                                                     )}
                                                     <div className="flex flex-col items-end">
@@ -780,7 +782,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                                             </div>
                                         )
                                     })}
-                                    {modpackFiles.length === 0 && <p className="text-center text-gray-500 py-4">No server files found for this modpack.</p>}
+                                    {modpackFiles.length === 0 && <p className="text-center text-gray-500 py-4">{t('software.modpacks.no_files')}</p>}
                                 </div>
                             )}
                         </div>
@@ -816,10 +818,10 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Resolving Server Files...
+              {t('software.buttons.resolving')}
             </>
           ) : (
-            activeTab === 'modpacks' ? 'Install Modpack' : 'Save Changes'
+            activeTab === 'modpacks' ? t('software.buttons.install') : t('software.buttons.save')
           )}
         </button>
       </div>
@@ -838,7 +840,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     <ExclamationTriangleIcon className="w-6 h-6" />
                   </div>
                   <h3 className={`text-lg font-bold ${versionChangeInfo.severity === 'high' ? 'text-red-900 dark:text-red-300' : 'text-yellow-900 dark:text-yellow-300'}`}>
-                    {versionChangeInfo.severity === 'high' ? 'High Impact Change' : 'Confirm Change'}
+                    {versionChangeInfo.severity === 'high' ? t('software.impact.high') : t('software.impact.confirm')}
                   </h3>
                 </div>
               </div>
@@ -858,13 +860,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                   onClick={() => { setShowVersionWarning(false); setVersionChangeInfo(null); }}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 font-medium"
                 >
-                  Cancel
+                  {t('actions.cancel')}
                 </button>
                 <button
                   onClick={confirmChange}
                   className={`px-4 py-2 text-white rounded-lg font-medium shadow-sm ${versionChangeInfo.severity === 'high' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
                 >
-                  Confirm & Install
+                  {t('software.buttons.confirm_install')}
                 </button>
               </div>
             </motion.div>

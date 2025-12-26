@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import md5 from 'md5';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabaseClient'; // Imported for DB sync
+import { useTranslation } from 'next-i18next'; // <--- IMPORTED
 import {
   UserGroupIcon,
   ShieldCheckIcon,
@@ -20,6 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function PlayersTab({ server, token }) {
+  const { t } = useTranslation('server'); // <--- INITIALIZED
   // --- State ---
   const [activeSubTab, setActiveSubTab] = useState('whitelist');
   const [whitelist, setWhitelist] = useState([]);
@@ -49,10 +51,10 @@ export default function PlayersTab({ server, token }) {
 
   // --- Constants ---
   const TABS = [
-    { id: 'whitelist', label: 'Whitelist', icon: UserGroupIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { id: 'ops', label: 'Operators', icon: ShieldCheckIcon, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { id: 'banned-players', label: 'Banned Players', icon: NoSymbolIcon, color: 'text-red-600', bg: 'bg-red-50' },
-    { id: 'banned-ips', label: 'Banned IPs', icon: GlobeAltIcon, color: 'text-slate-600', bg: 'bg-slate-50' },
+    { id: 'whitelist', label: t('players.tabs.whitelist'), icon: UserGroupIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { id: 'ops', label: t('players.tabs.ops'), icon: ShieldCheckIcon, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { id: 'banned-players', label: t('players.tabs.banned_players'), icon: NoSymbolIcon, color: 'text-red-600', bg: 'bg-red-50' },
+    { id: 'banned-ips', label: t('players.tabs.banned_ips'), icon: GlobeAltIcon, color: 'text-slate-600', bg: 'bg-slate-50' },
   ];
 
   // --- Effects ---
@@ -155,7 +157,7 @@ export default function PlayersTab({ server, token }) {
     const isIP = activeSubTab === 'banned-ips';
     const target = isIP ? newPlayerIp : newPlayerName;
     
-    if (!target) return showError(`${isIP ? 'IP Address' : 'Player Name'} is required`);
+    if (!target) return showError(`${isIP ? t('players.form.ip_address') : t('players.form.player_name')} is required`);
 
     setLoading(true);
     setError(null);
@@ -239,7 +241,7 @@ export default function PlayersTab({ server, token }) {
   };
 
   const removeFromList = async (identifier) => {
-    if (!confirm(`Remove ${identifier}?`)) return;
+    if (!confirm(`${t('actions.confirm')} ${identifier}?`)) return;
     setLoading(true);
 
     let file, currentList, command;
@@ -312,7 +314,7 @@ export default function PlayersTab({ server, token }) {
     // UPDATED: Added dark mode classes
     <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
       <UserGroupIcon className="w-12 h-12 mb-3 opacity-50" />
-      <p>No entries found for this list.</p>
+      <p>{t('players.empty_list')}</p>
     </div>
   );
 
@@ -329,7 +331,7 @@ export default function PlayersTab({ server, token }) {
             {/* UPDATED: Added dark mode class for text */}
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               <SignalIcon className="w-5 h-5 text-green-500" />
-              Online Players
+              {t('players.online_title')}
               <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
                 {onlineList.length}
               </span>
@@ -338,7 +340,7 @@ export default function PlayersTab({ server, token }) {
               onClick={fetchAllData} 
               disabled={loading}
               className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-              title="Refresh Data"
+              title={t('files.refresh')}
             >
               <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -361,7 +363,7 @@ export default function PlayersTab({ server, token }) {
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-gray-400">
                 <SignalSlashIcon className="w-8 h-8 mb-2 opacity-50" />
-                <span className="text-sm">No players online</span>
+                <span className="text-sm">{t('players.no_online')}</span>
               </div>
             )}
           </div>
@@ -373,21 +375,21 @@ export default function PlayersTab({ server, token }) {
           <div className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-100 dark:border-indigo-600">
             <div className="flex items-center gap-3">
               <UserGroupIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <span className="text-sm font-medium text-indigo-900 dark:text-indigo-300">Whitelisted</span>
+              <span className="text-sm font-medium text-indigo-900 dark:text-indigo-300">{t('players.tabs.whitelist')}</span>
             </div>
             <span className="font-bold text-indigo-700 dark:text-indigo-400">{whitelist.length}</span>
           </div>
           <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-600">
             <div className="flex items-center gap-3">
               <ShieldCheckIcon className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              <span className="text-sm font-medium text-amber-900 dark:text-amber-300">Operators</span>
+              <span className="text-sm font-medium text-amber-900 dark:text-amber-300">{t('players.tabs.ops')}</span>
             </div>
             <span className="font-bold text-amber-700 dark:text-amber-400">{ops.length}</span>
           </div>
           <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-600">
             <div className="flex items-center gap-3">
               <NoSymbolIcon className="w-5 h-5 text-red-600 dark:text-red-400" />
-              <span className="text-sm font-medium text-red-900 dark:text-red-300">Banned</span>
+              <span className="text-sm font-medium text-red-900 dark:text-red-300">{t('players.tabs.banned_players')}</span>
             </div>
             <span className="font-bold text-red-700 dark:text-red-400">{bannedPlayers.length + bannedIps.length}</span>
           </div>
@@ -426,7 +428,7 @@ export default function PlayersTab({ server, token }) {
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
             <input 
               type="text" 
-              placeholder="Search..." 
+              placeholder={t('players.search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               // UPDATED: Added dark mode classes for input
@@ -442,7 +444,7 @@ export default function PlayersTab({ server, token }) {
                 : 'bg-indigo-600 text-white hover:bg-indigo-700'
               }`}
           >
-            {isAdding ? 'Cancel' : <><UserPlusIcon className="w-4 h-4" /> Add New</>}
+            {isAdding ? t('actions.cancel') : <><UserPlusIcon className="w-4 h-4" /> {t('players.add_new')}</>}
           </button>
         </div>
 
@@ -461,7 +463,7 @@ export default function PlayersTab({ server, token }) {
                 {activeSubTab !== 'banned-ips' && (
                   <div className="col-span-1">
                     {/* UPDATED: Added dark mode class for label text */}
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">Player Name</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.player_name')}</label>
                     <input 
                       type="text" 
                       value={newPlayerName} 
@@ -476,7 +478,7 @@ export default function PlayersTab({ server, token }) {
                 {activeSubTab === 'banned-ips' && (
                   <div className="col-span-1">
                     {/* UPDATED: Added dark mode class for label text */}
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">IP Address</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.ip_address')}</label>
                     <input 
                       type="text" 
                       value={newPlayerIp} 
@@ -492,17 +494,17 @@ export default function PlayersTab({ server, token }) {
                   <>
                     <div>
                       {/* UPDATED: Added dark mode class for label text */}
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">Op Level</label>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.op_level')}</label>
                       <select 
                         value={newOpLevel} 
                         onChange={(e) => setNewOpLevel(Number(e.target.value))}
                         // UPDATED: Added dark mode classes for select
                         className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       >
-                        <option value="1">Level 1 (Bypass protection)</option>
-                        <option value="2">Level 2 (Command blocks)</option>
-                        <option value="3">Level 3 (Kick/Ban)</option>
-                        <option value="4">Level 4 (Stop/Operator)</option>
+                        <option value="1">{t('players.levels.l1')}</option>
+                        <option value="2">{t('players.levels.l2')}</option>
+                        <option value="3">{t('players.levels.l3')}</option>
+                        <option value="4">{t('players.levels.l4')}</option>
                       </select>
                     </div>
                     <div className="flex items-center h-10 mt-6">
@@ -514,7 +516,7 @@ export default function PlayersTab({ server, token }) {
                         className="h-4 w-4 text-indigo-600 border-gray-300 dark:border-slate-600 dark:bg-slate-800 rounded focus:ring-indigo-500"
                       />
                       {/* UPDATED: Added dark mode class for label text */}
-                      <label htmlFor="bypass" className="ml-2 text-sm text-gray-700 dark:text-gray-300">Bypass Player Limit</label>
+                      <label htmlFor="bypass" className="ml-2 text-sm text-gray-700 dark:text-gray-300">{t('players.form.bypass_limit')}</label>
                     </div>
                   </>
                 )}
@@ -523,7 +525,7 @@ export default function PlayersTab({ server, token }) {
                   <>
                     <div className="col-span-1 md:col-span-2">
                       {/* UPDATED: Added dark mode class for label text */}
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">Reason</label>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.reason')}</label>
                       <input 
                         type="text" 
                         value={newPlayerReason} 
@@ -535,15 +537,15 @@ export default function PlayersTab({ server, token }) {
                     </div>
                     <div>
                       {/* UPDATED: Added dark mode class for label text */}
-                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">Expires</label>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.expires')}</label>
                       <select 
                         value={newPlayerExpires === 'forever' ? 'forever' : 'date'} 
                         onChange={(e) => setNewPlayerExpires(e.target.value === 'forever' ? 'forever' : new Date().toISOString().split('T')[0])}
                         // UPDATED: Added dark mode classes for select
                         className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       >
-                        <option value="forever">Forever</option>
-                        <option value="date">Specific Date</option>
+                        <option value="forever">{t('players.form.forever')}</option>
+                        <option value="date">{t('players.form.specific_date')}</option>
                       </select>
                       {newPlayerExpires !== 'forever' && (
                         <input 
@@ -564,7 +566,7 @@ export default function PlayersTab({ server, token }) {
                     disabled={loading}
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-all disabled:opacity-50"
                   >
-                    {loading ? 'Saving...' : 'Confirm Add'}
+                    {loading ? t('files.editor.saving') : t('players.form.confirm')}
                   </button>
                 </div>
               </div>

@@ -40,6 +40,22 @@
     "terraria": "Terraria",
     "ark": "ARK: Survival Evolved"
   },
+  "software_names": {
+    "vanilla": "Vanilla",
+    "paper": "Paper",
+    "purpur": "Purpur",
+    "folia": "Folia",
+    "spigot": "Spigot",
+    "forge": "Forge",
+    "neoforge": "NeoForge",
+    "fabric": "Fabric",
+    "quilt": "Quilt",
+    "velocity": "Velocity",
+    "waterfall": "Waterfall",
+    "plus": "Valheim Plus",
+    "oxide": "Oxide",
+    "tmodloader": "tModLoader"
+  },
   "software_desc": {
     "vanilla": "Official server software",
     "paper": "High-performance Spigot fork",
@@ -54,5 +70,10 @@
     "waterfall": "Legacy proxy server",
     "modding": "Modding platform",
     "enhanced": "Enhanced with quality-of-life features"
+  },
+  "units": {
+    "gb": "GB",
+    "credits": "credits",
+    "credits_per_hour": "credits/hr"
   }
 }

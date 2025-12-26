@@ -1,8 +1,10 @@
 // components/CookieBanner.js
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useTranslation, Trans } from 'next-i18next'; // <--- IMPORTED
 
 export default function CookieBanner() {
+  const { t } = useTranslation('common'); // <--- INITIALIZED
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
@@ -27,26 +29,24 @@ export default function CookieBanner() {
         
         <div className="text-sm text-gray-600 dark:text-gray-300 text-center sm:text-left">
           <p>
-            We use cookies to ensure you get the best experience on Spawnly. 
-            By continuing, you agree to our{' '}
-            <Link href="/privacy" className="text-teal-600 dark:text-teal-400 hover:underline font-medium">
-              Privacy Policy
-            </Link> 
-            {' '}and{' '}
-            <Link href="/terms" className="text-teal-600 dark:text-teal-400 hover:underline font-medium">
-              Terms of Service
-            </Link>.
+            <Trans
+              i18nKey="cookie.text"
+              components={[
+                <span key="0" />,
+                <Link href="/privacy" key="1" className="text-teal-600 dark:text-teal-400 hover:underline font-medium" />,
+                <span key="2" />,
+                <Link href="/terms" key="3" className="text-teal-600 dark:text-teal-400 hover:underline font-medium" />
+              ]}
+            />
           </p>
         </div>
 
         <div className="flex gap-3">
-            {/* Optional: A 'Decline' button isn't strictly necessary if you only use Essential cookies, 
-                but 'Accept' is standard for acknowledgement. */}
           <button
             onClick={acceptCookies}
             className="whitespace-nowrap px-6 py-2 bg-teal-500 hover:bg-teal-400 text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
           >
-            Accept & Continue
+            {t('cookie.accept')} {/* <--- TRANSLATED */}
           </button>
         </div>
 

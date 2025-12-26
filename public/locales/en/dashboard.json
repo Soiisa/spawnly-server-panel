@@ -1,5 +1,5 @@
 {
-  "loading": "Loading dashboard...",
+  "loading": "Loading your servers...",
   "headers": {
     "your_servers": "Your Servers",
     "new_server": "New Server"
@@ -10,28 +10,52 @@
     "total_ram": "Total RAM",
     "hourly_cost": "Hourly Cost"
   },
-  "empty_state": {
-    "title": "No servers found",
-    "description": "Get started by creating your first game server.",
-    "button": "Create Server"
-  },
   "server_card": {
     "memory": "Memory",
     "address": "Address",
     "start": "Start",
     "stop": "Stop",
-    "processing": "Processing"
+    "processing": "Processing..."
+  },
+  "empty_state": {
+    "title": "No Servers Yet",
+    "description": "Get started by creating your first high-performance game server.",
+    "button": "Create Server"
   },
   "messages": {
-    "confirm_delete": "Are you sure? This will delete the server and all data permanently.",
-    "dismiss": "Dismiss",
     "error_create": "Failed to create server",
     "error_delete": "Failed to delete server",
     "error_start": "Failed to start server",
-    "error_stop": "Failed to stop server"
+    "error_stop": "Failed to stop server",
+    "confirm_delete": "Are you sure you want to delete this server? This action cannot be undone.",
+    "dismiss": "Dismiss"
   },
   "software": {
     "unknown": "Unknown",
     "modpack": "Modpack"
+  },
+  "software_names": {
+    "vanilla": "Vanilla",
+    "paper": "Paper",
+    "purpur": "Purpur",
+    "folia": "Folia",
+    "spigot": "Spigot",
+    "forge": "Forge",
+    "neoforge": "NeoForge",
+    "fabric": "Fabric",
+    "quilt": "Quilt",
+    "velocity": "Velocity",
+    "waterfall": "Waterfall",
+    "plus": "Valheim Plus",
+    "oxide": "Oxide",
+    "tmodloader": "tModLoader"
+  },
+  "tooltips": {
+    "console_files": "Console & Files",
+    "settings": "Settings",
+    "delete_server": "Delete Server"
+  },
+  "units": {
+    "gb": "GB"
   }
 }

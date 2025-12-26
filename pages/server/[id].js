@@ -52,7 +52,6 @@ const getOnlinePlayersArray = (server) => {
 const showStatusNotification = (serverName, t) => {
   if (typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') {
-      // <--- TRANSLATED NOTIFICATION
       new Notification(t('notifications.ready_title', { serverName }), {
         body: t('notifications.ready_body', { serverName }),
         icon: '/logo.png', 
@@ -64,7 +63,7 @@ const showStatusNotification = (serverName, t) => {
   }
 };
 
-// NEW: Helper for Displaying Software/Version
+// Helper for Displaying Software/Version
 const getDisplayInfo = (server, t) => {
   if (!server) return { software: t ? t('software.unknown') : 'Unknown', version: t ? t('software.unknown') : 'Unknown' };
 
@@ -162,7 +161,7 @@ export default function ServerDetailPage({ initialServer }) {
         }
       } catch (err) {
         console.error('Data fetch error:', err);
-        setError(t('errors.load_session')); // <--- TRANSLATED
+        setError(t('errors.load_session'));
       } finally {
         setLoading(false);
       }
@@ -190,7 +189,6 @@ export default function ServerDetailPage({ initialServer }) {
           if (!mountedRef.current) return;
           setServer((prev) => {
             const updated = payload.new;
-            // Sync MOTD if updated externally and we aren't editing
             if (!isEditingMotd && updated.motd !== prev.motd) {
               setMotdText(updated.motd);
             }
@@ -241,11 +239,10 @@ export default function ServerDetailPage({ initialServer }) {
         const timeoutMs = server.auto_stop_timeout * 60 * 1000;
         const diff = (lastEmpty + timeoutMs) - Date.now();
 
-        if (diff <= 0) setAutoStopCountdown(t('config.stopping_soon')); // <--- TRANSLATED
+        if (diff <= 0) setAutoStopCountdown(t('config.stopping_soon'));
         else {
           const minutes = Math.floor(diff / 60000);
           const seconds = Math.floor((diff % 60000) / 1000);
-          // <--- TRANSLATED with interpolation
           setAutoStopCountdown(t('config.stopping_in', { time: `${minutes}m ${seconds}s` }));
         }
       };
@@ -255,9 +252,8 @@ export default function ServerDetailPage({ initialServer }) {
       setAutoStopCountdown(null);
     }
     return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
-  }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout, t]); // Added 't' dependency
+  }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout, t]);
 
-  // Effect for Browser Notifications
   useEffect(() => {
     const prevStatus = prevStatusRef.current;
     const currentStatus = server?.status;
@@ -267,7 +263,7 @@ export default function ServerDetailPage({ initialServer }) {
     const isTransitioning = startingStatuses.includes(prevStatus) && currentStatus === 'Running';
 
     if (isTransitioning) {
-      showStatusNotification(serverName, t); // Passed 't'
+      showStatusNotification(serverName, t);
     }
     
     prevStatusRef.current = currentStatus;
@@ -316,7 +312,7 @@ export default function ServerDetailPage({ initialServer }) {
       fetchServer(id, user?.id);
       if (expectedStatuses.includes(server?.status) || Date.now() - startTime > timeout) {
         clearInterval(pollRef.current);
-        if (Date.now() - startTime > timeout) setError(t('errors.timeout')); // <--- TRANSLATED
+        if (Date.now() - startTime > timeout) setError(t('errors.timeout'));
       }
     }, 3000);
   };
@@ -340,7 +336,7 @@ export default function ServerDetailPage({ initialServer }) {
       const { error } = await supabase.from('servers').update({ auto_stop_timeout: val }).eq('id', server.id);
       if (error) throw error;
       setServer(prev => ({ ...prev, auto_stop_timeout: val }));
-    } catch (e) { setError(t('errors.update_auto_stop')); } // <--- TRANSLATED
+    } catch (e) { setError(t('errors.update_auto_stop')); }
     finally { setSavingAutoStop(false); }
   };
 
@@ -392,7 +388,7 @@ export default function ServerDetailPage({ initialServer }) {
         pollUntilStatus(expected);
       }
     } catch (e) {
-      setError(t('errors.failed_action', { action, message: e.message })); // <--- TRANSLATED
+      setError(t('errors.failed_action', { action, message: e.message }));
       await fetchServer(server.id, user.id);
     } finally {
       setActionLoading(false);
@@ -400,8 +396,8 @@ export default function ServerDetailPage({ initialServer }) {
   };
 
   const handleSaveRam = async () => {
-    if (server.status !== 'Stopped') return setError(t('errors.stop_ram')); // <--- TRANSLATED
-    if (newRam < 2 || newRam > 32) return setError(t('errors.ram_range')); // <--- TRANSLATED
+    if (server.status !== 'Stopped') return setError(t('errors.stop_ram'));
+    if (newRam < 2 || newRam > 32) return setError(t('errors.ram_range'));
     setActionLoading(true);
     try {
       const { error } = await supabase.from('servers').update({ ram: newRam }).eq('id', server.id);
@@ -450,7 +446,7 @@ export default function ServerDetailPage({ initialServer }) {
       setServer(prev => ({ ...prev, motd: motdText }));
       setIsEditingMotd(false);
     } catch (e) {
-      setError(t('errors.save_motd')); // <--- TRANSLATED
+      setError(t('errors.save_motd'));
       console.error(e);
     } finally {
       setSavingMotd(false);
@@ -459,19 +455,18 @@ export default function ServerDetailPage({ initialServer }) {
 
   // --- Render Helpers ---
 
-  // Calculate Display Info
   const { software: displaySoftware, version: displayVersion } = getDisplayInfo(server, t);
 
   if (!user || loading) return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-        <p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">{t('loading')}</p> {/* <--- TRANSLATED */}
+        <p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">{t('loading')}</p>
       </div>
     </div>
   );
 
-  if (!server) return <div className="p-10 text-center dark:text-gray-400">{t('not_found')}</div>; // <--- TRANSLATED
+  if (!server) return <div className="p-10 text-center dark:text-gray-400">{t('not_found')}</div>;
 
   const status = server.status || 'Unknown';
   const isRunning = status === 'Running';
@@ -485,13 +480,12 @@ export default function ServerDetailPage({ initialServer }) {
   const hybridTypes = ['arclight', 'mohist', 'magma'];
   const showMods = moddedTypes.includes(sType) || pluginTypes.includes(sType) || hybridTypes.includes(sType);
   
-  // Dynamic Label Translation
   let modLabel = t('tabs.mods');
   if (pluginTypes.includes(sType)) modLabel = t('tabs.plugins');
   if (hybridTypes.includes(sType)) modLabel = t('tabs.mods_plugins');
 
   const tabs = [
-    { id: 'overview', label: t('tabs.overview'), icon: SignalIcon }, // <--- TRANSLATED
+    { id: 'overview', label: t('tabs.overview'), icon: SignalIcon },
     { id: 'schedules', label: t('tabs.schedules'), icon: CalendarDaysIcon }, 
     { id: 'properties', label: t('tabs.properties'), icon: ServerIcon },
     { id: 'console', label: t('tabs.console'), icon: ClockIcon },
@@ -518,16 +512,14 @@ export default function ServerDetailPage({ initialServer }) {
                 <span className="bg-red-200 p-1 rounded-full"><XMarkIcon className="w-4 h-4 text-red-700" /></span>
                 <span>{error}</span>
               </div>
-              <button onClick={() => setError(null)} className="text-sm font-semibold hover:underline">Dismiss</button>
+              <button onClick={() => setError(null)} className="text-sm font-semibold hover:underline">{t('messages.dismiss', { defaultValue: 'Dismiss' })}</button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* --- Header Section --- */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 mb-8">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             
-            {/* Server Identity */}
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{server.name}</h1>
@@ -542,12 +534,10 @@ export default function ServerDetailPage({ initialServer }) {
                   className="group flex items-center gap-1 hover:text-indigo-600 transition-colors"
                 >
                   <span className="font-mono">{server.name}.spawnly.net</span>
-                  {/* <--- TRANSLATED */}
                   {copiedIp ? <span className="text-green-600 text-xs font-bold">{t('actions.copied')}</span> : <ClipboardDocumentIcon className="w-4 h-4 opacity-50 group-hover:opacity-100" />}
                 </button>
               </div>
 
-              {/* Editable MOTD Section */}
               <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 h-8">
                 {isEditingMotd ? (
                   <div className="flex items-center gap-2 w-full max-w-md animate-in fade-in zoom-in duration-200">
@@ -556,7 +546,7 @@ export default function ServerDetailPage({ initialServer }) {
                       value={motdText}
                       onChange={(e) => setMotdText(e.target.value)}
                       className="flex-1 px-2 py-1 border border-indigo-300 rounded text-gray-900 dark:bg-slate-700 dark:text-gray-100 dark:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                      placeholder="Enter Server MOTD..."
+                      placeholder={t('properties.labels.motd', { defaultValue: 'Enter Server MOTD...' })}
                       maxLength={64}
                     />
                     <button 
@@ -575,11 +565,11 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 group">
-                    <span className="italic text-gray-600 dark:text-gray-400">“{motdText || 'A Spawnly Server'}”</span>
+                    <span className="italic text-gray-600 dark:text-gray-400">“{motdText || t('messages.default_motd', { defaultValue: 'A Spawnly Server' })}”</span>
                     <button 
                       onClick={() => setIsEditingMotd(true)}
                       className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 dark:text-gray-500 hover:text-indigo-600"
-                      title={t('actions.edit_motd')} // <--- TRANSLATED
+                      title={t('actions.edit_motd')}
                     >
                       <PencilSquareIcon className="w-4 h-4" />
                     </button>
@@ -588,7 +578,6 @@ export default function ServerDetailPage({ initialServer }) {
               </div>
             </div>
 
-            {/* Quick Actions */}
             <div className="flex flex-wrap items-center gap-3">
               {isStopped && (
                 <button
@@ -597,7 +586,7 @@ export default function ServerDetailPage({ initialServer }) {
                   className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {actionLoading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <PlayIcon className="w-5 h-5" />}
-                  {t('actions.start')} {/* <--- TRANSLATED */}
+                  {t('actions.start')}
                 </button>
               )}
               
@@ -610,7 +599,7 @@ export default function ServerDetailPage({ initialServer }) {
                       className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50"
                     >
                       {actionLoading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowPathIcon className="w-5 h-5" />}
-                      {t('actions.restart')} {/* <--- TRANSLATED */}
+                      {t('actions.restart')}
                     </button>
                   )}
                   <button
@@ -619,7 +608,7 @@ export default function ServerDetailPage({ initialServer }) {
                     className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50"
                   >
                     <StopIcon className="w-5 h-5" />
-                    {t('actions.stop')} {/* <--- TRANSLATED */}
+                    {t('actions.stop')}
                   </button>
                 </>
               )}
@@ -627,14 +616,13 @@ export default function ServerDetailPage({ initialServer }) {
               {isBusy && (
                 <button disabled className="flex items-center gap-2 bg-gray-100 dark:bg-slate-700 text-gray-400 px-5 py-2.5 rounded-xl font-semibold cursor-not-allowed">
                   <div className="animate-spin w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full" />
-                  {t('status.processing')} {/* <--- TRANSLATED */}
+                  {t('status.processing')}
                 </button>
               )}
             </div>
           </div>
         </div>
 
-        {/* --- Navigation Tabs --- */}
         <div className="mb-8 overflow-x-auto">
           <div className="flex items-center gap-2 min-w-max border-b border-gray-200 dark:border-slate-700 pb-1">
             {tabs.map((tab) => (
@@ -660,47 +648,44 @@ export default function ServerDetailPage({ initialServer }) {
           </div>
         </div>
 
-        {/* --- Tab Content --- */}
         <div className="min-h-[400px]">
-          <Suspense fallback={<div className="text-center py-12 text-gray-400">Loading component...</div>}>
+          <Suspense fallback={<div className="text-center py-12 text-gray-400">{t('loading')}</div>}>
             
             {activeTab === 'overview' && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {/* 1. Connection Card */}
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col justify-between">
                   <div>
                     <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
-                      <SignalIcon className="w-4 h-4" /> {t('connection.title')} {/* <--- TRANSLATED */}
+                      <SignalIcon className="w-4 h-4" /> {t('connection.title')}
                     </h3>
                     <div 
                       onClick={handleCopyIp}
                       className="group cursor-pointer bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 rounded-xl p-4 text-center transition-all"
                     >
-                      <p className="text-sm text-gray-500 dark:text-gray-300 mb-1">{t('connection.address')}</p> {/* <--- TRANSLATED */}
+                      <p className="text-sm text-gray-500 dark:text-gray-300 mb-1">{t('connection.address')}</p>
                       <p className="text-xl font-mono font-bold text-gray-900 dark:text-gray-100 break-all">{server.name}.spawnly.net</p>
                       <p className="text-xs text-indigo-600 mt-2 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                        {copiedIp ? t('actions.copied') : t('actions.copy_ip')} {/* <--- TRANSLATED */}
+                        {copiedIp ? t('actions.copied') : t('actions.copy_ip')}
                       </p>
                     </div>
                   </div>
                   <div className="mt-6 pt-6 border-t border-gray-100 dark:border-slate-700">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm text-gray-600 dark:text-gray-300">{t('connection.software')}</span> {/* <--- TRANSLATED */}
+                      <span className="text-sm text-gray-600 dark:text-gray-300">{t('connection.software')}</span>
                       <span className="text-sm font-medium text-gray-900 dark:text-gray-100 capitalize truncate max-w-[150px] text-right" title={displaySoftware}>
                         {displaySoftware}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600 dark:text-gray-300">{t('connection.version')}</span> {/* <--- TRANSLATED */}
+                      <span className="text-sm text-gray-600 dark:text-gray-300">{t('connection.version')}</span>
                       <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{displayVersion}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* 2. Resources & Metrics */}
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2 flex flex-col">
                   <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <CpuChipIcon className="w-4 h-4" /> {t('resources.title')} {/* <--- TRANSLATED */}
+                    <CpuChipIcon className="w-4 h-4" /> {t('resources.title')}
                   </h3>
                   <div className="flex flex-col flex-1 gap-4">
                     {isRunning ? (
@@ -709,7 +694,7 @@ export default function ServerDetailPage({ initialServer }) {
                         <div className="mt-auto pt-4 border-t border-gray-100 dark:border-slate-700 flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <UserGroupIcon className="w-5 h-5 text-gray-400" />
-                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('resources.active_players')}</span> {/* <--- TRANSLATED */}
+                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('resources.active_players')}</span>
                           </div>
                           <div className="text-right">
                             <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{server.player_count || 0}</span>
@@ -720,21 +705,19 @@ export default function ServerDetailPage({ initialServer }) {
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-slate-700 rounded-xl border border-dashed border-gray-200 dark:border-slate-600 h-40">
                         <ServerIcon className="w-8 h-8 mb-2 opacity-50" />
-                        <p>{t('resources.server_offline')}</p> {/* <--- TRANSLATED */}
+                        <p>{t('resources.server_offline')}</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* 3. Configuration & Limits */}
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <ClockIcon className="w-4 h-4" /> {t('config.title')} {/* <--- TRANSLATED */}
+                    <ClockIcon className="w-4 h-4" /> {t('config.title')}
                   </h3>
                   
-                  {/* Auto-Stop */}
                   <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('config.auto_stop')}</label> {/* <--- TRANSLATED */}
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('config.auto_stop')}</label>
                     <div className="flex items-center gap-2">
                       <select
                         value={server.auto_stop_timeout ?? 30}
@@ -742,11 +725,11 @@ export default function ServerDetailPage({ initialServer }) {
                         disabled={savingAutoStop}
                         className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-gray-50 dark:bg-slate-700"
                       >
-                        <option value="0">{t('config.auto_stop_never')}</option> {/* <--- TRANSLATED */}
-                        <option value="5">{t('config.auto_stop_5m')}</option> {/* <--- TRANSLATED */}
-                        <option value="15">{t('config.auto_stop_15m')}</option> {/* <--- TRANSLATED */}
-                        <option value="30">{t('config.auto_stop_30m')}</option> {/* <--- TRANSLATED */}
-                        <option value="60">{t('config.auto_stop_1h')}</option> {/* <--- TRANSLATED */}
+                        <option value="0">{t('config.auto_stop_never')}</option>
+                        <option value="5">{t('config.auto_stop_5m')}</option>
+                        <option value="15">{t('config.auto_stop_15m')}</option>
+                        <option value="30">{t('config.auto_stop_30m')}</option>
+                        <option value="60">{t('config.auto_stop_1h')}</option>
                       </select>
                       {savingAutoStop && <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />}
                     </div>
@@ -757,9 +740,8 @@ export default function ServerDetailPage({ initialServer }) {
                     )}
                   </div>
 
-                  {/* RAM Allocation */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('config.ram_allocation')}</label> {/* <--- TRANSLATED */}
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('config.ram_allocation')}</label>
                     {editingRam ? (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
@@ -771,8 +753,8 @@ export default function ServerDetailPage({ initialServer }) {
                           <span className="text-sm font-bold w-12 text-right">{newRam}GB</span>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={handleSaveRam} className="flex-1 bg-indigo-600 text-white text-xs py-1.5 rounded-lg hover:bg-indigo-700">{t('actions.save')}</button> {/* <--- TRANSLATED */}
-                          <button onClick={() => setEditingRam(false)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-1.5 rounded-lg hover:bg-gray-300">{t('actions.cancel')}</button> {/* <--- TRANSLATED */}
+                          <button onClick={handleSaveRam} className="flex-1 bg-indigo-600 text-white text-xs py-1.5 rounded-lg hover:bg-indigo-700">{t('actions.save')}</button>
+                          <button onClick={() => setEditingRam(false)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-1.5 rounded-lg hover:bg-gray-300">{t('actions.cancel')}</button>
                         </div>
                       </div>
                     ) : (
@@ -783,7 +765,7 @@ export default function ServerDetailPage({ initialServer }) {
                             onClick={() => { setNewRam(server.ram); setEditingRam(true); }} 
                             className="text-xs text-indigo-600 font-medium hover:text-indigo-800"
                           >
-                            {t('config.edit_ram')} {/* <--- TRANSLATED */}
+                            {t('config.edit_ram')}
                           </button>
                         )}
                       </div>
@@ -791,27 +773,26 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 </div>
 
-                {/* 4. Billing Info */}
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2">
                   <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <CurrencyDollarIcon className="w-4 h-4" /> {t('billing.title')} {/* <--- TRANSLATED */}
+                    <CurrencyDollarIcon className="w-4 h-4" /> {t('billing.title')}
                   </h3>
                   <div className="flex items-center gap-8">
                     <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.hourly_cost')}</p> {/* <--- TRANSLATED */}
-                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{server.cost_per_hour} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.credits_hr')}</span></p> {/* <--- TRANSLATED */}
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.hourly_cost')}</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{server.cost_per_hour} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.credits_hr')}</span></p>
                     </div>
                     <div className="h-10 w-px bg-gray-200 dark:bg-slate-700"></div>
                     <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.est_runtime')}</p> {/* <--- TRANSLATED */}
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.est_runtime')}</p>
                       <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                        {(credits / (server.cost_per_hour || 1)).toFixed(1)} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.hours_left')}</span> {/* <--- TRANSLATED */}
+                        {(credits / (server.cost_per_hour || 1)).toFixed(1)} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.hours_left')}</span>
                       </p>
                     </div>
                   </div>
                   {credits < server.cost_per_hour && (
                     <div className="mt-4 bg-red-50 text-red-700 text-sm p-3 rounded-lg flex items-center gap-2">
-                      <span className="font-bold">{t('billing.warning_low')}</span> {/* <--- TRANSLATED */}
+                      <span className="font-bold">{t('billing.warning_low')}</span>
                     </div>
                   )}
                 </div>
@@ -819,7 +800,6 @@ export default function ServerDetailPage({ initialServer }) {
               </div>
             )}
 
-            {/* Other Tabs */}
             <div className={activeTab === 'overview' ? 'hidden' : 'block animate-in fade-in duration-300'}>
               {activeTab === 'properties' && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
@@ -827,7 +807,6 @@ export default function ServerDetailPage({ initialServer }) {
                 </div>
               )}
 
-              {/* ADDED: Schedules Tab Render Logic */}
               {activeTab === 'schedules' && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <SchedulesTab server={server} />
@@ -842,7 +821,7 @@ export default function ServerDetailPage({ initialServer }) {
 
               {activeTab === 'players' && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating...</p>}
+                  {fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating', { defaultValue: 'Authenticating...' })}</p>}
                 </div>
               )}
 
@@ -851,13 +830,13 @@ export default function ServerDetailPage({ initialServer }) {
 
               {activeTab === 'world' && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating...</p>}
+                  {fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating', { defaultValue: 'Authenticating...' })}</p>}
                 </div>
               )}
 
               {activeTab === 'files' && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} /> : <p className="text-center text-gray-500 dark:text-gray-400">Authenticating file access...</p>}
+                  {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating_files', { defaultValue: 'Authenticating file access...' })}</p>}
                 </div>
               )}
 
@@ -874,15 +853,15 @@ export default function ServerDetailPage({ initialServer }) {
   );
 }
 
-// --- REQUIRED FOR NEXT-I18NEXT (Server Side Translation Loading) ---
+// --- REQUIRED FOR NEXT-I18NEXT ---
 export async function getServerSideProps(context) {
   const { id } = context.params || {};
   if (!id) return { notFound: true };
 
-  // Load translations BEFORE any data fetching logic
   const translations = await serverSideTranslations(context.locale, [
     'common',
-    'server'
+    'server',
+    'dashboard' // Ensure dismissal texts etc are loaded
   ]);
 
   try {
@@ -897,7 +876,6 @@ export async function getServerSideProps(context) {
 
     if (error || !data) return { notFound: true };
 
-    // Return combined props: Translations + Initial Server Data
     return { 
       props: { 
         ...translations, 

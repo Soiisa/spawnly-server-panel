@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { read, write } from 'nbtify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'next-i18next'; // <--- IMPORTED
 import { 
   FolderIcon, 
   DocumentIcon, 
@@ -45,6 +46,8 @@ const getFileIcon = (fileName, isDirectory) => {
 };
 
 export default function FileManager({ server, token, setActiveTab }) {
+  const { t } = useTranslation('server'); // <--- INITIALIZED
+  
   // --- State ---
   const [currentPath, setCurrentPath] = useState('');
   const [files, setFiles] = useState([]);
@@ -118,7 +121,7 @@ export default function FileManager({ server, token, setActiveTab }) {
       setAllFiles(sorted);
       setCurrentPath(res.data.path);
     } catch (err) {
-      setError(`Failed to load files: ${err.response?.data?.error || err.message}`);
+      setError(`${t('files.load_fail')}: ${err.response?.data?.error || err.message}`); // <--- TRANSLATED
     } finally {
       setLoading(false);
     }
@@ -198,14 +201,14 @@ export default function FileManager({ server, token, setActiveTab }) {
       setEditingFile(null);
       setFileContent('');
     } catch (err) {
-      setError(`Failed to save: ${err.message}`);
+      setError(`${t('files.save_fail')}: ${err.message}`); // <--- TRANSLATED
     } finally {
       setIsSaving(false);
     }
   };
 
   const deleteFile = async (file) => {
-    if (!window.confirm(`Delete ${file.name}? This cannot be undone.`)) return;
+    if (!window.confirm(t('files.delete_confirm', { name: file.name }))) return; // <--- TRANSLATED
     try {
       const relPath = currentPath ? `${currentPath}/${file.name}` : file.name;
       await axios.delete(`${apiBase}/files`, {
@@ -214,7 +217,7 @@ export default function FileManager({ server, token, setActiveTab }) {
       });
       fetchFiles(currentPath);
     } catch (err) {
-      setError(`Delete failed: ${err.message}`);
+      setError(`${t('files.delete_fail')}: ${err.message}`); // <--- TRANSLATED
     }
   };
 
@@ -234,7 +237,7 @@ export default function FileManager({ server, token, setActiveTab }) {
       link.click();
       link.remove();
     } catch (err) {
-      setError('Download failed');
+      setError(t('files.download_fail')); // <--- TRANSLATED
     }
   };
 
@@ -255,7 +258,7 @@ export default function FileManager({ server, token, setActiveTab }) {
       });
       fetchFiles(currentPath);
     } catch (err) {
-      setError('Upload failed');
+      setError(t('files.upload_fail')); // <--- TRANSLATED
     } finally {
       setSelectedFile(null);
       setUploadProgress(0);
@@ -306,7 +309,7 @@ export default function FileManager({ server, token, setActiveTab }) {
                     onClick={() => { setEditingFile(null); setFileContent(''); }}
                     className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600 rounded-lg transition-colors"
                   >
-                    Cancel
+                    {t('actions.cancel')}
                   </button>
                   <button 
                     onClick={saveFile}
@@ -314,7 +317,7 @@ export default function FileManager({ server, token, setActiveTab }) {
                     className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm flex items-center gap-2 transition-all disabled:opacity-50"
                   >
                     {isSaving ? <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> : <CheckCircleIcon className="w-4 h-4" />}
-                    Save Changes
+                    {t('files.editor.save_changes')} {/* <--- TRANSLATED */}
                   </button>
                 </div>
               </div>
@@ -367,7 +370,7 @@ export default function FileManager({ server, token, setActiveTab }) {
             <button
               onClick={() => setFilterEnabled(!filterEnabled)}
               className={`p-2 rounded-lg border transition-colors ${filterEnabled ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/20 dark:border-indigo-600 dark:text-indigo-400' : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600 text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'}`}
-              title="Toggle masked files"
+              title={t('files.filter_tooltip')} // <--- TRANSLATED
             >
               <FunnelIcon className="w-5 h-5" />
             </button>
@@ -376,7 +379,7 @@ export default function FileManager({ server, token, setActiveTab }) {
               onClick={() => fetchFiles(currentPath)}
               disabled={loading}
               className="p-2 rounded-lg border border-gray-200 dark:border-slate-600 text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 hover:text-gray-900 dark:hover:text-gray-100 transition-colors disabled:opacity-50"
-              title="Refresh"
+              title={t('files.refresh')} // <--- TRANSLATED
             >
               <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -387,7 +390,7 @@ export default function FileManager({ server, token, setActiveTab }) {
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm shadow-sm transition-all"
               >
                 <ArrowUpTrayIcon className="w-4 h-4" />
-                Upload
+                {t('files.upload')} {/* <--- TRANSLATED */}
               </button>
               <input 
                 type="file" 
@@ -425,10 +428,10 @@ export default function FileManager({ server, token, setActiveTab }) {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-700 text-xs uppercase text-gray-500 dark:text-gray-300 font-semibold tracking-wider">
-                <th className="px-6 py-4 w-1/2">Name</th>
-                <th className="px-6 py-4 w-1/6">Size</th>
-                <th className="px-6 py-4 w-1/6">Modified</th>
-                <th className="px-6 py-4 w-1/6 text-right">Actions</th>
+                <th className="px-6 py-4 w-1/2">{t('files.columns.name')}</th>
+                <th className="px-6 py-4 w-1/6">{t('files.columns.size')}</th>
+                <th className="px-6 py-4 w-1/6">{t('files.columns.modified')}</th>
+                <th className="px-6 py-4 w-1/6 text-right">{t('files.columns.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
@@ -449,7 +452,7 @@ export default function FileManager({ server, token, setActiveTab }) {
                     <div className="mx-auto w-12 h-12 bg-gray-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-3">
                       <FolderIcon className="w-6 h-6 text-gray-400" />
                     </div>
-                    <p className="text-gray-500 dark:text-gray-400 font-medium">This folder is empty</p>
+                    <p className="text-gray-500 dark:text-gray-400 font-medium">{t('files.empty')}</p> {/* <--- TRANSLATED */}
                   </td>
                 </tr>
               ) : (

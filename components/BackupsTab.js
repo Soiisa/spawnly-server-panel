@@ -10,8 +10,10 @@ import {
   CheckIcon
 } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabaseClient';
+import { useTranslation } from 'next-i18next'; // <--- IMPORTED
 
 export default function BackupsTab({ server }) {
+  const { t } = useTranslation('server'); // <--- INITIALIZED
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -34,7 +36,6 @@ export default function BackupsTab({ server }) {
     }
   }, [server.id]);
 
-  // Update local state if server prop updates (e.g. from external change)
   useEffect(() => {
     setAutoBackupEnabled(server.auto_backup_enabled || false);
     setAutoBackupInterval(server.auto_backup_interval_hours || 24);
@@ -62,7 +63,6 @@ export default function BackupsTab({ server }) {
   };
 
   const handleCreateBackup = async () => {
-    // Logic updated to allow backup when stopped (handled by backend)
     setProcessing(true);
     const { data: { session } } = await supabase.auth.getSession();
     try {
@@ -80,11 +80,10 @@ export default function BackupsTab({ server }) {
         throw new Error(err.error || 'Failed');
       }
       
-      alert("Backup started! It will appear in the list shortly.");
-      // Poll a few times to see the new file
+      alert(t('backups.alerts.started')); // <--- TRANSLATED
       setTimeout(fetchBackups, 2000);
       setTimeout(fetchBackups, 5000);
-      setTimeout(fetchBackups, 10000); // Extra poll for slower S3 zips
+      setTimeout(fetchBackups, 10000); 
     } catch (e) {
       alert("Failed to start backup: " + e.message);
     } finally {
@@ -115,10 +114,10 @@ export default function BackupsTab({ server }) {
 
   const handleRestore = async (key) => {
     if (!isStopped) {
-        return alert("Server must be FULLY STOPPED to queue a restore.");
+        return alert(t('backups.alerts.stop_required')); // <--- TRANSLATED
     }
 
-    if (!confirm("WARNING: This will queue a restore.\n\nThe NEXT time you click 'Start', your current files will be DELETED and replaced with this backup.\n\nContinue?")) return;
+    if (!confirm(t('backups.alerts.confirm_restore'))) return; // <--- TRANSLATED
 
     setProcessing(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -137,7 +136,7 @@ export default function BackupsTab({ server }) {
         throw new Error(err.error || 'Failed');
       }
       
-      alert("Restore Queued!\n\nThe backup will be applied automatically when you next START the server.");
+      alert(t('backups.alerts.queued')); // <--- TRANSLATED
     } catch (e) {
       alert("Restore request failed: " + e.message);
     } finally {
@@ -164,10 +163,10 @@ export default function BackupsTab({ server }) {
               <ClockIcon className="h-5 w-5 text-amber-400" aria-hidden="true" />
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300">Restore Pending</h3>
+              <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300">{t('backups.pending_title')}</h3>
               <div className="mt-2 text-sm text-amber-700 dark:text-amber-200">
                 <p>
-                  A backup restore is queued. <strong>The next time you click Start</strong>, the server will be wiped and restored from:
+                  {t('backups.pending_desc')}
                 </p>
                 <code className="bg-amber-100 dark:bg-amber-900 px-2 py-1 rounded mt-1 block w-fit font-mono text-xs">
                   {pendingRestore.split('/').pop()}
@@ -184,9 +183,9 @@ export default function BackupsTab({ server }) {
           <div>
             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               <ArchiveBoxIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              Backups
+              {t('backups.title')}
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Manage snapshots and configure auto-backups.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('backups.subtitle')}</p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
               <button 
@@ -199,7 +198,7 @@ export default function BackupsTab({ server }) {
               <button 
                   onClick={fetchBackups} 
                   className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:text-gray-100 rounded-lg border border-gray-200 dark:border-slate-700"
-                  title="Refresh List"
+                  title={t('backups.refresh')}
               >
                   <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
               </button>
@@ -214,7 +213,7 @@ export default function BackupsTab({ server }) {
                   ) : (
                     <CloudArrowUpIcon className="w-5 h-5" />
                   )}
-                  Create Backup
+                  {t('backups.create')}
               </button>
           </div>
         </div>
@@ -222,7 +221,7 @@ export default function BackupsTab({ server }) {
         {/* Auto Backup Settings Panel */}
         {showSettings && (
           <div className="mb-6 bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl border border-gray-200 dark:border-slate-600 animate-in fade-in slide-in-from-top-2">
-            <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 text-sm">Auto-Backup Configuration</h4>
+            <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 text-sm">{t('backups.settings_title')}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
               <div>
                 <label className="flex items-center gap-2 cursor-pointer mb-1">
@@ -232,13 +231,13 @@ export default function BackupsTab({ server }) {
                     onChange={(e) => setAutoBackupEnabled(e.target.checked)}
                     className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Auto-Backup</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('backups.enable_auto')}</span>
                 </label>
                 <p className="text-xs text-gray-500 dark:text-gray-400 pl-6">Runs when server stops.</p>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Frequency (Hours)</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('backups.frequency')}</label>
                 <div className="relative">
                   <input 
                     type="number" 
@@ -252,7 +251,7 @@ export default function BackupsTab({ server }) {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Retention (Count)</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('backups.retention')}</label>
                 <div className="relative">
                     <input 
                       type="number" 
@@ -272,7 +271,7 @@ export default function BackupsTab({ server }) {
                   className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-70"
                >
                  {savingSettings && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                 Save Settings
+                 {t('backups.save_settings')}
                </button>
             </div>
           </div>
@@ -282,10 +281,10 @@ export default function BackupsTab({ server }) {
           <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
             <thead className="bg-gray-50 dark:bg-slate-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">File Name</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Size</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Created</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('files.columns.name')}</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('files.columns.size')}</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('files.columns.modified')}</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">{t('files.columns.actions')}</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-100 dark:divide-slate-700">
@@ -295,8 +294,8 @@ export default function BackupsTab({ server }) {
                           <div className="mx-auto w-12 h-12 bg-gray-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-3">
                               <CloudArrowUpIcon className="w-6 h-6 text-gray-400" />
                           </div>
-                          <p className="text-gray-900 dark:text-gray-100 font-medium">No backups found</p>
-                          <p className="text-gray-500 dark:text-gray-400 text-sm">Create a backup manually or enable auto-backups.</p>
+                          <p className="text-gray-900 dark:text-gray-100 font-medium">{t('backups.empty_title')}</p>
+                          <p className="text-gray-500 dark:text-gray-400 text-sm">{t('backups.empty_desc')}</p>
                       </td>
                   </tr>
               ) : (
@@ -321,7 +320,7 @@ export default function BackupsTab({ server }) {
                             }`}
                         >
                             <ArrowDownTrayIcon className="w-4 h-4" /> 
-                            {isStopped ? 'Restore' : 'Stop to Restore'}
+                            {isStopped ? t('backups.restore') : t('backups.stop_to_restore')}
                         </button>
                       </td>
                   </tr>
