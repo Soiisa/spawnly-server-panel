@@ -2,12 +2,13 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
+import { useTranslation } from 'next-i18next';
 import { 
   ServerIcon, 
   CreditCardIcon, 
   SunIcon,
   MoonIcon,
+  Cog6ToothIcon // <--- IMPORTED
 } from '@heroicons/react/24/outline';
 import CreditBalance from "./CreditBalance";
 import { useDarkMode } from '../pages/_app';
@@ -15,13 +16,15 @@ import { useDarkMode } from '../pages/_app';
 export default function ServersHeader({ user, credits, isLoading, onLogout }) {
   const router = useRouter();
   const { isDarkMode, toggleDarkMode } = useDarkMode();
-  const { t } = useTranslation('common'); // <--- INITIALIZED
+  const { t } = useTranslation('common');
 
   const isActive = (path) => router.pathname === path;
 
+  // Add Settings to the navLinks array
   const navLinks = [
-    { name: t('nav.dashboard'), href: '/dashboard', icon: ServerIcon }, // <--- TRANSLATED
-    { name: t('nav.billing'), href: '/credits', icon: CreditCardIcon }, // <--- TRANSLATED
+    { name: t('nav.dashboard'), href: '/dashboard', icon: ServerIcon },
+    { name: t('nav.billing'), href: '/credits', icon: CreditCardIcon },
+    { name: t('nav.settings', 'Settings'), href: '/settings', icon: Cog6ToothIcon }, // <--- ADDED
   ];
 
   return (
@@ -33,7 +36,6 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
           <div className="flex items-center gap-8">
             <Link href="/dashboard" className="flex items-center gap-2 group">
               <div className="relative h-8 w-8">
-                {/* REPLACE '/logo.png' WITH YOUR ACTUAL FILE NAME */}
                 <Image 
                   src="/logo.png" 
                   alt="Spawnly Logo" 
@@ -70,7 +72,7 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
             <button
               onClick={toggleDarkMode}
               className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-              title={isDarkMode ? t('theme.switch_light') : t('theme.switch_dark')} // <--- TRANSLATED
+              title={isDarkMode ? t('theme.switch_light') : t('theme.switch_dark')}
             >
               {isDarkMode ? <SunIcon className="w-6 h-6" /> : <MoonIcon className="w-6 h-6" />}
             </button>
@@ -88,7 +90,7 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
                   onClick={onLogout}
                   className="text-xs text-gray-500 hover:text-red-600 transition-colors mt-1 flex items-center gap-1"
                 >
-                  {t('nav.logout')} {/* <--- TRANSLATED */}
+                  {t('nav.logout')}
                 </button>
               </div>
               
