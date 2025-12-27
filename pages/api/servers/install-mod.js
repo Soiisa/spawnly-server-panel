@@ -98,15 +98,26 @@ export default async function handler(req, res) {
   const s3 = new AWS.S3(s3Config);
 
   try {
-    // UPDATED: Added User-Agent header to satisfy Cloudflare/Spiget
+    console.log(`[Install-Mod] Downloading from: ${downloadUrl}`);
+
+    // UPDATED: Added Robust Headers to bypass WAF/Cloudflare 403s
     const fileRes = await fetch(downloadUrl, {
         headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.google.com/',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'cross-site',
+            'Upgrade-Insecure-Requests': '1'
+        },
+        redirect: 'follow'
     });
 
     if (!fileRes.ok) {
-      throw new Error(`Failed to download file: ${fileRes.statusText}`);
+      console.error(`[Install-Mod] Failed download. Status: ${fileRes.status} ${fileRes.statusText}`);
+      throw new Error(`Failed to download file: ${fileRes.statusText} (${fileRes.status})`);
     }
     const arrayBuffer = await fileRes.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -120,9 +131,10 @@ export default async function handler(req, res) {
       ContentType: 'application/java-archive',
     }).promise();
 
+    console.log(`[Install-Mod] Success: ${key}`);
     return res.status(200).json({ success: true });
   } catch (err) {
-    console.error('Error installing mod/plugin:', err.message, err.stack);
+    console.error('[Install-Mod] Error:', err.message);
     return res.status(500).json({ error: 'Failed to install', detail: err.message });
   }
 }
