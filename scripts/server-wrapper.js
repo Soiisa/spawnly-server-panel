@@ -98,9 +98,10 @@ if (USE_RUN_SH) {
   mcProcess = spawn('./run.sh', [], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
 } else {
   // Add flags to this array
+  // UPDATED: Xms=1G (Minimum), Xmx=HEAP_GB (Maximum)
   const args = [
     `-Xmx${HEAP_GB}G`, 
-    `-Xms${Math.min(1, HEAP_GB)}G`, 
+    `-Xms1G`, 
     '-XX:+UseG1GC',
     '-XX:+ParallelRefProcEnabled',
     '-XX:MaxGCPauseMillis=200',

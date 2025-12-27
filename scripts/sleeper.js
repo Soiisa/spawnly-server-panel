@@ -92,18 +92,40 @@ const server = net.createServer((socket) => {
 
     if (packetId === 0x00) {
       let motd = "§b§lSpawnly Server\n§7Server is Stopped. Join to Start!";
+      let versionText = "§4● Sleeping";
       
       if (subdomain) {
         const { data } = await supabase
           .from('servers')
-          .select('motd')
+          .select('motd, status')
           .eq('subdomain', subdomain)
           .single();
-        if (data?.motd) motd = `${data.motd}\n§r§7(Server Sleeping)`;
+        
+        if (data) {
+           // Base MOTD
+           if (data.motd) motd = `${data.motd}\n§r§7(Server Sleeping)`;
+
+           // Dynamic Status Overrides
+           if (data.status === 'Initializing') {
+               versionText = "§e● Initializing";
+               motd = "§e§lServer Initializing...\n§7Preparing infrastructure...";
+           } else if (data.status === 'Starting') {
+               versionText = "§e● Starting";
+               motd = "§e§lServer Starting...\n§7Booting up Minecraft...";
+           } else if (data.status === 'Stopping') {
+               versionText = "§c● Stopping";
+               motd = "§c§lServer Stopping...\n§7Saving data...";
+           } else if (data.status === 'Running') {
+               // Rare case: Server is running but DNS hasn't propagated to client yet, 
+               // so they hit the sleeper instead of the real server.
+               versionText = "§a● Running";
+               motd = "§a§lServer is Online!\n§7Refresh to join.";
+           }
+        }
       }
 
       const response = {
-        version: { name: "§4● Sleeping", protocol: -1 },
+        version: { name: versionText, protocol: -1 },
         players: { max: 0, online: 0 },
         description: { text: motd }
       };
@@ -144,8 +166,19 @@ const server = net.createServer((socket) => {
       .single();
 
     if (error || !serverInfo) return kickClient("§cServer not found.");
-    if (serverInfo.status === 'Running' || serverInfo.status === 'Starting') {
-      return kickClient("§eServer is already starting!\n§fPlease wait ~30 seconds.");
+    
+    // Status Checks
+    if (serverInfo.status === 'Running') {
+        return kickClient("§aServer is Running!\n§fPlease refresh your server list to connect.");
+    }
+    if (serverInfo.status === 'Initializing') {
+        return kickClient("§eServer is Initializing!\n§fWe are provisioning your server.\n§fPlease wait ~30 seconds.");
+    }
+    if (serverInfo.status === 'Starting') {
+        return kickClient("§eServer is Starting!\n§fMinecraft is booting up.\n§fPlease wait ~15 seconds.");
+    }
+    if (serverInfo.status === 'Stopping') {
+        return kickClient("§cServer is Stopping.\n§fPlease wait for it to fully stop before restarting.");
     }
 
     // Whitelist Check
@@ -165,9 +198,10 @@ const server = net.createServer((socket) => {
 
     console.log(`[Sleeper] Waking up server ${serverInfo.id}...`);
     
-    try {
-      // SECURITY FIX: Send Secret Header
-      await axios.post(PROVISION_API_URL, {
+    // --- FIRE AND FORGET PROVISION REQUEST ---
+    // We do NOT await this. We trigger it and immediately kick the user.
+    // This ensures the "Logging in..." screen doesn't hang.
+    axios.post(PROVISION_API_URL, {
         serverId: serverInfo.id,
         version: serverInfo.version
       }, {
@@ -175,13 +209,13 @@ const server = net.createServer((socket) => {
             'Content-Type': 'application/json',
             'x-sleeper-secret': SLEEPER_SECRET 
         }
+      }).catch(err => {
+        // Log error secretly, user will just try again if it fails.
+        console.error(`[Sleeper] Wake API failed for ${serverInfo.id}:`, err.message);
       });
 
-      kickClient("§a§lWaking up Server!\n\n§7Authentication Accepted.\n§7Server is starting now.\n\n§fPlease refresh in 1-2 minutes.");
-    } catch (err) {
-      console.error(`[Sleeper] Wake failed:`, err.message);
-      kickClient("§cFailed to wake server. Please use the dashboard.");
-    }
+    // Immediate Kick
+    kickClient("§a§lWaking up Server!\n\n§7Request sent successfully.\n§7Server is starting now.\n\n§fPlease refresh in 1-2 minutes.");
   }
 
   function sendPacket(id, data) {
