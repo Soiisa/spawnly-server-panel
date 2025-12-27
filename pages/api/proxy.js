@@ -13,7 +13,8 @@ const ALLOWED_HOSTS = [
   'mohistmc.com',
   'api.magmafoundation.org',
   'api.modrinth.com',
-  'api.feed-the-beast.com'
+  'api.feed-the-beast.com',
+  'api.spiget.org' // <--- ADDED
 ];
 
 export default async function handler(req, res) {

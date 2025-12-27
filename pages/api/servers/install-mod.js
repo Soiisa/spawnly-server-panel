@@ -17,7 +17,8 @@ const ALLOWED_DOMAINS = [
   'api.papermc.io',
   'cdn.getbukkit.org',
   'buk.kit',
-  'spigotmc.org'
+  'spigotmc.org',
+  'api.spiget.org' // <--- ADDED
 ];
 
 export default async function handler(req, res) {

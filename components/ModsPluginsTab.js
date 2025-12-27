@@ -284,10 +284,21 @@ export default function ModsPluginsTab({ server }) {
     setSuccess(null);
     try {
       const folder = selectedItem.type === 'plugin' ? 'plugins' : 'mods';
-        
+      
+      // --- NEW: Get Authentication Token ---
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+          throw new Error("You must be logged in to install plugins.");
+      }
+
       const res = await fetch('/api/servers/install-mod', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` // <--- ADDED HEADER
+        },
         body: JSON.stringify({
           serverId: server.id,
           downloadUrl: version.downloadUrl,
