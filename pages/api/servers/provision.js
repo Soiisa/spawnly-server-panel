@@ -22,12 +22,13 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-// RAM to Server Type Mapping (Cost Optimized)
+// RAM to Server Type Mapping (Cost Optimized with Overhead)
+// Ensure we always have at least 1GB of "slack" on the VPS for the OS.
 const ramToServerType = (ramGb) => {
-  if (ramGb <= 3) return 'cx23';
-  if (ramGb <= 7) return 'cx33';
-  if (ramGb <= 15) return 'cx43';
-  return 'cx53';
+  if (ramGb <= 3) return 'cx23';  // 4GB VPS -> 1GB free
+  if (ramGb <= 7) return 'cx33';  // 8GB VPS -> 1GB free
+  if (ramGb <= 15) return 'cx43'; // 16GB VPS -> 1GB free
+  return 'cx53';                  // 32GB VPS
 };
 
 const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
@@ -335,8 +336,10 @@ const deleteS3Files = async (serverId, s3Config) => {
 
 const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '', pendingRestoreKey = null) => {
   const ramNum = Number(ramGb);
-  const overhead = ramNum >= 12 ? 2 : 1;
-  const heapGb = Math.max(1, ramNum - overhead);
+  
+  // UPDATED: Use full allocated RAM for Heap, with a minimum of 1GB.
+  // The VPS size is guaranteed to be larger by ramToServerType logic.
+  const heapGb = Math.max(1, ramNum);
   
   // Logic to determine Effective Version and Download Meta
   let effectiveVersion = version;
@@ -642,7 +645,8 @@ write_files:
                       FORGE_JAR=$(find . -name "forge-*-universal.jar" -o -name "forge-*.jar" | grep -v installer | head -n 1)
                       if [ -n "$FORGE_JAR" ]; then
                           echo "#!/bin/bash" > run.sh
-                          echo "$JAVA_BIN -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar $FORGE_JAR nogui" >> run.sh
+                          # UPDATED: Xms=1G, Xmx=Max
+                          echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar $FORGE_JAR nogui" >> run.sh
                           chmod +x run.sh
                       fi
                   fi
@@ -697,7 +701,8 @@ write_files:
                  if [ -n "$FORGE_JAR" ]; then 
                      mv "$FORGE_JAR" server.jar
                      echo "#!/bin/bash" > run.sh
-                     echo "$JAVA_BIN -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
+                     # UPDATED: Xms=1G, Xmx=Max
+                     echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
                      chmod +x run.sh
                  fi
              fi
@@ -706,7 +711,8 @@ write_files:
               echo "[Startup] Downloading Server JAR..."
               sudo -u minecraft wget -O server.jar "$DOWNLOAD_URL"
               echo "#!/bin/bash" > run.sh
-              echo "$JAVA_BIN -Xms${heapGb}G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
+              # UPDATED: Xms=1G, Xmx=Max
+              echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
               chmod +x run.sh
           fi
           
@@ -1090,7 +1096,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     return res.status(500).json({ error: 'Server provisioning failed', detail: err.message });
   }
 }
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
