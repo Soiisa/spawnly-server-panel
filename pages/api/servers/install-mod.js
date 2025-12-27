@@ -18,7 +18,7 @@ const ALLOWED_DOMAINS = [
   'cdn.getbukkit.org',
   'buk.kit',
   'spigotmc.org',
-  'api.spiget.org' // <--- ADDED
+  'api.spiget.org' // Ensure Spiget is allowed
 ];
 
 export default async function handler(req, res) {
@@ -98,7 +98,13 @@ export default async function handler(req, res) {
   const s3 = new AWS.S3(s3Config);
 
   try {
-    const fileRes = await fetch(downloadUrl);
+    // UPDATED: Added User-Agent header to satisfy Cloudflare/Spiget
+    const fileRes = await fetch(downloadUrl, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+    });
+
     if (!fileRes.ok) {
       throw new Error(`Failed to download file: ${fileRes.statusText}`);
     }

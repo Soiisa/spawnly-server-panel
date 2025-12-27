@@ -49,14 +49,26 @@ export default function ModsPluginsTab({ server }) {
   const [loadingDependencies, setLoadingDependencies] = useState(false);
 
   // Helper to use the local proxy
-  const fetchWithProxy = async (url) => {
+  const fetchWithProxy = async (url, ignore404 = false) => {
     try {
       const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+      
+      // Handle Spiget's "404 means no results" logic gracefully
+      if (res.status === 404 && ignore404) {
+        return []; 
+      }
+
       if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
       return await res.json();
     } catch (e) {
+      // Only retry direct fetch if it wasn't a 404 we intentionally ignored
+      if (e.message.includes('404') && ignore404) return [];
+
       console.warn('Proxy failed, trying direct fetch:', e);
       const res = await fetch(url);
+      
+      if (res.status === 404 && ignore404) return [];
+      
       if (!res.ok) throw new Error(`Direct fetch failed: ${res.status}`);
       return await res.json();
     }
@@ -85,7 +97,6 @@ export default function ModsPluginsTab({ server }) {
 
   // Helper to get Release Type Badge
   const getReleaseBadge = (type) => {
-    // UPDATED: Added dark mode classes for badges
     switch (type) {
       case 1: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-600 uppercase tracking-wide">Release</span>;
       case 2: return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-600 uppercase tracking-wide">Beta</span>;
@@ -113,7 +124,8 @@ export default function ModsPluginsTab({ server }) {
           ? `https://api.spiget.org/v2/search/resources/${encodeURIComponent(searchQuery)}?size=${pageSize}&page=${page}&sort=-downloads&fields=id,name,description,version,downloads,file,testedVersions,icon`
           : `https://api.spiget.org/v2/resources?size=${pageSize}&page=${page}&sort=-downloads&fields=id,name,description,version,downloads,file,testedVersions,icon`;
 
-        const spigetData = await fetchWithProxy(apiUrl);
+        // Pass true to ignore404 because Spiget returns 404 for empty searches
+        const spigetData = await fetchWithProxy(apiUrl, true);
 
         totalItems = 9999; 
         items = Array.isArray(spigetData) ? spigetData.map(item => ({
@@ -169,7 +181,12 @@ export default function ModsPluginsTab({ server }) {
       }
     } catch (error) {
       console.error('Error fetching catalog:', error);
-      setError(`Failed to load resources: ${error.message}`);
+      // Don't show error for 404s that slipped through (double safety)
+      if (!error.message.includes('404')) {
+          setError(`Failed to load resources: ${error.message}`);
+      } else {
+          setCatalog([]);
+      }
     } finally {
       setLoadingCatalog(false);
       setIsSearching(false);
@@ -285,7 +302,7 @@ export default function ModsPluginsTab({ server }) {
     try {
       const folder = selectedItem.type === 'plugin' ? 'plugins' : 'mods';
       
-      // --- NEW: Get Authentication Token ---
+      // --- Get Authentication Token ---
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
@@ -297,7 +314,7 @@ export default function ModsPluginsTab({ server }) {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` // <--- ADDED HEADER
+            'Authorization': `Bearer ${token}` 
         },
         body: JSON.stringify({
           serverId: server.id,
@@ -310,7 +327,6 @@ export default function ModsPluginsTab({ server }) {
       if (!res.ok) throw new Error((await res.json()).error || 'Installation failed');
       
       setSuccess(`Installed ${selectedItem.name} (${version.name}) to /${folder}! Restart server to apply.`);
-      // We don't close the modal immediately so they can see the success or install deps
     } catch (error) {
       setError(error.message);
     } finally {
@@ -318,14 +334,12 @@ export default function ModsPluginsTab({ server }) {
     }
   };
 
-  // --- NEW: Switch modal to the dependency ---
   const handleViewDependency = (dep) => {
-    // Construct an item object compatible with selectedItem
     const item = {
       id: dep.id,
       name: dep.name,
       description: dep.description,
-      version: 'Latest', // Placeholder
+      version: 'Latest', 
       downloads: dep.downloads,
       source: 'curseforge',
       type: 'mod',
@@ -333,23 +347,17 @@ export default function ModsPluginsTab({ server }) {
       websiteUrl: dep.url
     };
     
-    // Switch view
     setSelectedItem(item);
-    // Reset to files tab so they can immediately see versions to install
     setModalTab('files'); 
-    // Load versions for this new item
     fetchVersions(item); 
   };
 
   return (
-    // UPDATED: Added dark mode classes for main container
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col h-[600px]">
       
       {/* Header / Search */}
-      {/* UPDATED: Added dark mode classes for header background and border */}
       <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 flex flex-col md:flex-row gap-3">
         {isHybrid && (
-          // UPDATED: Added dark mode classes for category buttons
           <div className="flex bg-gray-200 dark:bg-slate-600 rounded-lg p-1 shrink-0">
             <button
               onClick={() => setActiveCategory('mods')}
@@ -375,7 +383,6 @@ export default function ModsPluginsTab({ server }) {
         )}
 
         <div className="relative flex-1">
-          {/* UPDATED: Added dark mode class for icon */}
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
@@ -383,7 +390,6 @@ export default function ModsPluginsTab({ server }) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch(e)}
-            // UPDATED: Added dark mode classes for input
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
           />
         </div>
@@ -415,7 +421,6 @@ export default function ModsPluginsTab({ server }) {
       </div>
 
       {/* Results Grid */}
-      {/* UPDATED: Added dark mode class for background */}
       <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50 dark:bg-slate-900/50">
         {loadingCatalog && currentPage === 1 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
@@ -425,20 +430,16 @@ export default function ModsPluginsTab({ server }) {
         ) : catalog.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             {activeCategory === 'mods' ? <CpuChipIcon className="w-16 h-16 mb-4 opacity-20" /> : <PuzzlePieceIcon className="w-16 h-16 mb-4 opacity-20" />}
-            {/* UPDATED: Added dark mode class for text */}
             <p className="text-lg font-medium text-gray-500 dark:text-gray-400">No resources found</p>
-            {/* UPDATED: Added dark mode class for text */}
             <p className="text-sm dark:text-gray-500">Try a different search term</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {catalog.map((item) => (
               <div key={`${item.source}-${item.id}`} 
-                // UPDATED: Added dark mode classes for card background and border
                 className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-indigo-300 hover:shadow-md transition-all flex flex-col">
                 <div className="flex gap-4 mb-3">
                   {item.icon ? (
-                    // UPDATED: Added dark mode class for image background
                     <img src={item.icon} alt="" className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-slate-700 object-cover" />
                   ) : (
                     <div className="w-12 h-12 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 font-bold text-xl">
@@ -446,9 +447,7 @@ export default function ModsPluginsTab({ server }) {
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    {/* UPDATED: Added dark mode class for text */}
                     <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate" title={item.name}>{item.name}</h3>
-                    {/* UPDATED: Added dark mode class for text */}
                     <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1">
                       <ArrowDownTrayIcon className="w-3 h-3" />
                       {item.downloads.toLocaleString()}
@@ -456,14 +455,12 @@ export default function ModsPluginsTab({ server }) {
                   </div>
                 </div>
                 
-                {/* UPDATED: Added dark mode class for text */}
                 <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 flex-1 leading-relaxed">
                   {item.description?.replace(/<\/?[^>]+(>|$)/g, "") || "No description provided."}
                 </p>
 
                 <button
                   onClick={() => fetchVersions(item)}
-                  // UPDATED: Added dark mode classes for button
                   className="w-full py-2 bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 font-medium rounded-lg text-sm border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors"
                 >
                   Select Version
@@ -478,7 +475,6 @@ export default function ModsPluginsTab({ server }) {
             <button
               onClick={handleLoadMore}
               disabled={loadingCatalog}
-              // UPDATED: Added dark mode classes for button
               className="px-6 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-300 rounded-full text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700/50 shadow-sm transition-all disabled:opacity-50"
             >
               {loadingCatalog ? 'Loading...' : 'Load More'}
@@ -490,17 +486,12 @@ export default function ModsPluginsTab({ server }) {
       {/* Version Selector Modal */}
       {selectedItem && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          {/* UPDATED: Added dark mode class for modal container */}
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[85vh]">
             
-            {/* Modal Header */}
-            {/* UPDATED: Added dark mode classes for header background and border */}
             <div className="p-5 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700">
               <div className="flex justify-between items-start mb-3">
                 <div className="flex-1 pr-4">
-                  {/* UPDATED: Added dark mode class for text */}
                   <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{selectedItem.name}</h3>
-                  {/* UPDATED: Added dark mode class for text */}
                   <p 
                     onClick={() => selectedItem.websiteUrl && window.open(selectedItem.websiteUrl, '_blank')}
                     className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 cursor-pointer hover:text-indigo-600 hover:bg-indigo-50 rounded p-1 -ml-1 transition-colors"
@@ -509,20 +500,17 @@ export default function ModsPluginsTab({ server }) {
                     {selectedItem.description}
                   </p>
                 </div>
-                {/* UPDATED: Added dark mode classes for close button */}
                 <button onClick={() => setSelectedItem(null)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-500 dark:text-gray-400 transition-colors">
                   <XCircleIcon className="w-6 h-6" />
                 </button>
               </div>
 
-              {/* Header Actions */}
               <div className="flex items-center gap-2">
                 {selectedItem.websiteUrl && (
                   <a 
                     href={selectedItem.websiteUrl} 
                     target="_blank" 
                     rel="noreferrer"
-                    // UPDATED: Added dark mode classes for external link button
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 hover:text-indigo-600 transition-colors"
                   >
                     <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
@@ -532,13 +520,10 @@ export default function ModsPluginsTab({ server }) {
               </div>
             </div>
 
-            {/* Tabs */}
-            {/* UPDATED: Added dark mode class for tab container */}
             <div className="flex border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-5 pt-2">
               <button
                 onClick={() => setModalTab('files')}
                 className={`pb-3 px-4 text-sm font-medium border-b-2 transition-colors ${
-                  // UPDATED: Added dark mode class for inactive tab text
                   modalTab === 'files' 
                     ? 'border-indigo-600 text-indigo-600' 
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -549,7 +534,6 @@ export default function ModsPluginsTab({ server }) {
               <button
                 onClick={() => setModalTab('dependencies')}
                 className={`pb-3 px-4 text-sm font-medium border-b-2 transition-colors ${
-                  // UPDATED: Added dark mode class for inactive tab text
                   modalTab === 'dependencies' 
                     ? 'border-indigo-600 text-indigo-600' 
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -559,11 +543,8 @@ export default function ModsPluginsTab({ server }) {
               </button>
             </div>
 
-            {/* Content Area */}
-            {/* UPDATED: Added dark mode class for content background */}
             <div className="overflow-y-auto p-4 flex-1 bg-gray-50/30 dark:bg-slate-900/50">
               
-              {/* --- FILES TAB --- */}
               {modalTab === 'files' && (
                 <>
                   {selectedVersions.length === 0 ? (
@@ -575,19 +556,15 @@ export default function ModsPluginsTab({ server }) {
                     <div className="space-y-3">
                       {selectedVersions.map((v) => (
                         <div key={v.id} 
-                          // UPDATED: Added dark mode classes for file version card
                           className="group bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 p-3 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all flex items-center gap-3">
                           
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              {/* UPDATED: Added dark mode class for text */}
                               <span className="font-bold text-gray-900 dark:text-gray-100 truncate text-sm" title={v.name}>{v.name}</span>
                               {getReleaseBadge(v.releaseType)}
                             </div>
                             
-                            {/* UPDATED: Added dark mode class for text */}
                             <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center flex-wrap gap-x-3 gap-y-1">
-                               {/* UPDATED: Added dark mode classes for filename badge */}
                                <span className="font-mono bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-300 truncate max-w-[150px]" title={v.filename}>
                                  {v.filename}
                                </span>
@@ -620,7 +597,6 @@ export default function ModsPluginsTab({ server }) {
                 </>
               )}
 
-              {/* --- DEPENDENCIES TAB --- */}
               {modalTab === 'dependencies' && (
                 <div className="space-y-3">
                   {loadingDependencies ? (
@@ -636,7 +612,6 @@ export default function ModsPluginsTab({ server }) {
                     </div>
                   ) : (
                     <>
-                      {/* UPDATED: Added dark mode classes for warning banner */}
                       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3 mb-4 text-xs text-amber-800 dark:text-amber-300 flex gap-2">
                         <ExclamationCircleIcon className="w-4 h-4 shrink-0 mt-0.5" />
                         <p>These mods are required for <b>{selectedItem.name}</b> to work. Please install them as well.</p>
@@ -644,25 +619,19 @@ export default function ModsPluginsTab({ server }) {
 
                       {itemDependencies.map(dep => (
                         <div key={dep.id} 
-                          // UPDATED: Added dark mode classes for dependency card
                           className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 p-3 rounded-xl flex items-center gap-3">
-                          {/* UPDATED: Added dark mode class for image placeholder background */}
                           <img 
                             src={dep.icon || 'https://www.curseforge.com/images/favicon.ico'} 
                             alt="" 
                             className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-slate-700 object-cover" 
                           />
                           <div className="flex-1 min-w-0">
-                            {/* UPDATED: Added dark mode class for text */}
                             <h4 className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">{dep.name}</h4>
-                            {/* UPDATED: Added dark mode class for text */}
                             <div className="flex gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                               <span>{dep.downloads > 0 ? formatFileSize(dep.downloads) + ' downloads' : 'Dependency'}</span>
                             </div>
                           </div>
                           
-                          {/* Navigate to Dependency Button */}
-                          {/* UPDATED: Added dark mode classes for button */}
                           <button
                             onClick={() => handleViewDependency(dep)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 rounded-lg text-xs font-medium transition-all"
