@@ -90,8 +90,20 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Forbidden', detail: 'You do not own this server' });
     }
 
+    // --- 3. Delete Files from S3 ---
     await deleteS3ServerFolder(serverId);
-    console.log(`[API:delete-s3-folder] Successfully deleted S3 folder for server ${serverId}`);
+    
+    // --- 4. NEW: Clear Console Logs Immediately ---
+    // This ensures consistency: if files are wiped, logs from the old server are also wiped.
+    try {
+        await supabaseAdmin.from('server_console').delete().eq('server_id', serverId);
+        console.log(`[API:delete-s3-folder] Successfully deleted console logs for server ${serverId}`);
+    } catch (consoleErr) {
+        console.warn(`[API:delete-s3-folder] Warning: Failed to clear console logs: ${consoleErr.message}`);
+        // Non-fatal, proceed
+    }
+
+    console.log(`[API:delete-s3-folder] Full wipe completed successfully for server ${serverId}`);
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error('[API:delete-s3-folder] Unhandled error:', err.message, err.stack);

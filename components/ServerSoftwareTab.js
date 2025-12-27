@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
+import { useTranslation } from 'next-i18next'; 
 import { 
   CubeTransparentIcon, 
   DocumentTextIcon, 
@@ -45,7 +45,7 @@ const parseMavenXml = (text) => {
 const sanitizePackName = (name) => name ? name.replace(/::/g, ' ').trim() : 'Modpack';
 
 export default function ServerSoftwareTab({ server, onSoftwareChange }) {
-  const { t } = useTranslation('server'); // <--- INITIALIZED
+  const { t } = useTranslation('server'); 
   // --- State ---
   const isModpack = server?.type?.startsWith('modpack');
   const [activeTab, setActiveTab] = useState(isModpack ? 'modpacks' : 'types');
@@ -150,8 +150,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         severity: 'high',
         requiresRecreation: !!server?.hetzner_id,
         requiresFileDeletion: true,
-        message: t('software.impact.clean_install', { old: server.type, new: newType }), // <--- TRANSLATED
-        backupMessage: t('software.impact.backup_download') // <--- TRANSLATED
+        message: t('software.impact.clean_install', { old: server.type, new: newType }), 
+        backupMessage: t('software.impact.backup_download')
       };
     } 
     
@@ -160,7 +160,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         severity: 'high',
         requiresRecreation: !!server?.hetzner_id,
         requiresFileDeletion: true,
-        message: t('software.impact.modpack_install'), // <--- TRANSLATED
+        message: t('software.impact.modpack_install'),
         backupMessage: t('software.impact.backup_download')
        };
     }
@@ -170,8 +170,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         severity: 'medium',
         requiresRecreation: !!server?.hetzner_id,
         requiresFileDeletion: false,
-        message: t('software.impact.version_change', { old: server.version, new: newVersion }), // <--- TRANSLATED
-        backupMessage: t('software.impact.backup_recommend') // <--- TRANSLATED
+        message: t('software.impact.version_change', { old: server.version, new: newVersion }),
+        backupMessage: t('software.impact.backup_recommend')
       };
     }
     return { severity: 'none' };
@@ -251,7 +251,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
       } catch (err) {
         console.error(err);
-        setError(t('software.errors.fetch_fail', { error: err.message })); // <--- TRANSLATED
+        setError(t('software.errors.fetch_fail', { error: err.message }));
       } finally {
         setLoadingVersions(false);
       }
@@ -311,7 +311,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             else setModpackList([]);
         }
     } catch (err) {
-        setError(t('software.errors.modpack_fail', { error: err.message })); // <--- TRANSLATED
+        setError(t('software.errors.modpack_fail', { error: err.message }));
     } finally {
         setLoadingVersions(false);
     }
@@ -381,7 +381,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         }
         setModpackFiles(files);
     } catch (err) {
-        setError(t('software.errors.versions_fail')); // <--- TRANSLATED
+        setError(t('software.errors.versions_fail'));
     } finally {
         setLoadingVersions(false);
     }
@@ -421,7 +421,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
     if (modpackProvider === 'custom') {
         if (!customZipUrl || !customZipUrl.startsWith('http')) {
-            setError(t('software.errors.invalid_url')); // <--- TRANSLATED
+            setError(t('software.errors.invalid_url'));
             return;
         }
         let mcVerMeta = '1.20.1';
@@ -465,7 +465,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     }
                 } catch (e) {
                     console.error("Server pack resolution failed:", e);
-                    setError(t('software.errors.resolve_fail', { error: e.message })); // <--- TRANSLATED
+                    setError(t('software.errors.resolve_fail', { error: e.message }));
                     setIsInstalling(false);
                     return; 
                 } finally {
@@ -473,7 +473,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 }
             } else {
                 if (!verObj.downloadUrl) {
-                    setError(t('software.errors.no_download')); // <--- TRANSLATED
+                    setError(t('software.errors.no_download'));
                     return;
                 }
                 payloadVersion = `${verObj.downloadUrl}::${mcVer}::${packName}`;
@@ -481,7 +481,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
         } else if (modpackProvider === 'modrinth') {
             if (!verObj.downloadUrl) {
-                 setError(t('software.errors.no_download')); // <--- TRANSLATED
+                 setError(t('software.errors.no_download'));
                  return;
             }
             payloadVersion = `${verObj.downloadUrl}::${mcVer}::${packName}`;
@@ -504,22 +504,53 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   };
 
   const confirmChange = async () => {
+    setIsInstalling(true); // Show loading state on button
     setShowVersionWarning(false);
     setSuccess(null);
     setError(null);
 
+    const payload = { ...versionChangeInfo.payload };
+
     try {
-      const { error: err } = await supabase.from('servers').update(versionChangeInfo.payload).eq('id', server.id);
+      // --- IMMEDIATE DELETION LOGIC ---
+      if (payload.needs_file_deletion) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+
+          if (token) {
+              const delRes = await fetch('/api/servers/delete-s3-folder', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({ serverId: server.id })
+              });
+
+              if (!delRes.ok) {
+                  throw new Error(t('software.errors.delete_failed'));
+              }
+              
+              // Deletion successful, clear the flag so provision.js doesn't try again (optional)
+              payload.needs_file_deletion = false;
+          }
+      }
+
+      // --- DB UPDATE ---
+      const { error: err } = await supabase.from('servers').update(payload).eq('id', server.id);
       if (err) throw err;
 
-      if (onSoftwareChange) onSoftwareChange(versionChangeInfo.payload);
+      if (onSoftwareChange) onSoftwareChange(payload);
       
-      setSuccess(versionChangeInfo.payload.needs_recreation 
+      setSuccess(payload.needs_recreation 
         ? t('software.messages.saved_reinstall') 
         : t('software.messages.saved')
       );
     } catch (err) {
-      setError(err.message);
+      console.error(err);
+      setError(err.message || t('software.errors.update_failed'));
+    } finally {
+      setIsInstalling(false);
     }
   };
 
@@ -864,9 +895,16 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 </button>
                 <button
                   onClick={confirmChange}
-                  className={`px-4 py-2 text-white rounded-lg font-medium shadow-sm ${versionChangeInfo.severity === 'high' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                  className={`px-4 py-2 text-white rounded-lg font-medium shadow-sm flex items-center justify-center gap-2 ${versionChangeInfo.severity === 'high' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
                 >
-                  {t('software.buttons.confirm_install')}
+                    {isInstalling ? (
+                       <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                       </svg>
+                    ) : (
+                       t('software.buttons.confirm_install')
+                    )}
                 </button>
               </div>
             </motion.div>
