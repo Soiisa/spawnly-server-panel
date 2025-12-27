@@ -229,7 +229,8 @@ export default function ModsPluginsTab({ server }) {
           versions = res.map(v => ({
             id: v.id,
             name: v.name,
-            downloadUrl: `https://api.spiget.org/v2/resources/${item.id}/versions/${v.id}/download`,
+            // FIX: Use '/download/proxy' to prevent SpigotMC Cloudflare blocks (403 Forbidden)
+            downloadUrl: `https://api.spiget.org/v2/resources/${item.id}/versions/${v.id}/download/proxy`,
             filename: `${item.name}-${v.name}.jar`,
             releaseType: 1
           }));
