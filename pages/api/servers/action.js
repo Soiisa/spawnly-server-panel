@@ -514,7 +514,8 @@ export default async function handler(req, res) {
             running_since: null,
             current_session_id: null, 
             last_heartbeat_at: nowIso,
-            last_empty_at: null 
+            last_empty_at: null,
+            started_at: null // --- CLEAN UP STARTED_AT ON STOP/KILL ---
           })
           .eq('id', serverId);
         if (updateErr) {
@@ -549,7 +550,8 @@ export default async function handler(req, res) {
            await supabaseAdmin.from('servers').update({
              status: 'Stopped', hetzner_id: null, ipv4: null, 
              last_billed_at: null, runtime_accumulated_seconds: 0, 
-             running_since: null, current_session_id: null
+             running_since: null, current_session_id: null,
+             started_at: null // --- CLEAN UP STARTED_AT ---
            }).eq('id', serverId);
            
            return res.status(200).json({ ok: true, message: 'Force killed unprovisioned server.' });
@@ -590,7 +592,8 @@ export default async function handler(req, res) {
       status: newStatus,
       last_billed_at: now,
       runtime_accumulated_seconds: 0,
-      last_empty_at: null 
+      last_empty_at: null,
+      started_at: now // --- SET STARTED_AT ON START/RESTART ---
     };
     if (action === 'start' && sessionId && sessionId !== server.current_session_id) {
       updateFields.current_session_id = sessionId; 

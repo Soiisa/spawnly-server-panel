@@ -915,27 +915,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const pendingRestoreKey = serverRow.pending_backup_restore; 
     const subdomain = serverRow.subdomain.toLowerCase() || '';
 
-    // --- 1. ZOMBIE CLEANUP ---
-    try {
-        const encodedName = encodeURIComponent(serverRow.name);
-        const existingRes = await axios.get(`${HETZNER_API_BASE}/servers?name=${encodedName}`, {
-            headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
-        });
-        
-        const existingJson = existingRes.data;
-        if (existingJson.servers && existingJson.servers.length > 0) {
-            for (const s of existingJson.servers) {
-                await axios.delete(`${HETZNER_API_BASE}/servers/${s.id}`, {
-                    headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
-                });
-            }
-            await new Promise(r => setTimeout(r, 2000));
-        }
-    } catch (cleanupErr) {
-        console.warn(`[Provision] Zombie cleanup warning: ${cleanupErr.message}`);
-    }
-
-    // --- 2. S3 Cleanup ---
+    // --- S3 Cleanup ---
     const s3Config = {
       S3_BUCKET: process.env.S3_BUCKET,
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
@@ -953,14 +933,14 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       }
     }
 
-    // --- 2.5 Console Cleanup (New) ---
+    // --- Console Cleanup (New) ---
     try {
       await supabaseAdmin.from('server_console').delete().eq('server_id', serverRow.id);
     } catch (consoleErr) {
        console.warn('Failed to clear console logs:', consoleErr.message);
     }
 
-    // --- 3. Get Download URL ---
+    // --- Get Download URL ---
     let downloadUrl = null;
     try {
       downloadUrl = await getSoftwareDownloadUrl(software, version);
@@ -985,7 +965,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     const sanitizedUserData = sanitizeYaml(userData);
 
-    // --- 4. SSH Key Resolution ---
+    // --- SSH Key Resolution ---
     let sshKeysToUse = Array.isArray(ssh_keys) && ssh_keys.length > 0 ? ssh_keys : [];
     if (sshKeysToUse.length === 0 && DEFAULT_SSH_KEY) {
       try {
@@ -1001,7 +981,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       }
     }
 
-    // --- 5. Create Server ---
+    // --- Create Server ---
     // Using Snapshot Image
     const payload = {
       name: serverRow.name,
@@ -1030,7 +1010,11 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const hetznerServer = createJson.server || null;
     const actionId = createJson.action?.id;
 
-    await supabaseAdmin.from('servers').update({ status: 'Initializing' }).eq('id', serverRow.id);
+    // --- UPDATE STARTED_AT HERE ---
+    await supabaseAdmin
+      .from('servers')
+      .update({ status: 'Initializing', started_at: new Date().toISOString() })
+      .eq('id', serverRow.id);
 
     try {
       if (actionId) await waitForAction(actionId);
@@ -1052,7 +1036,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const hetznerId = finalServer?.id || null;
     const newStatus = finalServer ? (finalServer.status === 'running' ? 'Running' : 'Initializing') : 'Initializing';
 
-    // --- 6. DNS Setup ---
+    // --- DNS Setup ---
     let subdomainResult = null;
     if (ipv4 && serverRow.subdomain) {
       try {

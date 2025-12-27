@@ -81,7 +81,8 @@ export default async function handler(req, res) {
           await supabaseAdmin.from('servers').update({
             status: 'Maintenance', 
             // Do NOT clear hetzner_id or ipv4
-            last_heartbeat_at: now.toISOString()
+            last_heartbeat_at: now.toISOString(),
+            started_at: null // --- Clear started_at if sync finished ---
           }).eq('id', serverId);
 
           return res.status(200).json({ success: true, message: "Development mode active: Server preserved." });
@@ -103,7 +104,8 @@ export default async function handler(req, res) {
       
       await supabaseAdmin.from('servers').update({
         status: 'Stopped', hetzner_id: null, ipv4: null, running_since: null,
-        last_billed_at: null, runtime_accumulated_seconds: 0, current_session_id: null, last_empty_at: null
+        last_billed_at: null, runtime_accumulated_seconds: 0, current_session_id: null, last_empty_at: null,
+        started_at: null // --- Clear started_at ---
       }).eq('id', serverId);
       
       return res.status(200).json({ success: true });
@@ -117,6 +119,11 @@ export default async function handler(req, res) {
       player_count: player_count !== undefined ? Number(player_count) : server.player_count,
       players_online: players_online || server.players_online,
     };
+
+    // --- CLEAN UP STARTED_AT IF RUNNING, STOPPED, OR CRASHED ---
+    if (status === 'Running' || status === 'Stopped' || status === 'Crashed') {
+        updates.started_at = null;
+    }
 
     // Auto-stop logic (if empty for too long)
     if (status === 'Running' && !server.development_mode) { // Disable auto-stop in dev mode too

@@ -42,14 +42,16 @@ export default async function handler(req, res) {
   if (!CRON_SECRET || cronHeader !== CRON_SECRET) return res.status(401).json({ error: 'Unauthorized' });
 
   // 1. Identify Stuck Servers
-  // Logic: Status is 'Initializing' or 'Starting' AND last update was > 30 mins ago.
+  // Logic: Status is 'Initializing' or 'Starting' AND started_at was > 30 mins ago.
   const timeLimit = new Date(Date.now() - 30 * 60 * 1000).toISOString();
   
   const { data: servers, error } = await supabaseAdmin
     .from('servers')
     .select('*')
     .in('status', ['Initializing', 'Starting'])
-    .lt('updated_at', timeLimit)
+    // --- UPDATED QUERY ---
+    .lt('started_at', timeLimit)
+    .not('started_at', 'is', null) // Ensure started_at is present
     .not('hetzner_id', 'is', null); // Only kill if provisioned
 
   if (error) return res.status(500).json({ error: 'Database error', detail: error.message });
@@ -57,7 +59,7 @@ export default async function handler(req, res) {
   let killedCount = 0;
 
   for (const server of servers || []) {
-    console.log(`[Auto-Kill] Killing stuck server ${server.id} (Status: ${server.status})`);
+    console.log(`[Auto-Kill] Killing stuck server ${server.id} (Status: ${server.status}, Started At: ${server.started_at})`);
 
     try {
       // 2. Kill Infrastructure (Skip graceful shutdown)
@@ -86,7 +88,8 @@ export default async function handler(req, res) {
       // 4. Update Database
       await supabaseAdmin.from('servers').update({
         status: 'Stopped', hetzner_id: null, ipv4: null, last_billed_at: null,
-        runtime_accumulated_seconds: 0, running_since: null, current_session_id: null
+        runtime_accumulated_seconds: 0, running_since: null, current_session_id: null,
+        started_at: null // --- CLEAN UP STARTED_AT ---
       }).eq('id', server.id);
 
       killedCount++;

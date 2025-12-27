@@ -46,6 +46,11 @@ export default async function handler(req, res) {
       const now = new Date();
       const updates = { status };
 
+      // --- CLEAN UP STARTED_AT IF RUNNING, STOPPED, OR CRASHED ---
+      if (status === 'Running' || status === 'Stopped' || status === 'Crashed') {
+          updates.started_at = null;
+      }
+
       // Stop the billing clock if it was running
       if (server.running_since) {
         const start = new Date(server.running_since);
