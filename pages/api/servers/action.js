@@ -232,7 +232,9 @@ async function deductCredits(supabaseAdmin, userId, amount, description, session
 }
 
 async function billRemainingTime(supabaseAdmin, server) {
-  if (server.status !== 'Running') return;
+  // We check for Running, but if we are KILLING a stuck server (Initializing/Starting), 
+  // we might check if billing started (last_billed_at exists).
+  if (server.status !== 'Running' && !server.last_billed_at) return;
 
   const now = new Date();
   let baseTime = null;
@@ -297,10 +299,8 @@ const performAutoBackup = async (server, supabaseAdmin) => {
     const now = Date.now();
 
     if (now - lastBackupTime < intervalMs) {
-        console.log(`[AutoBackup] Skipping: Last backup was ${(now - lastBackupTime)/3600000}h ago (Interval: ${server.auto_backup_interval_hours}h)`);
         return;
     }
-
     console.log(`[AutoBackup] Starting auto-backup for ${server.id}`);
     const fileApiUrl = `http://${server.subdomain}.spawnly.net:3005/api/backups`;
     
@@ -412,12 +412,13 @@ export default async function handler(req, res) {
       }
     }
 
-    if (action === 'delete' || action === 'stop') {
+    // --- UPDATED: Handle STOP, DELETE, and KILL ---
+    if (action === 'delete' || action === 'stop' || action === 'kill') {
       await billRemainingTime(supabaseAdmin, server);
 
       // --- AUTO BACKUP LOGIC START ---
       // We only attempt backup if: 
-      // 1. Action is STOP (not delete)
+      // 1. Action is STOP (not delete/kill)
       // 2. Feature is enabled
       // 3. Server is actually running/provisioned (has Hetzner ID)
       if (action === 'stop' && server.auto_backup_enabled && server.hetzner_id) {
@@ -425,23 +426,26 @@ export default async function handler(req, res) {
              await performAutoBackup(server, supabaseAdmin);
           } catch (backupErr) {
              console.error('[API:action] Auto-backup failed, proceeding with stop:', backupErr.message);
-             // We do NOT return error here, we proceed to stop the server to avoid getting stuck.
           }
       }
       // --- AUTO BACKUP LOGIC END ---
 
       if (server.hetzner_id) {
-        // [UPDATED] Graceful Shutdown Loop
-        try {
-          console.log(`[API:action] Shutting down Hetzner server: ${server.hetzner_id}`);
-          await hetznerDoAction(server.hetzner_id, 'shutdown');
-          
-          const isOff = await waitForServerStatus(server.hetzner_id, 'off', 30, 5000);
-          if (!isOff) {
-            console.warn(`[API:action] Server ${server.hetzner_id} did not reach 'off' status (or is still running), proceeding with force deletion`);
-          }
-        } catch (stopErr) {
-          console.error('[API:action] Stop sequence warning (likely non-fatal):', stopErr.message);
+        // [UPDATED] Graceful Shutdown Loop only if NOT killing
+        if (action !== 'kill') {
+            try {
+              console.log(`[API:action] Shutting down Hetzner server: ${server.hetzner_id}`);
+              await hetznerDoAction(server.hetzner_id, 'shutdown');
+              
+              const isOff = await waitForServerStatus(server.hetzner_id, 'off', 30, 5000);
+              if (!isOff) {
+                console.warn(`[API:action] Server ${server.hetzner_id} did not reach 'off' status (or is still running), proceeding with force deletion`);
+              }
+            } catch (stopErr) {
+              console.error('[API:action] Stop sequence warning (likely non-fatal):', stopErr.message);
+            }
+        } else {
+             console.log(`[API:action] FORCE KILL requested. Skipping graceful shutdown for server ${server.hetzner_id}.`);
         }
 
         try {
@@ -458,7 +462,8 @@ export default async function handler(req, res) {
           console.log(`[API:action] Cleaning up DNS records for subdomain: ${server.subdomain}`);
           await deleteCloudflareRecords(server.subdomain);
 
-          if (action === 'stop') {
+          // For STOP or KILL, redirect DNS to Sleeper Proxy
+          if (action === 'stop' || action === 'kill') {
             console.log(`[API:action] Pointing ${server.subdomain} to Sleeper Proxy (${SLEEPER_PROXY_IP})`);
             const dnsUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
             await fetch(dnsUrl, {
@@ -495,6 +500,7 @@ export default async function handler(req, res) {
           return res.status(500).json({ error: 'Failed to delete server from Supabase', detail: delErr.message });
         }
       } else {
+        // STOP or KILL -> Set status to 'Stopped'
         console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped'`);
         const nowIso = new Date().toISOString();
         const { error: updateErr } = await supabaseAdmin
@@ -521,7 +527,34 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // [MODIFIED] If action is kill, we might proceed even without Hetzner ID to clean up DB/DNS
     if (!server.hetzner_id) {
+      // If the user wants to KILL a stuck initializing server that has no hetzner_id yet
+      if (action === 'kill') {
+           console.log('[API:action] Force killing unprovisioned server (cleaning up DB/DNS only).');
+           // DNS Cleaning
+           if (server.subdomain) {
+             await deleteCloudflareRecords(server.subdomain);
+             // Sleeper redirect
+             try {
+                const dnsUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
+                await fetch(dnsUrl, {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ type: 'A', name: `${server.subdomain}${DOMAIN_SUFFIX}`, content: SLEEPER_PROXY_IP, ttl: 60, proxied: false })
+                });
+             } catch(e) {}
+           }
+           
+           await supabaseAdmin.from('servers').update({
+             status: 'Stopped', hetzner_id: null, ipv4: null, 
+             last_billed_at: null, runtime_accumulated_seconds: 0, 
+             running_since: null, current_session_id: null
+           }).eq('id', serverId);
+           
+           return res.status(200).json({ ok: true, message: 'Force killed unprovisioned server.' });
+      }
+
       console.error('[API:action] Server not provisioned on Hetzner, cannot perform action:', action);
       return res.status(400).json({ error: 'Server not provisioned on Hetzner' });
     }

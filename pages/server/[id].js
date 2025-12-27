@@ -22,7 +22,8 @@ import {
   CheckIcon, 
   XMarkIcon,
   ArchiveBoxIcon,
-  CalendarDaysIcon 
+  CalendarDaysIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -342,6 +343,14 @@ export default function ServerDetailPage({ initialServer }) {
 
   const handleServerAction = async (action) => {
     if (actionLoading) return;
+    
+    // CONFIRMATION FOR KILL
+    if (action === 'kill') {
+        if (!confirm(t('messages.confirm_kill', { defaultValue: 'Are you sure you want to FORCE KILL this server? This will immediately destroy the VPS without saving data. Only use this if the server is stuck.' }))) {
+            return;
+        }
+    }
+
     setActionLoading(true);
     setError(null);
     try {
@@ -373,8 +382,12 @@ export default function ServerDetailPage({ initialServer }) {
         }
         pollUntilStatus(['Running', 'Stopped']);
       } else {
-        const targetStatus = action === 'stop' ? 'Stopping' : 'Restarting';
-        const expected = action === 'stop' ? ['Stopped'] : ['Running'];
+        // KILL / STOP / RESTART
+        let targetStatus = 'Stopping';
+        if (action === 'restart') targetStatus = 'Restarting';
+        // For kill, we expect 'Stopped' eventually.
+        const expected = action === 'restart' ? ['Running'] : ['Stopped'];
+        
         setServer(p => ({ ...p, status: targetStatus }));
         
         await safeFetchJson('/api/servers/action', {
@@ -473,6 +486,13 @@ export default function ServerDetailPage({ initialServer }) {
   const isStopped = status === 'Stopped';
   const isUnknown = status === 'Unknown';
   const isBusy = !isRunning && !isStopped && !isUnknown;
+  
+  // Define stuck states where we show the KILL button
+  // We also show it if stopping/restarting in case that gets stuck.
+  const isStuck = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting'].includes(status);
+  
+  // Show Kill button if explicitly stuck, or if not stopped/unknown (general fallback, but emphasized for stuck)
+  const canKill = isStuck;
 
   const sType = (server.type || '').toLowerCase();
   const moddedTypes = ['forge', 'neoforge', 'fabric', 'quilt'];
@@ -617,6 +637,19 @@ export default function ServerDetailPage({ initialServer }) {
                 <button disabled className="flex items-center gap-2 bg-gray-100 dark:bg-slate-700 text-gray-400 px-5 py-2.5 rounded-xl font-semibold cursor-not-allowed">
                   <div className="animate-spin w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full" />
                   {t('status.processing')}
+                </button>
+              )}
+
+              {/* NEW FORCE KILL BUTTON - Specific for Stuck States */}
+              {canKill && (
+                <button
+                    onClick={() => handleServerAction('kill')}
+                    disabled={actionLoading}
+                    title="Force Kill (Delete VM)"
+                    className="flex items-center gap-2 bg-red-800 hover:bg-red-900 text-white px-4 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50"
+                >
+                    <TrashIcon className="w-5 h-5" />
+                    {t('actions.kill', { defaultValue: 'Kill' })}
                 </button>
               )}
             </div>
