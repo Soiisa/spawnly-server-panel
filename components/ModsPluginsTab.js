@@ -8,11 +8,9 @@ import {
   XCircleIcon,
   CpuChipIcon,
   PuzzlePieceIcon,
-  AdjustmentsHorizontalIcon,
   CalendarDaysIcon,
   CubeIcon,
   ArrowTopRightOnSquareIcon,
-  LinkIcon,
   ArrowRightCircleIcon
 } from '@heroicons/react/24/outline';
 
@@ -20,11 +18,9 @@ export default function ModsPluginsTab({ server }) {
   // --- Constants ---
   const HYBRID_TYPES = ['arclight', 'mohist', 'magma'];
   const PLUGIN_TYPES = ['paper', 'spigot', 'purpur', 'folia', 'velocity', 'waterfall', 'bungeecord', 'bukkit'];
-  const MOD_TYPES = ['forge', 'neoforge', 'fabric', 'quilt']; 
-
-  const isHybrid = HYBRID_TYPES.includes(server?.type);
   
-  // --- State ---
+  // Determine default tab based on server type
+  const isHybrid = HYBRID_TYPES.includes(server?.type);
   const [activeCategory, setActiveCategory] = useState(() => {
     if (PLUGIN_TYPES.includes(server?.type)) return 'plugins';
     return 'mods'; 
@@ -49,32 +45,21 @@ export default function ModsPluginsTab({ server }) {
   const [loadingDependencies, setLoadingDependencies] = useState(false);
 
   // Helper to use the local proxy
-  const fetchWithProxy = async (url, ignore404 = false) => {
+  const fetchWithProxy = async (url) => {
     try {
       const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-      
-      // Handle Spiget's "404 means no results" logic gracefully
-      if (res.status === 404 && ignore404) {
-        return []; 
-      }
-
       if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
       return await res.json();
     } catch (e) {
-      // Only retry direct fetch if it wasn't a 404 we intentionally ignored
-      if (e.message.includes('404') && ignore404) return [];
-
       console.warn('Proxy failed, trying direct fetch:', e);
+      // Fallback (though mostly blocked by CORS/API keys on client side)
       const res = await fetch(url);
-      
-      if (res.status === 404 && ignore404) return [];
-      
       if (!res.ok) throw new Error(`Direct fetch failed: ${res.status}`);
       return await res.json();
     }
   };
 
-  // Helper to map loader strings to CurseForge IDs
+  // Helper to get CurseForge Loader ID (For Mods Only)
   const getCurseForgeLoaderId = (type) => {
     const map = {
       'forge': 1,
@@ -109,65 +94,50 @@ export default function ModsPluginsTab({ server }) {
     if (!server?.type || !server?.version) return;
 
     const mcVersion = server.version.split('-')[0];
-
     setLoadingCatalog(true);
     setError(null);
 
     try {
+      const pageSize = 20;
+      const index = (page - 1) * pageSize;
+      const gameId = 432; // Minecraft
+
+      // --- Determine Class ID & Loader ---
+      let classId;
+      let loaderParam = '';
+
+      if (activeCategory === 'plugins') {
+        classId = 5; // CurseForge Bukkit Plugins
+        // Plugins usually don't need a loaderType, or we can use 0 (Any)
+      } else {
+        classId = 6; // CurseForge Mods
+        const loaderId = getCurseForgeLoaderId(server.type);
+        loaderParam = `&modLoaderType=${loaderId}`;
+      }
+
+      // Build Query
+      // Note: We use the same 'gameVersion' filter for plugins so users see compatible plugins
+      const apiUrl = `https://api.curseforge.com/v1/mods/search?gameId=${gameId}&classId=${classId}&searchFilter=${encodeURIComponent(searchQuery)}&gameVersion=${mcVersion}${loaderParam}&sortField=2&sortOrder=desc&pageSize=${pageSize}&index=${index}`;
+
+      const cfData = await fetchWithProxy(apiUrl);
       let items = [];
       let totalItems = 0;
-      const pageSize = 20;
 
-      // --- PLUGINS (SPIGET) ---
-      if (activeCategory === 'plugins') {
-        const apiUrl = searchQuery
-          ? `https://api.spiget.org/v2/search/resources/${encodeURIComponent(searchQuery)}?size=${pageSize}&page=${page}&sort=-downloads&fields=id,name,description,version,downloads,file,testedVersions,icon`
-          : `https://api.spiget.org/v2/resources?size=${pageSize}&page=${page}&sort=-downloads&fields=id,name,description,version,downloads,file,testedVersions,icon`;
+      if (cfData && cfData.data) {
+        totalItems = cfData.pagination.totalCount; 
+        if (totalItems > 10000) totalItems = 10000;
 
-        // Pass true to ignore404 because Spiget returns 404 for empty searches
-        const spigetData = await fetchWithProxy(apiUrl, true);
-
-        totalItems = 9999; 
-        items = Array.isArray(spigetData) ? spigetData.map(item => ({
+        items = cfData.data.map(item => ({
           id: item.id,
           name: item.name,
-          description: item.tag, 
-          version: item.version?.id || 'Unknown',
-          downloads: item.downloads,
-          source: 'spiget',
-          type: 'plugin',
-          icon: item.icon?.url ? `https://www.spigotmc.org/${item.icon.url}` : null,
-          websiteUrl: `https://www.spigotmc.org/resources/${item.id}`
-        })) : [];
-      } 
-      
-      // --- MODS (CURSEFORGE) ---
-      else if (activeCategory === 'mods') {
-        const loaderId = getCurseForgeLoaderId(server.type);
-        const gameId = 432; 
-        const classId = 6;  
-        const index = (page - 1) * pageSize;
-
-        const apiUrl = `https://api.curseforge.com/v1/mods/search?gameId=${gameId}&classId=${classId}&searchFilter=${encodeURIComponent(searchQuery)}&gameVersion=${mcVersion}&modLoaderType=${loaderId}&sortField=2&sortOrder=desc&pageSize=${pageSize}&index=${index}`;
-
-        const cfData = await fetchWithProxy(apiUrl);
-
-        if (cfData && cfData.data) {
-          totalItems = cfData.pagination.totalCount; 
-          if (totalItems > 10000) totalItems = 10000;
-
-          items = cfData.data.map(item => ({
-            id: item.id,
-            name: item.name,
-            description: item.summary,
-            version: 'Latest', 
-            downloads: item.downloadCount,
-            source: 'curseforge', 
-            type: 'mod',
-            icon: item.logo?.thumbnailUrl || null,
-            websiteUrl: item.links?.websiteUrl || `https://www.curseforge.com/minecraft/mc-mods/${item.slug}`
-          }));
-        }
+          description: item.summary,
+          version: 'Latest', 
+          downloads: item.downloadCount,
+          source: 'curseforge', 
+          type: activeCategory === 'plugins' ? 'plugin' : 'mod', // Tag for install logic
+          icon: item.logo?.thumbnailUrl || null,
+          websiteUrl: item.links?.websiteUrl || `https://www.curseforge.com/minecraft/${activeCategory === 'plugins' ? 'bukkit-plugins' : 'mc-mods'}/${item.slug}`
+        }));
       }
 
       const calculatedTotalPages = Math.ceil(totalItems / pageSize);
@@ -181,12 +151,7 @@ export default function ModsPluginsTab({ server }) {
       }
     } catch (error) {
       console.error('Error fetching catalog:', error);
-      // Don't show error for 404s that slipped through (double safety)
-      if (!error.message.includes('404')) {
-          setError(`Failed to load resources: ${error.message}`);
-      } else {
-          setCatalog([]);
-      }
+      setError(`Failed to load resources: ${error.message}`);
     } finally {
       setLoadingCatalog(false);
       setIsSearching(false);
@@ -223,73 +188,64 @@ export default function ModsPluginsTab({ server }) {
       let versions = [];
       let depIds = new Set();
       
-      if (item.source === 'spiget') {
-        const res = await fetchWithProxy(`https://api.spiget.org/v2/resources/${item.id}/versions?size=20&sort=-releaseDate`);
-        if (Array.isArray(res)) {
-          versions = res.map(v => ({
-            id: v.id,
-            name: v.name,
-            // FIX: Use '/download/proxy' to prevent SpigotMC Cloudflare blocks (403 Forbidden)
-            downloadUrl: `https://api.spiget.org/v2/resources/${item.id}/versions/${v.id}/download/proxy`,
-            filename: `${item.name}-${v.name}.jar`,
-            releaseType: 1
-          }));
-        }
-      } else if (item.source === 'curseforge') {
-        const loaderId = getCurseForgeLoaderId(server.type);
-        
-        const apiUrl = `https://api.curseforge.com/v1/mods/${item.id}/files?gameVersion=${mcVersion}&modLoaderType=${loaderId}&pageSize=20`;
-        const res = await fetchWithProxy(apiUrl);
-        
-        if (res && res.data && Array.isArray(res.data)) {
-           versions = res.data.map(v => {
-            if (v.dependencies) {
-              v.dependencies.forEach(d => {
-                if (d.relationType === 3) depIds.add(d.modId);
-              });
-            }
-
-            return {
-              id: v.id,
-              name: v.displayName,
-              downloadUrl: v.downloadUrl,
-              filename: v.fileName,
-              releaseType: v.releaseType,
-              fileDate: v.fileDate,
-              size: v.fileLength,
-              dependencies: v.dependencies || [] 
-            };
-          }).filter(v => v.downloadUrl);
-        }
-
-        // --- Fetch Dependency Details ---
-        if (depIds.size > 0) {
-          setLoadingDependencies(true);
-          const uniqueDepIds = Array.from(depIds);
-          // Limit parallel fetches
-          const limitedIds = uniqueDepIds.slice(0, 10);
-          
-          Promise.all(limitedIds.map(id => 
-            fetchWithProxy(`https://api.curseforge.com/v1/mods/${id}`)
-              .catch(e => null) 
-          )).then(results => {
-            const deps = results
-              .filter(r => r && r.data)
-              .map(r => ({
-                id: r.data.id,
-                name: r.data.name,
-                icon: r.data.logo?.thumbnailUrl,
-                url: r.data.links?.websiteUrl,
-                // Additional fields needed to treat this as a "selectedItem"
-                description: r.data.summary,
-                downloads: r.data.downloadCount,
-                slug: r.data.slug
-              }));
-            setItemDependencies(deps);
-            setLoadingDependencies(false);
-          });
-        }
+      // CurseForge logic for both Mods and Plugins
+      let apiUrl = `https://api.curseforge.com/v1/mods/${item.id}/files?gameVersion=${mcVersion}&pageSize=20`;
+      
+      // Only append loader type if it's a mod (not a plugin)
+      if (item.type === 'mod') {
+         const loaderId = getCurseForgeLoaderId(server.type);
+         apiUrl += `&modLoaderType=${loaderId}`;
       }
+
+      const res = await fetchWithProxy(apiUrl);
+      
+      if (res && res.data && Array.isArray(res.data)) {
+          versions = res.data.map(v => {
+          if (v.dependencies) {
+            v.dependencies.forEach(d => {
+              if (d.relationType === 3) depIds.add(d.modId);
+            });
+          }
+
+          return {
+            id: v.id,
+            name: v.displayName,
+            downloadUrl: v.downloadUrl,
+            filename: v.fileName,
+            releaseType: v.releaseType,
+            fileDate: v.fileDate,
+            size: v.fileLength,
+            dependencies: v.dependencies || [] 
+          };
+        }).filter(v => v.downloadUrl);
+      }
+
+      // --- Fetch Dependency Details ---
+      if (depIds.size > 0) {
+        setLoadingDependencies(true);
+        const uniqueDepIds = Array.from(depIds);
+        const limitedIds = uniqueDepIds.slice(0, 10);
+        
+        Promise.all(limitedIds.map(id => 
+          fetchWithProxy(`https://api.curseforge.com/v1/mods/${id}`)
+            .catch(e => null) 
+        )).then(results => {
+          const deps = results
+            .filter(r => r && r.data)
+            .map(r => ({
+              id: r.data.id,
+              name: r.data.name,
+              icon: r.data.logo?.thumbnailUrl,
+              url: r.data.links?.websiteUrl,
+              description: r.data.summary,
+              downloads: r.data.downloadCount,
+              slug: r.data.slug
+            }));
+          setItemDependencies(deps);
+          setLoadingDependencies(false);
+        });
+      }
+      
       setSelectedVersions(versions);
     } catch (err) {
       setError(`Failed to load versions: ${err.message}`);
@@ -301,14 +257,14 @@ export default function ModsPluginsTab({ server }) {
     setError(null);
     setSuccess(null);
     try {
+      // Determine folder based on the item type tag we set during fetchCatalog
       const folder = selectedItem.type === 'plugin' ? 'plugins' : 'mods';
       
-      // --- Get Authentication Token ---
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
       if (!token) {
-          throw new Error("You must be logged in to install plugins.");
+          throw new Error("You must be logged in to install content.");
       }
 
       const res = await fetch('/api/servers/install-mod', {
@@ -343,7 +299,7 @@ export default function ModsPluginsTab({ server }) {
       version: 'Latest', 
       downloads: dep.downloads,
       source: 'curseforge',
-      type: 'mod',
+      type: 'mod', // Dependencies are usually mods/libraries
       icon: dep.icon,
       websiteUrl: dep.url
     };
@@ -358,36 +314,34 @@ export default function ModsPluginsTab({ server }) {
       
       {/* Header / Search */}
       <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 flex flex-col md:flex-row gap-3">
-        {isHybrid && (
-          <div className="flex bg-gray-200 dark:bg-slate-600 rounded-lg p-1 shrink-0">
-            <button
-              onClick={() => setActiveCategory('mods')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                activeCategory === 'mods' 
-                  ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' 
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-              }`}
-            >
-              Mods
-            </button>
-            <button
-              onClick={() => setActiveCategory('plugins')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                activeCategory === 'plugins' 
-                  ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' 
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-              }`}
-            >
-              Plugins
-            </button>
-          </div>
-        )}
+        <div className="flex bg-gray-200 dark:bg-slate-600 rounded-lg p-1 shrink-0">
+          <button
+            onClick={() => setActiveCategory('mods')}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+              activeCategory === 'mods' 
+                ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' 
+                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            Mods
+          </button>
+          <button
+            onClick={() => setActiveCategory('plugins')}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+              activeCategory === 'plugins' 
+                ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' 
+                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            Plugins
+          </button>
+        </div>
 
         <div className="relative flex-1">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
-            placeholder={activeCategory === 'plugins' ? "Search plugins..." : "Search mods (CurseForge)..."}
+            placeholder={activeCategory === 'plugins' ? "Search Bukkit plugins..." : "Search Mods..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch(e)}
@@ -432,7 +386,7 @@ export default function ModsPluginsTab({ server }) {
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             {activeCategory === 'mods' ? <CpuChipIcon className="w-16 h-16 mb-4 opacity-20" /> : <PuzzlePieceIcon className="w-16 h-16 mb-4 opacity-20" />}
             <p className="text-lg font-medium text-gray-500 dark:text-gray-400">No resources found</p>
-            <p className="text-sm dark:text-gray-500">Try a different search term</p>
+            <p className="text-sm dark:text-gray-500">Try a different search term or check compatibility</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
