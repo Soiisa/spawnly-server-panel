@@ -115,12 +115,13 @@ const getFabricDownloadUrl = async (version) => {
   return `https://meta.fabricmc.net/v2/versions/loader/${version}/${loaderVersion}/${installerVersion}/server/jar`;
 };
 
+// FIX: Updated Quilt to use the Installer approach
 const getQuiltDownloadUrl = async (version) => {
-  const loaderRes = await fetch(`https://meta.quiltmc.org/v3/versions/loader/${version}`);
-  const loaderData = await loaderRes.json();
-  if (!loaderData || loaderData.length === 0) throw new Error(`No Quilt loader found for ${version}`);
-  const loaderVersion = loaderData[0].loader.version;
-  return `https://meta.quiltmc.org/v3/versions/loader/${version}/${loaderVersion}/server/jar`;
+  // We don't need the server version here, just the latest installer
+  const installerRes = await fetch('https://meta.quiltmc.org/v3/versions/installer');
+  const installerData = await installerRes.json();
+  const installerVersion = installerData[0].version; // Use latest stable installer
+  return `https://maven.quiltmc.org/repository/release/org/quiltmc/quilt-installer/${installerVersion}/quilt-installer-${installerVersion}.jar`;
 };
 
 const getMohistDownloadUrl = async (version) => {
@@ -173,7 +174,6 @@ const getSpigotDownloadUrl = async (version) => {
   return `https://cdn.getbukkit.org/spigot/spigot-${version}.jar`;
 };
 
-// --- Helper to extract metadata from version string ---
 const parseModpackMetadata = (software, versionString) => {
     let result = { url: null, packId: null, versionId: null, mcVersion: '1.20.1' };
     
@@ -236,7 +236,7 @@ const generateRconPassword = () => {
 };
 
 // --- DNS & S3 Helpers ---
-// (These are assumed to be standard and working as previously defined)
+// (These remain unchanged)
 const deleteCloudflareRecords = async (subdomain) => {
   console.log(`[DNS] Cleaning records for subdomain: ${subdomain}`);
   let subdomainPrefix = subdomain;
@@ -599,6 +599,7 @@ write_files:
       JAVA_BIN='${javaBin}'
       FORCE_INSTALL='${forceInstall}'
       IS_MODPACK='${isModpack}'
+      MC_VERSION='${escapedVersion}'
       
       AIKAR_FLAGS="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
       
@@ -641,18 +642,12 @@ write_files:
           fi
       }
 
-      # Main Install Logic
-      # Trigger if server.properties is missing OR deletion requested OR forced update
       if [ ! -f "server.properties" ] || [ "${needsFileDeletion}" = "true" ] || [ "$FORCE_INSTALL" = "true" ]; then
           
-          # --- SMART UPDATE CLEANUP FOR MODPACKS ---
-          # If we are forcing an install on an existing modpack server (and NOT deleting everything),
-          # we MUST wipe the old mods/configs to prevent conflicts with the new version.
           if [ "$IS_MODPACK" = "true" ] && [ -f "server.properties" ] && [ "${needsFileDeletion}" != "true" ]; then
               echo "[Startup] Smart Update detected. Cleaning old mods and config files..."
               rm -rf mods config scripts kubejs libraries defaultconfigs versions
           fi
-          # -----------------------------------------
 
           if [ "$SOFTWARE" = "modpack-ftb" ]; then
               echo "[Startup] Downloading FTB Installer..."
@@ -667,7 +662,6 @@ write_files:
               sudo -u minecraft wget -O modpack.zip "$DOWNLOAD_URL"
               sudo -u minecraft unzip -o modpack.zip
               rm modpack.zip
-              
               COUNT=$(ls -1 | wc -l)
               if [ "$COUNT" -eq 1 ]; then
                   DIR_NAME=$(ls -1)
@@ -678,11 +672,7 @@ write_files:
                       rmdir "$DIR_NAME"
                   fi
               fi
-              
-              if [ -f "user_jvm_args.txt" ]; then
-                  rm user_jvm_args.txt
-              fi
-
+              if [ -f "user_jvm_args.txt" ]; then rm user_jvm_args.txt; fi
               setup_generic_start_script
               
           elif [ "$SOFTWARE" = "forge" ] || [ "$SOFTWARE" = "neoforge" ]; then
@@ -690,7 +680,6 @@ write_files:
              sudo -u minecraft wget -O server-installer.jar "$DOWNLOAD_URL"
              sudo -u minecraft $JAVA_BIN -jar server-installer.jar --installServer
              rm -f server-installer.jar
-             
              if [ -f "run.sh" ]; then
                  chmod +x run.sh
              else
@@ -703,6 +692,19 @@ write_files:
                  fi
              fi
 
+          # FIX: New Quilt Installer Logic
+          elif [ "$SOFTWARE" = "quilt" ]; then
+             echo "[Startup] Downloading Quilt Installer..."
+             sudo -u minecraft wget -O quilt-installer.jar "$DOWNLOAD_URL"
+             echo "[Startup] Running Quilt Installer for $MC_VERSION..."
+             sudo -u minecraft $JAVA_BIN -jar quilt-installer.jar install server "$MC_VERSION" --download-server
+             
+             if [ -f "quilt-server-launch.jar" ]; then
+                 echo "#!/bin/bash" > run.sh
+                 echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar quilt-server-launch.jar nogui" >> run.sh
+                 chmod +x run.sh
+             fi
+
           else
               echo "[Startup] Downloading Server JAR..."
               sudo -u minecraft wget -O server.jar "$DOWNLOAD_URL"
@@ -711,11 +713,9 @@ write_files:
               chmod +x run.sh
           fi
           
-          # Only create default properties if they don't exist
           if [ ! -f "server.properties" ]; then
               echo "eula=true" > eula.txt
               chown minecraft:minecraft eula.txt
-              
               echo "enable-rcon=true" >> server.properties
               echo "rcon.port=25575" >> server.properties
               echo "rcon.password=${rconPassword}" >> server.properties
@@ -773,6 +773,7 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
+  # ... (Rest of systemd services remain same) ...
   - path: /etc/systemd/system/mc-status-reporter.service
     permissions: '0644'
     content: |
@@ -908,11 +909,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const needsFileDeletion = serverRow.needs_file_deletion;
     const pendingRestoreKey = serverRow.pending_backup_restore; 
     const subdomain = serverRow.subdomain.toLowerCase() || '';
-    
-    // FIX: Extract `force_software_install` from the request logic if present in serverRow
-    // Ideally this should be passed in via body, but currently we persist it to DB then read it.
-    // Ensure `force_software_install` column exists in Supabase or passed as param.
-    // For now, we rely on the `serverRow` data which was just updated in the frontend.
     const forceInstall = serverRow.force_software_install || false;
 
     const s3Config = {
@@ -958,7 +954,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       needsFileDeletion,
       subdomain,
       pendingRestoreKey,
-      forceInstall // Pass the flag
+      forceInstall
     );
 
     const sanitizedUserData = sanitizeYaml(userData);
@@ -1060,7 +1056,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         subdomain: serverRow.subdomain,
         needs_file_deletion: false,
         pending_backup_restore: null, 
-        force_software_install: false, // Reset flag
+        force_software_install: false,
         current_session_id: currentSessionId, 
       })
       .eq('id', serverRow.id)
