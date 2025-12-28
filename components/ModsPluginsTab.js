@@ -60,14 +60,33 @@ export default function ModsPluginsTab({ server }) {
   };
 
   // Helper to get CurseForge Loader ID (For Mods Only)
-  const getCurseForgeLoaderId = (type) => {
+  const getCurseForgeLoaderId = () => {
+    const type = server?.type || 'vanilla';
+    const versionStr = server?.version || '';
+
+    // CurseForge Loader IDs:
+    // 1 = Forge
+    // 4 = Fabric
+    // 5 = Quilt
+    // 6 = NeoForge
+
+    // --- ARCLIGHT DYNAMIC DETECTION ---
+    if (type === 'arclight') {
+        if (versionStr.includes('::neoforge::')) return 6; // NeoForge
+        if (versionStr.includes('::fabric::')) return 4;   // Fabric
+        return 1; // Default to Forge (Legacy Arclight)
+    }
+
+    // Mohist/Magma are historically Forge-based
+    if (['mohist', 'magma'].includes(type)) return 1;
+
     const map = {
       'forge': 1,
       'fabric': 4,
       'quilt': 5,
       'neoforge': 6
     };
-    if (HYBRID_TYPES.includes(type)) return 1;
+    
     return map[type] || 1; 
   };
 
@@ -93,7 +112,14 @@ export default function ModsPluginsTab({ server }) {
   const fetchCatalog = async (page = 1, isNewSearch = false) => {
     if (!server?.type || !server?.version) return;
 
-    const mcVersion = server.version.split('-')[0];
+    // Handle composite versions (e.g. 1.21.1::neoforge::tag)
+    let mcVersion = server.version;
+    if (mcVersion.includes('::')) {
+        mcVersion = mcVersion.split('::')[0];
+    } else {
+        mcVersion = mcVersion.split('-')[0];
+    }
+
     setLoadingCatalog(true);
     setError(null);
 
@@ -111,7 +137,7 @@ export default function ModsPluginsTab({ server }) {
         // Plugins usually don't need a loaderType, or we can use 0 (Any)
       } else {
         classId = 6; // CurseForge Mods
-        const loaderId = getCurseForgeLoaderId(server.type);
+        const loaderId = getCurseForgeLoaderId();
         loaderParam = `&modLoaderType=${loaderId}`;
       }
 
@@ -182,7 +208,13 @@ export default function ModsPluginsTab({ server }) {
     setModalTab('files');
     setItemDependencies([]);
     
-    const mcVersion = server.version.split('-')[0];
+    // Handle composite versions
+    let mcVersion = server.version;
+    if (mcVersion.includes('::')) {
+        mcVersion = mcVersion.split('::')[0];
+    } else {
+        mcVersion = mcVersion.split('-')[0];
+    }
 
     try {
       let versions = [];
@@ -193,7 +225,7 @@ export default function ModsPluginsTab({ server }) {
       
       // Only append loader type if it's a mod (not a plugin)
       if (item.type === 'mod') {
-         const loaderId = getCurseForgeLoaderId(server.type);
+         const loaderId = getCurseForgeLoaderId();
          apiUrl += `&modLoaderType=${loaderId}`;
       }
 
