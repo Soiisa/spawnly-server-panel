@@ -42,7 +42,7 @@ const parseMavenXml = (text) => {
   }
 };
 
-// Helper to sanitize modpack name for storage (remove :: to prevent parsing errors)
+// Helper to sanitize modpack name for storage
 const sanitizePackName = (name) => name ? name.replace(/::/g, ' ').trim() : 'Modpack';
 
 export default function ServerSoftwareTab({ server, onSoftwareChange }) {
@@ -78,7 +78,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   
   const isInitialMount = useRef(true);
 
-  // --- Definitions (Memoized with Translations) ---
+  // --- Definitions ---
   const softwareOptions = useMemo(() => [
     { id: 'vanilla', label: 'Vanilla', icon: CubeTransparentIcon, color: 'bg-green-50 text-green-700', badge: t('software.badges.vanilla') },
     { id: 'paper', label: 'Paper', icon: DocumentTextIcon, color: 'bg-blue-50 text-blue-700', badge: t('software.badges.plugins') },
@@ -167,10 +167,11 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const checkVersionChangeImpact = (newType, newVersion, isModpackSwitch) => {
     if (!server?.id) return { severity: 'none', message: t('software.impact.new_config'), requiresRecreation: false };
 
-    // Get simple version string for display
+    // Display helpers
     const currentVerDisplay = typeof server?.version === 'string' && server.version.includes('::') ? server.version.split('::')[0] : server.version;
     const newVerDisplay = typeof newVersion === 'string' && newVersion.includes('::') ? newVersion.split('::')[0] : newVersion;
 
+    // --- CASE 1: Different Software Type (High Severity) ---
     if (serverType !== server?.type && !isModpackSwitch) {
       return {
         severity: 'high',
@@ -181,30 +182,66 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       };
     } 
     
+    // --- CASE 2: Modpack Switches ---
     if (isModpackSwitch || activeTab === 'modpacks') {
-       return {
-        severity: 'high',
-        requiresRecreation: !!server?.hetzner_id,
-        requiresFileDeletion: true,
-        message: t('software.impact.modpack_install'),
-        backupMessage: t('software.impact.backup_download')
-       };
+       // Check if it's the SAME modpack (Update) or a DIFFERENT one (Switch)
+       let isSamePack = false;
+       
+       // Simple check: do the names match? (Or Provider + ID for precision)
+       // Current format: "URL::Version::Name"
+       const currentName = server?.version ? server.version.split('::')[2] : '';
+       const newName = newVersion.split('::')[2];
+
+       if (currentName && newName && currentName === newName) {
+           isSamePack = true;
+       }
+
+       if (isSamePack) {
+           // MEDIUM SEVERITY: Same pack, new version.
+           // Keep user files (world, whitelist), but backend MUST wipe mods/config.
+           return {
+               severity: 'medium',
+               requiresRecreation: !!server?.hetzner_id,
+               requiresFileDeletion: false, 
+               message: t('software.impact.modpack_update', { pack: newName }), // "Updating [Pack]. World will be kept, mods will be reset."
+               backupMessage: t('software.impact.backup_recommend')
+           };
+       } else {
+           // HIGH SEVERITY: Different pack.
+           return {
+                severity: 'high',
+                requiresRecreation: !!server?.hetzner_id,
+                requiresFileDeletion: true,
+                message: t('software.impact.modpack_install'),
+                backupMessage: t('software.impact.backup_download')
+           };
+       }
     }
 
+    // --- CASE 3: Standard Software Version Change ---
     if (newVersion !== server?.version) {
-      // FIX: FORCE DELETION FOR ARCLIGHT/MODDED VERSION CHANGES
       const isModded = ['arclight', 'mohist', 'forge', 'neoforge', 'fabric', 'quilt'].includes(serverType);
       
+      // If Modded: Check for Major Version Jump (e.g. 1.20 -> 1.21) OR Loader Switch
       if (isModded) {
-          return {
-             severity: 'high',
-             requiresRecreation: !!server?.hetzner_id,
-             requiresFileDeletion: true, // Force deletion to ensure new jar is downloaded
-             message: t('software.impact.modpack_install'), // Reuse "clean install needed" message
-             backupMessage: t('software.impact.backup_recommend')
+          const oldMC = currentVerDisplay.split('.').slice(0, 2).join('.'); // 1.20
+          const newMC = newVerDisplay.split('.').slice(0, 2).join('.'); // 1.21
+          
+          const oldLoader = server.version.includes('::') ? server.version.split('::')[1] : 'forge';
+          const newLoader = newVersion.includes('::') ? newVersion.split('::')[1] : 'forge';
+
+          if (oldMC !== newMC || oldLoader !== newLoader) {
+              return {
+                 severity: 'high',
+                 requiresRecreation: !!server?.hetzner_id,
+                 requiresFileDeletion: true, // Force clean install for major jumps
+                 message: t('software.impact.modpack_install'), // Reuse "clean install" message
+                 backupMessage: t('software.impact.backup_recommend')
+              };
           }
       }
 
+      // Minor update or Vanilla update (Keep Files)
       return {
         severity: 'medium',
         requiresRecreation: !!server?.hetzner_id,
@@ -213,6 +250,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         backupMessage: t('software.impact.backup_recommend')
       };
     }
+    
     return { severity: 'none' };
   };
 
@@ -492,10 +530,10 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             ...impact,
             payload: {
                 type: serverType,
-                version: version, // This might be "1.20.1::neoforge::tag" for Arclight now
+                version: version,
                 needs_file_deletion: impact.requiresFileDeletion || false,
                 needs_recreation: impact.requiresRecreation,
-                force_software_install: !impact.requiresFileDeletion
+                force_software_install: !impact.requiresFileDeletion // Force update even if keeping files
             }
         });
         setShowVersionWarning(true);
@@ -516,7 +554,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         if (customJavaVer === '17') mcVerMeta = '1.18.2';
         if (customJavaVer === '21') mcVerMeta = '1.20.5';
         
-        // Payload: Url::Version::Name
         payloadVersion = `${customZipUrl}::${mcVerMeta}::Custom Zip`;
 
     } else {
@@ -524,7 +561,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         if (!verObj) return;
 
         const mcVer = verObj.mcVersion !== 'Unknown' ? verObj.mcVersion : '1.20.1';
-        // Get name and sanitize
         const packName = sanitizePackName(selectedModpack.name || selectedModpack.title);
 
         if (modpackProvider === 'ftb') {
@@ -532,25 +568,19 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
         } else if (modpackProvider === 'curseforge') {
             
-            // --- AUTOMATIC SERVER PACK RESOLUTION ---
             if (verObj.serverPackFileId) {
                 try {
                     setIsInstalling(true);
                     setError(null);
-                    // Fetch the Server Pack details
                     const serverPackRes = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/${selectedModpack.id}/files/${verObj.serverPackFileId}`);
-                    
-                    // FIX: UNWRAP 'data' if present
                     const packData = serverPackRes.data || serverPackRes;
 
                     if (packData && packData.downloadUrl) {
-                        console.log("Resolved Server Pack URL:", packData.downloadUrl);
                         payloadVersion = `${packData.downloadUrl}::${mcVer}::${packName}`;
                     } else {
-                        throw new Error("Server pack file found, but no download URL available in response.");
+                        throw new Error("Server pack file found, but no download URL available.");
                     }
                 } catch (e) {
-                    console.error("Server pack resolution failed:", e);
                     setError(t('software.errors.resolve_fail', { error: e.message }));
                     setIsInstalling(false);
                     return; 
@@ -582,15 +612,16 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         payload: {
             type: payloadType,
             version: payloadVersion,
-            needs_file_deletion: true,
-            needs_recreation: true
+            needs_file_deletion: impact.requiresFileDeletion,
+            needs_recreation: true,
+            force_software_install: true // Always force for modpacks
         }
     });
     setShowVersionWarning(true);
   };
 
   const confirmChange = async () => {
-    setIsInstalling(true); // Show loading state on button
+    setIsInstalling(true); 
     setShowVersionWarning(false);
     setSuccess(null);
     setError(null);
@@ -598,7 +629,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     const payload = { ...versionChangeInfo.payload };
 
     try {
-      // --- IMMEDIATE DELETION LOGIC ---
       if (payload.needs_file_deletion) {
           const { data: sessionData } = await supabase.auth.getSession();
           const token = sessionData.session?.access_token;
@@ -616,13 +646,10 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
               if (!delRes.ok) {
                   throw new Error(t('software.errors.delete_failed'));
               }
-              
-              // Deletion successful, clear the flag so provision.js doesn't try again (optional)
               payload.needs_file_deletion = false;
           }
       }
 
-      // --- DB UPDATE ---
       const { error: err } = await supabase.from('servers').update(payload).eq('id', server.id);
       if (err) throw err;
 
@@ -643,7 +670,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   return (
     <div className="space-y-6">
       
-      {/* Tab Switcher */}
       <div className="flex space-x-1 bg-gray-100 dark:bg-slate-700 p-1 rounded-xl w-fit">
          <button 
            onClick={() => setActiveTab('types')}
@@ -661,7 +687,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
       {activeTab === 'types' && (
         <>
-            {/* Standard Software Grid */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
                 <ChipIcon className="w-5 h-5 text-gray-500" /> {t('software.titles.platform')}
@@ -696,7 +721,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 </div>
             </div>
 
-            {/* Standard Version Selector */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -756,7 +780,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       {activeTab === 'modpacks' && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 space-y-6">
             
-            {/* Provider Selector */}
             <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('software.titles.provider')}</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -770,7 +793,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 </div>
             </div>
 
-            {/* Custom Zip Input */}
             {modpackProvider === 'custom' ? (
                 <div className="space-y-4 bg-gray-50 dark:bg-slate-700/50 p-6 rounded-xl border border-dashed border-gray-300 dark:border-slate-600">
                     <div>
@@ -791,7 +813,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {/* Search Bar */}
                     <div className="flex gap-2">
                         <input 
                             type="text" 
@@ -804,7 +825,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                         <button onClick={searchModpacks} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">{t('software.buttons.search')}</button>
                     </div>
 
-                    {/* Modpack Results Grid */}
                     {modpackList.length > 0 && !selectedModpack && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar p-1">
                             {modpackList.map(pack => (
@@ -840,7 +860,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                         </div>
                     )}
 
-                    {/* File/Version Selection */}
                     {selectedModpack && (
                         <div className="space-y-4 animate-fadeIn">
                             <div className="flex items-center justify-between bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl border border-gray-200 dark:border-slate-700">
@@ -878,7 +897,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                                                     </div>
                                                 </div>
                                                 
-                                                {/* RIGHT SIDE: Minecraft Version, Loader, Server Badge */}
                                                 <div className="flex items-center gap-3 text-right">
                                                     {file.serverPackFileId && (
                                                         <span className="text-[10px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded-full border border-green-200 flex items-center gap-1">

@@ -23,7 +23,6 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 // RAM to Server Type Mapping (Cost Optimized with Overhead)
-// Ensure we always have at least 1GB of "slack" on the VPS for the OS.
 const ramToServerType = (ramGb) => {
   if (ramGb <= 3) return 'cx23';  // 4GB VPS -> 1GB free
   if (ramGb <= 7) return 'cx33';  // 8GB VPS -> 1GB free
@@ -133,13 +132,11 @@ const getMagmaDownloadUrl = async (version) => {
 };
 
 const getArclightDownloadUrl = async (versionString) => {
-  // Check if we are using the new complex format (MC::Loader::Tag)
   let tagName = versionString;
   let targetLoader = null;
 
   if (versionString.includes('::')) {
       const parts = versionString.split('::');
-      // parts[0] is mcVersion (e.g. 1.20.1), handled in main logic
       targetLoader = parts[1]; // forge, neoforge, fabric
       tagName = parts[2];      // FeudalKings/1.0.0
   }
@@ -150,26 +147,20 @@ const getArclightDownloadUrl = async (versionString) => {
   const releasesRes = await fetch('https://api.github.com/repos/IzzelAliz/Arclight/releases', { headers });
   const releases = await releasesRes.json();
   
-  // Try finding by Exact Tag match first
   let release = releases.find(r => r.tag_name === tagName);
   if (!release) {
-     // Fallback to startsWith for old logic compatibility
      release = releases.find(r => r.tag_name.startsWith(tagName));
   }
   
   if (!release) throw new Error(`No Arclight release found for tag: ${tagName}`);
 
   let asset;
-  
   if (targetLoader) {
-      // Find asset containing the loader name (case insensitive)
-      // e.g. "arclight-neoforge-1.20.1-..."
       asset = release.assets.find(a => 
           a.name.toLowerCase().includes(targetLoader.toLowerCase()) && 
           a.name.endsWith('.jar')
       );
   } else {
-      // Fallback for old style or non-specified loader
       asset = release.assets.find(a => a.name.endsWith('.jar'));
   }
 
@@ -245,7 +236,7 @@ const generateRconPassword = () => {
 };
 
 // --- DNS & S3 Helpers ---
-
+// (These are assumed to be standard and working as previously defined)
 const deleteCloudflareRecords = async (subdomain) => {
   console.log(`[DNS] Cleaning records for subdomain: ${subdomain}`);
   let subdomainPrefix = subdomain;
@@ -368,14 +359,10 @@ const deleteS3Files = async (serverId, s3Config) => {
 
 // --- Cloud-Init Builder ---
 
-const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '', pendingRestoreKey = null) => {
+const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '', pendingRestoreKey = null, forceInstall = false) => {
   const ramNum = Number(ramGb);
-  
-  // UPDATED: Use full allocated RAM for Heap, with a minimum of 1GB.
-  // The VPS size is guaranteed to be larger by ramToServerType logic.
   const heapGb = Math.max(1, ramNum);
   
-  // Logic to determine Effective Version and Download Meta
   let effectiveVersion = version;
   let modpackMeta = { url: downloadUrl };
 
@@ -384,33 +371,25 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
       effectiveVersion = modpackMeta.mcVersion;
   }
   
-  // --- NEW: ARCLIGHT VERSION PARSING ---
   if (software === 'arclight' && version.includes('::')) {
-      // version is "1.21.1::neoforge::FeudalKings/1.0.0"
       effectiveVersion = version.split('::')[0];
   }
-  // -------------------------------------
 
-  // Determine if this is a modpack for zipping logic
   const isModpack = software.startsWith('modpack-');
 
-  // --- Java Version Selection Logic ---
+  // Java Version Logic
   let javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'; 
-  
   if (effectiveVersion) {
       const vClean = effectiveVersion.replace(/[^0-9.]/g, '');
       const parts = vClean.split('.').map(Number);
-      
       if (parts.length >= 2) {
           const minor = parts[1];
           const patch = parts[2] || 0;
-
           if (minor > 20 || (minor === 20 && patch >= 5)) {
              javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
           } else if (minor >= 17) {
              javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
           } else {
-             // FIX: Arclight and Mohist often require Java 17 even for 1.16.5
              if (software.includes('arclight') || software.includes('mohist')) {
                  javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
              } else {
@@ -431,7 +410,6 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const AWS_ACCESS_KEY_ID = (s3Config.AWS_ACCESS_KEY_ID || '').replace(/'/g, "'\"'\"'");
   const AWS_SECRET_ACCESS_KEY = (s3Config.AWS_SECRET_ACCESS_KEY || '').replace(/'/g, "'\"'\"'");
   const S3_ENDPOINT = (s3Config.S3_ENDPOINT || '').replace(/'/g, "'\"'\"'");
-  
   const s5cmdEndpointOpt = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
 
   const userData = `#cloud-config
@@ -492,72 +470,41 @@ write_files:
       echo "[mc-sync] Processing..."
       cd "$SRC"
       
-      # Define params for sync
       SYNC_EXCLUDES=""
-      
-      # Determine World Name to avoid zipping it
-      # FIX: Escape backslash for carriage return to prevent breaking YAML structure
       WORLD_NAME=$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\\r')
       [ -z "$WORLD_NAME" ] && WORLD_NAME="world"
 
-      # === DYNAMIC ZIPPING LOGIC (Mainly for Modpacks) ===
       if [ "$IS_MODPACK" = "true" ]; then
           echo "[mc-sync] Modpack mode detected. Analyzing folders for optimization..."
-          
-          # We check every subfolder. If it has > 50 files, we zip it.
-          # We SKIP the world folder, logs, and sensitive system folders.
           DIRS_TO_ZIP=""
           FILE_LIMIT=50
-          
           for d in */ ; do
-              # remove trailing slash
-              # FIX: Escape the $ so JS doesn't try to interpret it
               if [ -L "\${d%/}" ]; then continue; fi
               dirname="\${d%/}"
-              
-              # Exclude critical folders from being ZIPPED
               if [[ "$dirname" == "$WORLD_NAME" || "$dirname" == "logs" || "$dirname" == "crash-reports" || "$dirname" == "backups" || "$dirname" == "serverinstaller" || "$dirname" == "node_modules" ]]; then
                   continue
               fi
-              
-              # Count files (SAFE VERSION: Removed 'head' to prevent SIGPIPE crash on large folders)
-              # FIX: Increased depth to 20 to catch nested files deep in mods/kubejs/etc
               count=$(find "$dirname" -maxdepth 20 -type f | wc -l)
-              
               if [ "$count" -gt "$FILE_LIMIT" ]; then
                   echo "[mc-sync] Folder '$dirname' has >$FILE_LIMIT files. Adding to zip."
                   DIRS_TO_ZIP="$DIRS_TO_ZIP $dirname"
-                  # FIX: Exclude both the directory and its contents to prevent s5cmd from entering
                   SYNC_EXCLUDES="$SYNC_EXCLUDES --exclude $dirname --exclude $dirname/*"
               fi
           done
 
           if [ -n "$DIRS_TO_ZIP" ]; then
             echo "[mc-sync] Compressing heavy folders..."
-            # -r recursive, -1 fast compression, -q quiet
             zip -r -1 -q packed-data.zip $DIRS_TO_ZIP || true
-            
-            # Immediately upload the zip
             if [ -f packed-data.zip ]; then
                echo "[mc-sync] Uploading packed-data.zip..."
                sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT cp packed-data.zip "s3://$BUCKET/$SERVER_PATH/packed-data.zip"
                rm -f packed-data.zip
             fi
-          else
-            echo "[mc-sync] No heavy folders found."
           fi
-      else
-          echo "[mc-sync] Standard server. Skipping zipping optimization."
       fi
       
       echo "[mc-sync] Syncing loose files..."
-      
-      # FIX: Disable wildcard expansion (globbing) so '--exclude config/*' is passed
-      # literally to s5cmd, instead of being expanded by bash into a list of files.
       set -f
-
-      # 2. Sync everything else (excluding what we just zipped)
-      # Note: $SYNC_EXCLUDES is unquoted so the string expands into multiple arguments
       sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
           --exclude 'node_modules/*' \
           --exclude 'serverinstaller' \
@@ -574,8 +521,6 @@ write_files:
           --exclude 'libraries/*' \
           $SYNC_EXCLUDES \
           . "s3://$BUCKET/$SERVER_PATH/"
-      
-      # Re-enable globbing
       set +f
 
       EXIT_CODE=$?
@@ -652,25 +597,22 @@ write_files:
       RCON_PASSWORD='${escapedRconPassword}'
       SERVER_ID='${serverId}'
       JAVA_BIN='${javaBin}'
+      FORCE_INSTALL='${forceInstall}'
+      IS_MODPACK='${isModpack}'
       
-      # Optimized JVM Arguments (Aikar's Flags)
       AIKAR_FLAGS="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
       
       echo "[Startup] Initializing for software: $SOFTWARE"
       
-      # Ensure dirs
       mkdir -p /opt/minecraft
       chown -R minecraft:minecraft /opt/minecraft || true
       cd /opt/minecraft
 
-      # Function to find and setup start script (Universal)
       setup_generic_start_script() {
           START_SCRIPT=$(find . -maxdepth 3 -name "start.sh" -o -name "run.sh" -o -name "ServerStart.sh" | head -n 1)
-          
           if [ -n "$START_SCRIPT" ]; then
               echo "[Startup] Found start script: $START_SCRIPT"
               chmod +x "$START_SCRIPT"
-              
               if [ "$START_SCRIPT" != "./run.sh" ]; then
                   if [ "$(dirname "$START_SCRIPT")" == "." ]; then
                       mv "$START_SCRIPT" run.sh
@@ -685,14 +627,12 @@ write_files:
               if [ -n "$INSTALLER" ]; then
                   echo "[Startup] Running installer: $INSTALLER"
                   sudo -u minecraft $JAVA_BIN -jar "$INSTALLER" --installServer
-                  
                   if [ -f "run.sh" ]; then
                       chmod +x run.sh
                   else
                       FORGE_JAR=$(find . -name "forge-*-universal.jar" -o -name "forge-*.jar" | grep -v installer | head -n 1)
                       if [ -n "$FORGE_JAR" ]; then
                           echo "#!/bin/bash" > run.sh
-                          # UPDATED: Xms=1G, Xmx=Max
                           echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar $FORGE_JAR nogui" >> run.sh
                           chmod +x run.sh
                       fi
@@ -702,8 +642,18 @@ write_files:
       }
 
       # Main Install Logic
-      if [ ! -f "server.properties" ] || [ "${needsFileDeletion}" = "true" ]; then
+      # Trigger if server.properties is missing OR deletion requested OR forced update
+      if [ ! -f "server.properties" ] || [ "${needsFileDeletion}" = "true" ] || [ "$FORCE_INSTALL" = "true" ]; then
           
+          # --- SMART UPDATE CLEANUP FOR MODPACKS ---
+          # If we are forcing an install on an existing modpack server (and NOT deleting everything),
+          # we MUST wipe the old mods/configs to prevent conflicts with the new version.
+          if [ "$IS_MODPACK" = "true" ] && [ -f "server.properties" ] && [ "${needsFileDeletion}" != "true" ]; then
+              echo "[Startup] Smart Update detected. Cleaning old mods and config files..."
+              rm -rf mods config scripts kubejs libraries defaultconfigs versions
+          fi
+          # -----------------------------------------
+
           if [ "$SOFTWARE" = "modpack-ftb" ]; then
               echo "[Startup] Downloading FTB Installer..."
               sudo -u minecraft curl -L -o serverinstaller https://dist.creeper.host/FTB2/server-installer/serverinstaller_linux
@@ -748,7 +698,6 @@ write_files:
                  if [ -n "$FORGE_JAR" ]; then 
                      mv "$FORGE_JAR" server.jar
                      echo "#!/bin/bash" > run.sh
-                     # UPDATED: Xms=1G, Xmx=Max
                      echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
                      chmod +x run.sh
                  fi
@@ -758,41 +707,38 @@ write_files:
               echo "[Startup] Downloading Server JAR..."
               sudo -u minecraft wget -O server.jar "$DOWNLOAD_URL"
               echo "#!/bin/bash" > run.sh
-              # UPDATED: Xms=1G, Xmx=Max
               echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar server.jar nogui" >> run.sh
               chmod +x run.sh
           fi
           
-          # Create EULA
-          echo "eula=true" > eula.txt
-          chown minecraft:minecraft eula.txt
-          
-          if [ -f server.properties ]; then echo "" >> server.properties; fi
-          
-          echo "enable-rcon=true" >> server.properties
-          echo "rcon.port=25575" >> server.properties
-          echo "rcon.password=${rconPassword}" >> server.properties
-          echo "broadcast-rcon-to-ops=true" >> server.properties
-          echo "server-port=25565" >> server.properties
-          echo "enable-query=true" >> server.properties
-          echo "query.port=25565" >> server.properties
-          echo "online-mode=false" >> server.properties
-          echo "max-players=20" >> server.properties
-          echo "difficulty=easy" >> server.properties
-          echo "gamemode=survival" >> server.properties
-          echo "spawn-protection=16" >> server.properties
-          echo "view-distance=10" >> server.properties
-          echo "simulation-distance=10" >> server.properties
-          echo "motd=A Spawnly Server" >> server.properties
-          echo "pvp=true" >> server.properties
-          echo "generate-structures=true" >> server.properties
-          echo "max-world-size=29999984" >> server.properties
-          echo "max-tick-time=-1" >> server.properties
-
-          chown minecraft:minecraft server.properties
+          # Only create default properties if they don't exist
+          if [ ! -f "server.properties" ]; then
+              echo "eula=true" > eula.txt
+              chown minecraft:minecraft eula.txt
+              
+              echo "enable-rcon=true" >> server.properties
+              echo "rcon.port=25575" >> server.properties
+              echo "rcon.password=${rconPassword}" >> server.properties
+              echo "broadcast-rcon-to-ops=true" >> server.properties
+              echo "server-port=25565" >> server.properties
+              echo "enable-query=true" >> server.properties
+              echo "query.port=25565" >> server.properties
+              echo "online-mode=false" >> server.properties
+              echo "max-players=20" >> server.properties
+              echo "difficulty=easy" >> server.properties
+              echo "gamemode=survival" >> server.properties
+              echo "spawn-protection=16" >> server.properties
+              echo "view-distance=10" >> server.properties
+              echo "simulation-distance=10" >> server.properties
+              echo "motd=A Spawnly Server" >> server.properties
+              echo "pvp=true" >> server.properties
+              echo "generate-structures=true" >> server.properties
+              echo "max-world-size=29999984" >> server.properties
+              echo "max-tick-time=-1" >> server.properties
+              chown minecraft:minecraft server.properties
+          fi
       fi
 
-      # Fix Permissions
       chown -R minecraft:minecraft /opt/minecraft
       chmod -R u+rwX /opt/minecraft
       chmod +x /opt/minecraft/*.sh || true
@@ -922,10 +868,8 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 runcmd:
-  # 1. Permission fix for existing folder
   - chown -R minecraft:minecraft /opt/minecraft /home/minecraft
   
-  # 2. Download scripts using s5cmd (faster & pre-installed)
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js
@@ -936,10 +880,8 @@ runcmd:
   - chmod 0755 /opt/minecraft/*.js
   - chown minecraft:minecraft /opt/minecraft/*.js
 
-  # 3. Start Minecraft initialization logic
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
 
-  # 4. Enable/Start Services
   - systemctl daemon-reload
   - systemctl enable minecraft
   - systemctl start minecraft
@@ -958,7 +900,6 @@ runcmd:
   return userData;
 };
 
-// Switched to AXIOS for provisioning to handle large bodies and better errors
 async function provisionServer(serverRow, version, ssh_keys, res) {
   try {
     console.log('provisionServer: Starting for serverId:', serverRow.id, 'software:', serverRow.type, 'version:', version);
@@ -967,8 +908,13 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const needsFileDeletion = serverRow.needs_file_deletion;
     const pendingRestoreKey = serverRow.pending_backup_restore; 
     const subdomain = serverRow.subdomain.toLowerCase() || '';
+    
+    // FIX: Extract `force_software_install` from the request logic if present in serverRow
+    // Ideally this should be passed in via body, but currently we persist it to DB then read it.
+    // Ensure `force_software_install` column exists in Supabase or passed as param.
+    // For now, we rely on the `serverRow` data which was just updated in the frontend.
+    const forceInstall = serverRow.force_software_install || false;
 
-    // --- S3 Cleanup ---
     const s3Config = {
       S3_BUCKET: process.env.S3_BUCKET,
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
@@ -986,14 +932,12 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       }
     }
 
-    // --- Console Cleanup (New) ---
     try {
       await supabaseAdmin.from('server_console').delete().eq('server_id', serverRow.id);
     } catch (consoleErr) {
        console.warn('Failed to clear console logs:', consoleErr.message);
     }
 
-    // --- Get Download URL ---
     let downloadUrl = null;
     try {
       downloadUrl = await getSoftwareDownloadUrl(software, version);
@@ -1013,12 +957,12 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       version,
       needsFileDeletion,
       subdomain,
-      pendingRestoreKey
+      pendingRestoreKey,
+      forceInstall // Pass the flag
     );
 
     const sanitizedUserData = sanitizeYaml(userData);
 
-    // --- SSH Key Resolution ---
     let sshKeysToUse = Array.isArray(ssh_keys) && ssh_keys.length > 0 ? ssh_keys : [];
     if (sshKeysToUse.length === 0 && DEFAULT_SSH_KEY) {
       try {
@@ -1030,22 +974,18 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         const match = projectKeys.find((k) => k.name === DEFAULT_SSH_KEY);
         if (match) sshKeysToUse = [match.id];
       } catch (e) {
-        // ignore
       }
     }
 
-    // --- Create Server ---
-    // Using Snapshot Image
     const payload = {
       name: serverRow.name,
       server_type: serverType,
-      image: '342669261', // CUSTOM SNAPSHOT NAME
+      image: '342669261',
       user_data: sanitizedUserData,
       ssh_keys: sshKeysToUse,
       location: 'nbg1',
     };
 
-    // Use AXIOS here for robust error handling on POST
     let createRes;
     try {
       createRes = await axios.post(`${HETZNER_API_BASE}/servers`, payload, {
@@ -1063,7 +1003,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const hetznerServer = createJson.server || null;
     const actionId = createJson.action?.id;
 
-    // --- UPDATE STARTED_AT HERE ---
     await supabaseAdmin
       .from('servers')
       .update({ status: 'Initializing', started_at: new Date().toISOString() })
@@ -1089,7 +1028,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const hetznerId = finalServer?.id || null;
     const newStatus = finalServer ? (finalServer.status === 'running' ? 'Running' : 'Initializing') : 'Initializing';
 
-    // --- DNS Setup ---
     let subdomainResult = null;
     if (ipv4 && serverRow.subdomain) {
       try {
@@ -1122,6 +1060,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
         subdomain: serverRow.subdomain,
         needs_file_deletion: false,
         pending_backup_restore: null, 
+        force_software_install: false, // Reset flag
         current_session_id: currentSessionId, 
       })
       .eq('id', serverRow.id)
