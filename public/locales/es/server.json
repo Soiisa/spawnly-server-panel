@@ -335,6 +335,7 @@
       "confirm": "Confirmar Cambio",
       "clean_install": "Cambiar de {{old}} a {{new}} requiere una instalación limpia. TODOS los archivos existentes serán eliminados.",
       "modpack_install": "Instalar un Modpack requiere una reinstalación completa del servidor. TODOS los archivos existentes (mundo, configuraciones) serán eliminados.",
+      "modpack_update": "Actualizando {{pack}}. Tu mundo y server.properties se conservarán, pero los mods, configs y scripts se restablecerán.",
       "version_change": "Cambiando versión de {{old}} a {{new}}. Los archivos existentes se preservan, pero bajar de versión puede corromper tu mundo.",
       "backup_download": "¡Descarga los archivos de tu mundo antes de proceder!",
       "backup_recommend": "Recomendamos hacer una copia de seguridad de tu mundo antes de cambiar versiones.",

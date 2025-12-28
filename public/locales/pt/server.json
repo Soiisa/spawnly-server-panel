@@ -243,7 +243,7 @@
       "expires": "Expira",
       "forever": "Para sempre",
       "specific_date": "Data Específica",
-      "confirm": "Confirmar Adição"
+      "confirm": "Confirmar"
     },
     "levels": {
       "l1": "Nível 1 (Ignorar proteção)",
@@ -335,6 +335,7 @@
       "confirm": "Confirmar Alteração",
       "clean_install": "Mudar de {{old}} para {{new}} requer uma instalação limpa. TODOS os ficheiros existentes serão eliminados.",
       "modpack_install": "Instalar um Modpack requer uma reinstalação completa do servidor. TODOS os ficheiros existentes (mundo, configurações) serão eliminados.",
+      "modpack_update": "A atualizar {{pack}}. O seu mundo e server.properties serão preservados, mas mods, configs e scripts serão redefinidos.",
       "version_change": "A alterar versão de {{old}} para {{new}}. Os ficheiros existentes são preservados, mas fazer downgrade pode corromper o seu mundo.",
       "backup_download": "Descarregue os ficheiros do seu mundo antes de prosseguir!",
       "backup_recommend": "Recomendamos fazer um backup do seu mundo antes de alterar versões.",
