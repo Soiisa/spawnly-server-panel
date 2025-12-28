@@ -369,7 +369,12 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
           } else if (minor >= 17) {
              javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
           } else {
-             javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
+             // FIX: Arclight and Mohist often require Java 17 even for 1.16.5
+             if (software.includes('arclight') || software.includes('mohist')) {
+                 javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
+             } else {
+                 javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
+             }
           }
       }
   }
