@@ -525,6 +525,7 @@ write_files:
           --exclude 'dynmap/*' \
           --exclude 'bluemap/*' \
           --exclude '*.zip' \
+          --exclude 'libraries/*' \
           $SYNC_EXCLUDES \
           . "s3://$BUCKET/$SERVER_PATH/"
       
