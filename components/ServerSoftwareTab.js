@@ -19,7 +19,8 @@ import {
   PuzzlePieceIcon,
   ArrowDownTrayIcon,
   ArrowRightCircleIcon,
-  ServerIcon
+  ServerIcon,
+  SquaresPlusIcon
 } from '@heroicons/react/24/outline';
 
 // XML Parser for Maven metadata (Forge/NeoForge)
@@ -88,8 +89,14 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     { id: 'neoforge', label: 'NeoForge', icon: WrenchScrewdriverIcon, color: 'bg-orange-100 text-orange-800', badge: t('software.badges.mods') },
     { id: 'fabric', label: 'Fabric', icon: ChipIcon, color: 'bg-indigo-50 text-indigo-700', badge: t('software.badges.mods') },
     { id: 'quilt', label: 'Quilt', icon: ChipIcon, color: 'bg-teal-50 text-teal-700', badge: t('software.badges.mods') },
+    // Hybrids
+    { id: 'arclight', label: 'Arclight', icon: SquaresPlusIcon, color: 'bg-lime-50 text-lime-700', badge: 'Hybrid' },
+    { id: 'mohist', label: 'Mohist', icon: SquaresPlusIcon, color: 'bg-cyan-50 text-cyan-700', badge: 'Hybrid' },
+    { id: 'magma', label: 'Magma', icon: SquaresPlusIcon, color: 'bg-red-50 text-red-700', badge: 'Hybrid' },
+    // Proxies
     { id: 'velocity', label: 'Velocity', icon: GlobeAltIcon, color: 'bg-sky-50 text-sky-700', badge: t('software.badges.proxy') },
     { id: 'waterfall', label: 'Waterfall', icon: GlobeAltIcon, color: 'bg-blue-100 text-blue-800', badge: t('software.badges.proxy') },
+    { id: 'bungeecord', label: 'BungeeCord', icon: GlobeAltIcon, color: 'bg-yellow-50 text-yellow-700', badge: t('software.badges.proxy') },
   ], [t]);
 
   const modpackProviders = useMemo(() => [
@@ -136,8 +143,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   const filterStableVersions = (versions, type) => {
     const stableRegex = /^\d+\.\d+(\.\d+)?$/;
-    if (['forge', 'neoforge'].includes(type)) {
-      return versions.filter(v => !v.toLowerCase().includes('beta') && !v.toLowerCase().includes('rc'));
+    if (['forge', 'neoforge', 'arclight', 'mohist', 'magma'].includes(type)) {
+      return versions.filter(v => !v.toLowerCase().includes('beta') && !v.toLowerCase().includes('rc') && !v.toLowerCase().includes('snapshot'));
     }
     return versions.filter(v => stableRegex.test(v) && !v.includes('snapshot'));
   };
@@ -238,9 +245,25 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             const quiltRes = await fetch('https://meta.quiltmc.org/v3/versions/game');
             versions = (await quiltRes.json()).map(v => v.version);
             break;
+          case 'arclight':
+            const arcRes = await fetchWithLocalProxy('https://api.github.com/repos/IzzelAliz/Arclight/tags');
+            versions = Array.isArray(arcRes) ? arcRes.map(t => t.name) : [];
+            break;
+          case 'mohist':
+            const mohRes = await fetchWithLocalProxy('https://mohistmc.com/api/v2/projects/mohist');
+            versions = Array.isArray(mohRes) ? mohRes : (mohRes.versions || []);
+            break;
+          case 'magma':
+            const magRes = await fetchWithLocalProxy('https://api.magmafoundation.org/api/v2/versions');
+            versions = Array.isArray(magRes) ? magRes : [];
+            break;
+          case 'bungeecord':
+            const bunRes = await fetchWithLocalProxy('https://ci.md-5.net/job/BungeeCord/api/json');
+            versions = bunRes.builds ? bunRes.builds.map(b => String(b.number)).slice(0, 20) : ['Latest'];
+            break;
         }
 
-        const sorted = sortVersions(versions);
+        const sorted = serverType === 'bungeecord' ? versions : sortVersions(versions);
         setAvailableVersions(sorted);
 
         if (isInitialMount.current && !version && !isModpack) {
@@ -575,13 +598,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
       {activeTab === 'types' && (
         <>
-            {/* Standard Software Grid (Unchanged) */}
+            {/* Standard Software Grid */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
                 <ChipIcon className="w-5 h-5 text-gray-500" /> {t('software.titles.platform')}
                 </h2>
                 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {softwareOptions.map((opt) => {
                     const isSelected = serverType === opt.id;
                     return (
