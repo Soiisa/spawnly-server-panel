@@ -132,15 +132,49 @@ const getMagmaDownloadUrl = async (version) => {
   return `https://api.magmafoundation.org/api/v2/${version}/latest/download`;
 };
 
-const getArclightDownloadUrl = async (version) => {
+const getArclightDownloadUrl = async (versionString) => {
+  // Check if we are using the new complex format (MC::Loader::Tag)
+  let tagName = versionString;
+  let targetLoader = null;
+
+  if (versionString.includes('::')) {
+      const parts = versionString.split('::');
+      // parts[0] is mcVersion (e.g. 1.20.1), handled in main logic
+      targetLoader = parts[1]; // forge, neoforge, fabric
+      tagName = parts[2];      // FeudalKings/1.0.0
+  }
+
   const headers = {};
   if (process.env.GITHUB_TOKEN) headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
+  
   const releasesRes = await fetch('https://api.github.com/repos/IzzelAliz/Arclight/releases', { headers });
   const releases = await releasesRes.json();
-  const release = releases.find(r => r.tag_name.startsWith(version));
-  if (!release) throw new Error(`No Arclight release found for ${version}`);
-  const asset = release.assets.find(a => a.name.endsWith('.jar'));
-  if (!asset) throw new Error('No JAR found in Arclight release');
+  
+  // Try finding by Exact Tag match first
+  let release = releases.find(r => r.tag_name === tagName);
+  if (!release) {
+     // Fallback to startsWith for old logic compatibility
+     release = releases.find(r => r.tag_name.startsWith(tagName));
+  }
+  
+  if (!release) throw new Error(`No Arclight release found for tag: ${tagName}`);
+
+  let asset;
+  
+  if (targetLoader) {
+      // Find asset containing the loader name (case insensitive)
+      // e.g. "arclight-neoforge-1.20.1-..."
+      asset = release.assets.find(a => 
+          a.name.toLowerCase().includes(targetLoader.toLowerCase()) && 
+          a.name.endsWith('.jar')
+      );
+  } else {
+      // Fallback for old style or non-specified loader
+      asset = release.assets.find(a => a.name.endsWith('.jar'));
+  }
+
+  if (!asset) throw new Error(`No matching JAR found in Arclight release for ${targetLoader || 'default'}`);
+  
   return asset.browser_download_url;
 };
 
@@ -349,6 +383,13 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
       modpackMeta = parseModpackMetadata(software, version);
       effectiveVersion = modpackMeta.mcVersion;
   }
+  
+  // --- NEW: ARCLIGHT VERSION PARSING ---
+  if (software === 'arclight' && version.includes('::')) {
+      // version is "1.21.1::neoforge::FeudalKings/1.0.0"
+      effectiveVersion = version.split('::')[0];
+  }
+  // -------------------------------------
 
   // Determine if this is a modpack for zipping logic
   const isModpack = software.startsWith('modpack-');

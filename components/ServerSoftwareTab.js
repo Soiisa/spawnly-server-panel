@@ -125,7 +125,11 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   };
 
   const sortVersions = (versions) => {
-    const parse = (v) => v.split(/[-.]/).map(x => (isNaN(Number(x)) ? x : Number(x)));
+    // UPDATED: Handle object versions (Arclight) by using their ID or Name for sorting logic
+    const parse = (v) => {
+        const str = typeof v === 'object' ? (v.id || '') : v;
+        return str.split(/[-.]/).map(x => (isNaN(Number(x)) ? x : Number(x)));
+    };
     return versions.sort((a, b) => {
       const pa = parse(a);
       const pb = parse(b);
@@ -142,15 +146,37 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   };
 
   const filterStableVersions = (versions, type) => {
+    // UPDATED: Handle object versions (Arclight)
     const stableRegex = /^\d+\.\d+(\.\d+)?$/;
-    if (['forge', 'neoforge', 'arclight', 'mohist', 'magma'].includes(type)) {
-      return versions.filter(v => !v.toLowerCase().includes('beta') && !v.toLowerCase().includes('rc') && !v.toLowerCase().includes('snapshot'));
+    
+    if (type === 'arclight') {
+        // For Arclight (objects), we generally trust the releases are stable enough unless tagged 'pre'
+        // If versions are objects, filter based on name/id not containing keywords
+        return versions.filter(v => {
+            const str = typeof v === 'object' ? (v.name || '') : v;
+            return !str.toLowerCase().includes('snapshot') && !str.toLowerCase().includes('pre');
+        });
     }
-    return versions.filter(v => stableRegex.test(v) && !v.includes('snapshot'));
+
+    if (['forge', 'neoforge', 'mohist', 'magma'].includes(type)) {
+      return versions.filter(v => {
+        const str = typeof v === 'object' ? v.id : v;
+        return !str.toLowerCase().includes('beta') && !str.toLowerCase().includes('rc') && !str.toLowerCase().includes('snapshot');
+      });
+    }
+    
+    return versions.filter(v => {
+        const str = typeof v === 'object' ? v.id : v;
+        return stableRegex.test(str) && !str.includes('snapshot');
+    });
   };
 
   const checkVersionChangeImpact = (newType, newVersion, isModpackSwitch) => {
     if (!server?.id) return { severity: 'none', message: t('software.impact.new_config'), requiresRecreation: false };
+
+    // Get simple version string for display
+    const currentVerDisplay = typeof server?.version === 'string' && server.version.includes('::') ? server.version.split('::')[0] : server.version;
+    const newVerDisplay = typeof newVersion === 'string' && newVersion.includes('::') ? newVersion.split('::')[0] : newVersion;
 
     if (serverType !== server?.type && !isModpackSwitch) {
       return {
@@ -177,7 +203,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
         severity: 'medium',
         requiresRecreation: !!server?.hetzner_id,
         requiresFileDeletion: false,
-        message: t('software.impact.version_change', { old: server.version, new: newVersion }),
+        message: t('software.impact.version_change', { old: currentVerDisplay, new: newVerDisplay }),
         backupMessage: t('software.impact.backup_recommend')
       };
     }
@@ -245,13 +271,44 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             const quiltRes = await fetch('https://meta.quiltmc.org/v3/versions/game');
             versions = (await quiltRes.json()).map(v => v.version);
             break;
+            
+          // --- UPDATED ARCLIGHT LOGIC ---
           case 'arclight':
-            const arcRes = await fetchWithLocalProxy('https://api.github.com/repos/IzzelAliz/Arclight/tags');
-            versions = Array.isArray(arcRes) ? arcRes.map(t => t.name) : [];
+            // Fetch Releases to get body text and assets
+            const arcRes = await fetchWithLocalProxy('https://api.github.com/repos/IzzelAliz/Arclight/releases');
+            const releases = Array.isArray(arcRes) ? arcRes : [];
+            const processedVersions = [];
+
+            releases.forEach(r => {
+                // 1. Extract Minecraft Version from title/body using Regex
+                const mcMatch = (r.body && r.body.match(/Minecraft\s+([0-9]+\.[0-9]+(\.[0-9]+)?)/i)) ||
+                                (r.name && r.name.match(/Minecraft\s+([0-9]+\.[0-9]+(\.[0-9]+)?)/i));
+                const mcVer = mcMatch ? mcMatch[1] : 'Unknown';
+
+                // 2. Scan assets for loaders
+                const assets = r.assets || [];
+                const hasNeo = assets.some(a => a.name.toLowerCase().includes('neoforge'));
+                const hasForge = assets.some(a => a.name.toLowerCase().includes('forge') && !a.name.toLowerCase().includes('neoforge'));
+                const hasFabric = assets.some(a => a.name.toLowerCase().includes('fabric'));
+
+                // 3. Create composite entries
+                if (hasNeo) processedVersions.push({ id: `${mcVer}::neoforge::${r.tag_name}`, name: `Minecraft ${mcVer} (NeoForge) - ${r.name || r.tag_name}` });
+                if (hasForge) processedVersions.push({ id: `${mcVer}::forge::${r.tag_name}`, name: `Minecraft ${mcVer} (Forge) - ${r.name || r.tag_name}` });
+                if (hasFabric) processedVersions.push({ id: `${mcVer}::fabric::${r.tag_name}`, name: `Minecraft ${mcVer} (Fabric) - ${r.name || r.tag_name}` });
+
+                // Fallback for older/generic assets
+                if (!hasNeo && !hasForge && !hasFabric && assets.some(a => a.name.endsWith('.jar'))) {
+                     processedVersions.push({ id: `${mcVer}::forge::${r.tag_name}`, name: `Minecraft ${mcVer} - ${r.name || r.tag_name}` });
+                }
+            });
+            versions = processedVersions;
             break;
+            
           case 'mohist':
             const mohRes = await fetchWithLocalProxy('https://mohistmc.com/api/v2/projects/mohist');
-            versions = Array.isArray(mohRes) ? mohRes : (mohRes.versions || []);
+            const rawMohVersions = Array.isArray(mohRes) ? mohRes : (mohRes.versions || []);
+            // Filter out 1.21.4 which is known to be broken (returns 404 on download)
+            versions = rawMohVersions.filter(v => v !== '1.21.4');
             break;
           case 'magma':
             const magRes = await fetchWithLocalProxy('https://api.magmafoundation.org/api/v2/versions');
@@ -263,12 +320,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             break;
         }
 
-        const sorted = serverType === 'bungeecord' ? versions : sortVersions(versions);
+        const sorted = (serverType === 'bungeecord' || serverType === 'arclight') ? versions : sortVersions(versions);
         setAvailableVersions(sorted);
 
         if (isInitialMount.current && !version && !isModpack) {
           const stable = filterStableVersions(sorted, serverType);
-          setVersion(stable.length > 0 ? stable[0] : sorted[0]);
+          const firstVer = stable.length > 0 ? stable[0] : sorted[0];
+          setVersion(typeof firstVer === 'object' ? firstVer.id : firstVer);
           isInitialMount.current = false;
         }
 
@@ -285,7 +343,12 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
 
   const displayedVersions = useMemo(() => {
     let list = showAllVersions ? availableVersions : filterStableVersions(availableVersions, serverType);
-    if (searchQuery) list = list.filter(v => v.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (searchQuery) {
+        list = list.filter(v => {
+            const str = typeof v === 'object' ? v.name : v;
+            return str.toLowerCase().includes(searchQuery.toLowerCase());
+        });
+    }
     return list;
   }, [availableVersions, showAllVersions, serverType, searchQuery]);
 
@@ -429,7 +492,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             ...impact,
             payload: {
                 type: serverType,
-                version: version,
+                version: version, // This might be "1.20.1::neoforge::tag" for Arclight now
                 needs_file_deletion: impact.requiresFileDeletion || false,
                 needs_recreation: impact.requiresRecreation,
                 force_software_install: !impact.requiresFileDeletion
@@ -665,17 +728,20 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     {[...Array(12)].map((_, i) => <div key={i} className="h-10 bg-gray-100 dark:bg-slate-700 rounded-lg"></div>)}
                 </div>
                 ) : displayedVersions.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 max-h-[320px] overflow-y-auto p-1 custom-scrollbar">
+                <div className={`grid gap-2 max-h-[320px] overflow-y-auto p-1 custom-scrollbar ${serverType === 'arclight' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'}`}>
                     {displayedVersions.map((v) => {
-                    const isSelected = version === v;
+                    const val = typeof v === 'object' ? v.id : v;
+                    const label = typeof v === 'object' ? v.name : v;
+                    const isSelected = version === val;
                     return (
                         <button
-                        key={v} onClick={() => setVersion(v)}
+                        key={val} onClick={() => setVersion(val)}
                         className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border transition-all truncate text-left
                             ${isSelected ? 'border-indigo-600 bg-indigo-600 text-white shadow-md' : 'border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700'}
                         `}
+                        title={label}
                         >
-                        {v}
+                        {label}
                         </button>
                     );
                     })}
