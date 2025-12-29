@@ -115,12 +115,11 @@ const getFabricDownloadUrl = async (version) => {
   return `https://meta.fabricmc.net/v2/versions/loader/${version}/${loaderVersion}/${installerVersion}/server/jar`;
 };
 
-// FIX: Updated Quilt to use the Installer approach
 const getQuiltDownloadUrl = async (version) => {
-  // We don't need the server version here, just the latest installer
+  // Use generic installer endpoint
   const installerRes = await fetch('https://meta.quiltmc.org/v3/versions/installer');
   const installerData = await installerRes.json();
-  const installerVersion = installerData[0].version; // Use latest stable installer
+  const installerVersion = installerData[0].version; 
   return `https://maven.quiltmc.org/repository/release/org/quiltmc/quilt-installer/${installerVersion}/quilt-installer-${installerVersion}.jar`;
 };
 
@@ -138,8 +137,8 @@ const getArclightDownloadUrl = async (versionString) => {
 
   if (versionString.includes('::')) {
       const parts = versionString.split('::');
-      targetLoader = parts[1]; // forge, neoforge, fabric
-      tagName = parts[2];      // FeudalKings/1.0.0
+      targetLoader = parts[1];
+      tagName = parts[2];
   }
 
   const headers = {};
@@ -236,7 +235,6 @@ const generateRconPassword = () => {
 };
 
 // --- DNS & S3 Helpers ---
-// (These remain unchanged)
 const deleteCloudflareRecords = async (subdomain) => {
   console.log(`[DNS] Cleaning records for subdomain: ${subdomain}`);
   let subdomainPrefix = subdomain;
@@ -692,12 +690,22 @@ write_files:
                  fi
              fi
 
-          # FIX: New Quilt Installer Logic
+          # FIX: Quilt installer logic: install to 'server/' then move files
           elif [ "$SOFTWARE" = "quilt" ]; then
              echo "[Startup] Downloading Quilt Installer..."
              sudo -u minecraft wget -O quilt-installer.jar "$DOWNLOAD_URL"
              echo "[Startup] Running Quilt Installer for $MC_VERSION..."
-             sudo -u minecraft $JAVA_BIN -jar quilt-installer.jar install server "$MC_VERSION" . --download-server
+             
+             # Run installer (creates 'server' directory)
+             sudo -u minecraft $JAVA_BIN -jar quilt-installer.jar install server "$MC_VERSION" --download-server
+             
+             # Move files from 'server' subdirectory to current dir
+             if [ -d "server" ]; then
+                 echo "[Startup] Moving Quilt server files to root..."
+                 mv server/* .
+                 mv server/.* . 2>/dev/null || true
+                 rmdir server
+             fi
              
              if [ -f "quilt-server-launch.jar" ]; then
                  echo "#!/bin/bash" > run.sh
@@ -773,7 +781,6 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-  # ... (Rest of systemd services remain same) ...
   - path: /etc/systemd/system/mc-status-reporter.service
     permissions: '0644'
     content: |
