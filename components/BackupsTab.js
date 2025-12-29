@@ -7,7 +7,8 @@ import {
   ExclamationTriangleIcon,
   ClockIcon,
   Cog6ToothIcon,
-  CheckIcon
+  CheckIcon,
+  AdjustmentsHorizontalIcon
 } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabaseClient';
 import { useTranslation } from 'next-i18next';
@@ -108,7 +109,7 @@ export default function BackupsTab({ server }) {
         .eq('id', server.id);
       
       if (error) throw error;
-      setMaxAutoBackups(safeRetention); // Update UI state to match
+      setMaxAutoBackups(safeRetention); 
       setShowSettings(false);
     } catch (e) {
       alert("Failed to save settings: " + e.message);
@@ -170,9 +171,7 @@ export default function BackupsTab({ server }) {
             <div className="ml-3">
               <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300">{t('backups.pending_title')}</h3>
               <div className="mt-2 text-sm text-amber-700 dark:text-amber-200">
-                <p>
-                  {t('backups.pending_desc')}
-                </p>
+                <p>{t('backups.pending_desc')}</p>
                 <code className="bg-amber-100 dark:bg-amber-900 px-2 py-1 rounded mt-1 block w-fit font-mono text-xs">
                   {pendingRestore.split('/').pop()}
                 </code>
@@ -195,11 +194,12 @@ export default function BackupsTab({ server }) {
           <div className="flex gap-2 w-full sm:w-auto">
               <button 
                   onClick={() => setShowSettings(!showSettings)}
-                  className={`p-2 rounded-lg border transition-colors ${showSettings ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
-                  title="Backup Settings"
+                  className={`p-2 rounded-lg border transition-colors flex items-center gap-2 text-sm font-medium ${showSettings ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700'}`}
               >
-                  <Cog6ToothIcon className="w-5 h-5" />
+                  <AdjustmentsHorizontalIcon className="w-5 h-5" />
+                  <span>{t('backups.settings_title').replace("Auto-Backup Configuration", "Settings")}</span>
               </button>
+              
               <button 
                   onClick={fetchBackups} 
                   className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 dark:hover:text-gray-100 rounded-lg border border-gray-200 dark:border-slate-700"
@@ -225,59 +225,96 @@ export default function BackupsTab({ server }) {
 
         {/* Auto Backup Settings Panel */}
         {showSettings && (
-          <div className="mb-6 bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl border border-gray-200 dark:border-slate-600 animate-in fade-in slide-in-from-top-2">
-            <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 text-sm">{t('backups.settings_title')}</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer mb-1">
-                  <input 
-                    type="checkbox" 
-                    checked={autoBackupEnabled}
-                    onChange={(e) => setAutoBackupEnabled(e.target.checked)}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('backups.enable_auto')}</span>
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 pl-6">Runs when server stops.</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('backups.frequency')}</label>
-                <div className="relative">
-                  <input 
-                    type="number" 
-                    min="1"
-                    value={autoBackupInterval} 
-                    onChange={(e) => setAutoBackupInterval(e.target.value)}
-                    className="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                  />
-                  <span className="absolute right-3 top-2 text-xs text-gray-400">hrs</span>
+          <div className="mb-8 bg-slate-50 dark:bg-slate-700/30 p-5 rounded-xl border border-slate-200 dark:border-slate-700 animate-in fade-in slide-in-from-top-2">
+            
+            <div className="flex flex-col md:flex-row gap-8 items-start">
+                {/* 1. Toggle Switch */}
+                <div className="flex-shrink-0">
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                        <div className="relative">
+                            <input 
+                                type="checkbox" 
+                                className="sr-only" 
+                                checked={autoBackupEnabled}
+                                onChange={(e) => setAutoBackupEnabled(e.target.checked)} 
+                            />
+                            <div className={`block w-12 h-7 rounded-full transition-colors ${autoBackupEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                            <div className={`absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform ${autoBackupEnabled ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                        </div>
+                        <div>
+                            <span className="block text-sm font-bold text-gray-900 dark:text-gray-100">{t('backups.enable_auto')}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 block">Runs automatically when server stops.</span>
+                        </div>
+                    </label>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('backups.retention')} <span className="text-indigo-500">(Max 10)</span></label>
-                <div className="relative">
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="10" 
-                      value={maxAutoBackups} 
-                      onChange={(e) => setMaxAutoBackups(e.target.value)}
-                      className="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    />
-                    <span className="absolute right-3 top-2 text-xs text-gray-400">files</span>
+                {/* 2. Controls (Conditional) */}
+                <div className={`flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6 w-full transition-opacity duration-300 ${autoBackupEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                    
+                    {/* Frequency Input */}
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
+                            {t('backups.frequency')}
+                        </label>
+                        <div className="relative">
+                            <input 
+                                type="number" 
+                                min="1"
+                                value={autoBackupInterval} 
+                                onChange={(e) => setAutoBackupInterval(e.target.value)}
+                                className="block w-full pl-3 pr-12 py-2 rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-medium"
+                            />
+                            <span className="absolute right-3 top-2 text-sm text-gray-400">hours</span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1">Minimum time between backups.</p>
+                    </div>
+
+                    {/* Retention Slider (Hard Cap 10) */}
+                    <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                {t('backups.retention')}
+                            </label>
+                            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded">
+                                {maxAutoBackups} / 10
+                            </span>
+                        </div>
+                        
+                        <input 
+                            type="range" 
+                            min="1" 
+                            max="10" 
+                            step="1"
+                            value={maxAutoBackups} 
+                            onChange={(e) => setMaxAutoBackups(e.target.value)}
+                            className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                            <span>1</span>
+                            <span>5</span>
+                            <span>10 (Max)</span>
+                        </div>
+                    </div>
                 </div>
-              </div>
             </div>
-            <div className="mt-4 flex justify-end">
+
+            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-600 flex justify-end">
                <button 
                   onClick={handleSaveSettings}
                   disabled={savingSettings}
-                  className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-70"
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed hover:shadow-md"
                >
-                 {savingSettings && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                 {t('backups.save_settings')}
+                 {savingSettings ? (
+                    <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Saving...
+                    </>
+                 ) : (
+                    <>
+                        <CheckIcon className="w-4 h-4" />
+                        {t('backups.save_settings')}
+                    </>
+                 )}
                </button>
             </div>
           </div>
