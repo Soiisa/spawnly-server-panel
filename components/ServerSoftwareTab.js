@@ -91,8 +91,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     { id: 'quilt', label: 'Quilt', icon: ChipIcon, color: 'bg-teal-50 text-teal-700', badge: t('software.badges.mods') },
     // Hybrids
     { id: 'arclight', label: 'Arclight', icon: SquaresPlusIcon, color: 'bg-lime-50 text-lime-700', badge: 'Hybrid' },
-    { id: 'mohist', label: 'Mohist', icon: SquaresPlusIcon, color: 'bg-cyan-50 text-cyan-700', badge: 'Hybrid' },
-    { id: 'magma', label: 'Magma', icon: SquaresPlusIcon, color: 'bg-red-50 text-red-700', badge: 'Hybrid' },
     // Proxies
     { id: 'velocity', label: 'Velocity', icon: GlobeAltIcon, color: 'bg-sky-50 text-sky-700', badge: t('software.badges.proxy') },
     { id: 'waterfall', label: 'Waterfall', icon: GlobeAltIcon, color: 'bg-blue-100 text-blue-800', badge: t('software.badges.proxy') },
