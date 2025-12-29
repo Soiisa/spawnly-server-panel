@@ -10,10 +10,10 @@ import {
   CheckIcon
 } from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabaseClient';
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
+import { useTranslation } from 'next-i18next';
 
 export default function BackupsTab({ server }) {
-  const { t } = useTranslation('server'); // <--- INITIALIZED
+  const { t } = useTranslation('server');
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -39,7 +39,8 @@ export default function BackupsTab({ server }) {
   useEffect(() => {
     setAutoBackupEnabled(server.auto_backup_enabled || false);
     setAutoBackupInterval(server.auto_backup_interval_hours || 24);
-    setMaxAutoBackups(server.max_auto_backups || 5);
+    // Ensure existing values don't violate the new cap visually
+    setMaxAutoBackups(Math.min(10, server.max_auto_backups || 5));
   }, [server.auto_backup_enabled, server.auto_backup_interval_hours, server.max_auto_backups]);
 
   const fetchBackups = async () => {
@@ -80,7 +81,7 @@ export default function BackupsTab({ server }) {
         throw new Error(err.error || 'Failed');
       }
       
-      alert(t('backups.alerts.started')); // <--- TRANSLATED
+      alert(t('backups.alerts.started'));
       setTimeout(fetchBackups, 2000);
       setTimeout(fetchBackups, 5000);
       setTimeout(fetchBackups, 10000); 
@@ -94,16 +95,20 @@ export default function BackupsTab({ server }) {
   const handleSaveSettings = async () => {
     setSavingSettings(true);
     try {
+      // Enforce Hard Cap of 10
+      const safeRetention = Math.min(10, Math.max(1, parseInt(maxAutoBackups)));
+      
       const { error } = await supabase
         .from('servers')
         .update({ 
           auto_backup_enabled: autoBackupEnabled,
           auto_backup_interval_hours: parseInt(autoBackupInterval),
-          max_auto_backups: parseInt(maxAutoBackups)
+          max_auto_backups: safeRetention
         })
         .eq('id', server.id);
       
       if (error) throw error;
+      setMaxAutoBackups(safeRetention); // Update UI state to match
       setShowSettings(false);
     } catch (e) {
       alert("Failed to save settings: " + e.message);
@@ -114,10 +119,10 @@ export default function BackupsTab({ server }) {
 
   const handleRestore = async (key) => {
     if (!isStopped) {
-        return alert(t('backups.alerts.stop_required')); // <--- TRANSLATED
+        return alert(t('backups.alerts.stop_required'));
     }
 
-    if (!confirm(t('backups.alerts.confirm_restore'))) return; // <--- TRANSLATED
+    if (!confirm(t('backups.alerts.confirm_restore'))) return;
 
     setProcessing(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -136,7 +141,7 @@ export default function BackupsTab({ server }) {
         throw new Error(err.error || 'Failed');
       }
       
-      alert(t('backups.alerts.queued')); // <--- TRANSLATED
+      alert(t('backups.alerts.queued'));
     } catch (e) {
       alert("Restore request failed: " + e.message);
     } finally {
@@ -251,11 +256,12 @@ export default function BackupsTab({ server }) {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('backups.retention')}</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('backups.retention')} <span className="text-indigo-500">(Max 10)</span></label>
                 <div className="relative">
                     <input 
                       type="number" 
-                      min="1" max="50"
+                      min="1" 
+                      max="10" 
                       value={maxAutoBackups} 
                       onChange={(e) => setMaxAutoBackups(e.target.value)}
                       className="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-800 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"

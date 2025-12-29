@@ -1,6 +1,6 @@
 // pages/api/servers/[serverId]/backup-action.js
 import { createClient } from '@supabase/supabase-js';
-import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, ListObjectsV2Command, GetObjectCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import archiver from 'archiver';
 import { PassThrough } from 'stream';
@@ -19,6 +19,33 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+// --- HELPER: Enforce Hard Cap of 10 Backups ---
+const enforceRetention = async (serverId) => {
+    const MAX_BACKUPS = 10;
+    try {
+        const command = new ListObjectsV2Command({
+            Bucket: process.env.S3_BUCKET,
+            Prefix: `backups/${serverId}/`,
+        });
+        const response = await s3Client.send(command);
+        const backups = (response.Contents || [])
+            .sort((a, b) => new Date(b.LastModified) - new Date(a.LastModified)); // Newest first
+
+        if (backups.length > MAX_BACKUPS) {
+            const toDelete = backups.slice(MAX_BACKUPS).map(b => ({ Key: b.Key }));
+            console.log(`[Backup] Enforcing retention. Deleting ${toDelete.length} old backups for ${serverId}`);
+            
+            await s3Client.send(new DeleteObjectsCommand({
+                Bucket: process.env.S3_BUCKET,
+                Delete: { Objects: toDelete }
+            }));
+        }
+    } catch (e) {
+        console.error("Failed to enforce backup retention:", e);
+        // Don't fail the main request just because cleanup failed
+    }
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -68,7 +95,7 @@ export default async function handler(req, res) {
     const filename = `manual-backup-${timestamp}.zip`;
     const targetKey = `backups/${serverId}/${filename}`;
 
-    // CASE A: Server is Running -> Use VPS Agent (Faster, safer for live data)
+    // CASE A: Server is Running -> Use VPS Agent
     if (server.status === 'Running') {
         const fileApiUrl = `http://${server.subdomain}.spawnly.net:3005/api/backups`;
         try {
@@ -78,14 +105,15 @@ export default async function handler(req, res) {
                     'Authorization': `Bearer ${server.rcon_password}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ s3Key }) // Note: The agent generates its own name usually, but we accept what it returns
+                body: JSON.stringify({ s3Key }) 
             });
 
             if (!vpsRes.ok) throw new Error((await vpsRes.text()) || vpsRes.statusText);
             const data = await vpsRes.json();
             
-            // Update last_backup_at
+            // Update last_backup_at & Enforce Retention
             await supabaseAdmin.from('servers').update({ last_backup_at: new Date().toISOString() }).eq('id', serverId);
+            await enforceRetention(serverId);
             
             return res.status(200).json(data);
         } catch (err) {
@@ -94,7 +122,7 @@ export default async function handler(req, res) {
         }
     } 
     
-    // CASE B: Server is Stopped -> Zip S3 files directly (Serverless)
+    // CASE B: Server is Stopped -> Zip S3 files directly
     else if (server.status === 'Stopped') {
         try {
             console.log(`[Backup] Server stopped. Zipping S3 files for ${serverId}...`);
@@ -128,7 +156,7 @@ export default async function handler(req, res) {
 
             // 5. Append files from S3 to Archive
             for (const file of files) {
-                // Skip existing backups/ or node_modules if somehow present
+                // Skip existing backups/ or node_modules
                 if (file.Key.includes('node_modules') || file.Key.includes('/backups/')) continue;
 
                 const fileStream = await s3Client.send(new GetObjectCommand({ Bucket, Key: file.Key }));
@@ -141,8 +169,9 @@ export default async function handler(req, res) {
             await archive.finalize();
             await upload.done();
 
-            // Update last_backup_at
+            // Update last_backup_at & Enforce Retention
             await supabaseAdmin.from('servers').update({ last_backup_at: new Date().toISOString() }).eq('id', serverId);
+            await enforceRetention(serverId);
 
             return res.status(200).json({ success: true, filename, s3Path: `s3://${Bucket}/${targetKey}` });
         } catch (err) {

@@ -506,7 +506,6 @@ write_files:
       sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
           --exclude 'node_modules/*' \
           --exclude 'serverinstaller' \
-          --exclude 'logs/*' \
           --exclude 'crash-reports/*' \
           --exclude 'debug/*' \
           --exclude 'cache/*' \
