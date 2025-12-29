@@ -697,7 +697,7 @@ write_files:
              echo "[Startup] Downloading Quilt Installer..."
              sudo -u minecraft wget -O quilt-installer.jar "$DOWNLOAD_URL"
              echo "[Startup] Running Quilt Installer for $MC_VERSION..."
-             sudo -u minecraft $JAVA_BIN -jar quilt-installer.jar install server "$MC_VERSION" --download-server
+             sudo -u minecraft $JAVA_BIN -jar quilt-installer.jar install server "$MC_VERSION" . --download-server
              
              if [ -f "quilt-server-launch.jar" ]; then
                  echo "#!/bin/bash" > run.sh
