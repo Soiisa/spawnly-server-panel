@@ -31,34 +31,33 @@ export default async function handler(req, res) {
   if (authError || !user) return res.status(401).json({ error: 'Invalid token' });
 
   const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
+    .from('profiles').select('is_admin').eq('id', user.id).single();
 
-  if (!profile?.is_admin) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
+  if (!profile?.is_admin) return res.status(403).json({ error: 'Forbidden' });
 
   try {
-    // 1. Fetch Supabase Data (Users, Servers, Running RAM)
     const [
       { count: userCount }, 
       { count: serverCount },
-      { data: runningServers }, // Get actual rows to sum RAM
+      // UPDATED: Fetch player_count alongside ram
+      { data: runningServers }, 
       { data: creditStats }
     ] = await Promise.all([
       supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('servers').select('*', { count: 'exact', head: true }),
-      supabaseAdmin.from('servers').select('ram').eq('status', 'Running'),
+      supabaseAdmin.from('servers').select('ram, player_count').eq('status', 'Running'),
       supabaseAdmin.from('profiles').select('credits')
     ]);
 
-    // 2. Calculate Revenue Rate
-    const totalRunningRam = runningServers.reduce((acc, s) => acc + (s.ram || 0), 0);
-    const revenuePerHour = totalRunningRam * 1 * 0.01; // GB * 1 Credit * 0.01 EUR
+    // --- NEW: Calculate Total Players ---
+    const totalPlayers = runningServers.reduce((acc, s) => acc + (s.player_count || 0), 0);
+    // ------------------------------------
 
-    // 3. Fetch Hetzner Infrastructure Data
+    // Calculate Revenue
+    const totalRunningRam = runningServers.reduce((acc, s) => acc + (s.ram || 0), 0);
+    const revenuePerHour = totalRunningRam * 1 * 0.01; 
+
+    // Calculate Cost
     let hetznerCostPerHour = 0;
     try {
       const hRes = await fetch('https://api.hetzner.cloud/v1/servers', {
@@ -66,10 +65,9 @@ export default async function handler(req, res) {
       });
       if (hRes.ok) {
         const hData = await hRes.json();
-        // Sum up costs based on server type
         hetznerCostPerHour = hData.servers.reduce((acc, s) => {
           const type = s.server_type.name.toLowerCase();
-          const price = HETZNER_PRICING[type] || 0.01; // Default fallback if type unknown
+          const price = HETZNER_PRICING[type] || 0.01;
           return acc + price;
         }, 0);
       }
@@ -78,9 +76,9 @@ export default async function handler(req, res) {
     }
 
     const profitPerHour = revenuePerHour - hetznerCostPerHour;
-
-    // 4. Financials (Historical)
     const totalLiability = creditStats.reduce((acc, curr) => acc + (curr.credits || 0), 0);
+    
+    // Financial History
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { data: usageData } = await supabaseAdmin
       .from('credit_transactions')
@@ -91,13 +89,15 @@ export default async function handler(req, res) {
     
     const revenue24h = usageData.reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
 
-    // 5. Return Unified Stats
     res.status(200).json({
       users: userCount,
       servers: {
         total: serverCount,
         active: runningServers.length,
       },
+      // --- NEW FIELD ---
+      players: totalPlayers, 
+      // ----------------
       financials: {
         liability: totalLiability,
         revenue24h: revenue24h,
