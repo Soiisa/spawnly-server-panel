@@ -4,8 +4,8 @@ import { supabase } from '../../lib/supabaseClient';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
-import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
+import { useTranslation } from 'next-i18next';
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { 
   ClipboardDocumentIcon, 
   PlayIcon, 
@@ -97,7 +97,7 @@ const getDisplayInfo = (server, t) => {
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
   const { id } = router.query;
-  const { t } = useTranslation('server'); // <--- INITIALIZED with 'server' namespace
+  const { t } = useTranslation('server');
 
   // --- State ---
   const [server, setServer] = useState(initialServer);
@@ -140,8 +140,14 @@ export default function ServerDetailPage({ initialServer }) {
     }
   }, [router?.query?.tab]);
 
+  // Initial Data Fetch & Permissions
   useEffect(() => {
     mountedRef.current = true;
+
+    // Request notification permission early
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
 
     const fetchSessionAndData = async () => {
       setLoading(true);
@@ -176,6 +182,7 @@ export default function ServerDetailPage({ initialServer }) {
     };
   }, [id]);
 
+  // Realtime Subscription
   useEffect(() => {
     if (!id || !user?.id) return;
     
@@ -190,11 +197,13 @@ export default function ServerDetailPage({ initialServer }) {
           if (!mountedRef.current) return;
           setServer((prev) => {
             const updated = payload.new;
+            // Prevent overwriting unsaved MOTD changes if the user is typing
             if (!isEditingMotd && updated.motd !== prev.motd) {
               setMotdText(updated.motd);
             }
             return updated;
           });
+          // Clear errors on successful update reception
           setError(null);
         }
       )
@@ -203,6 +212,21 @@ export default function ServerDetailPage({ initialServer }) {
     serverChannelRef.current = serverChannel;
     return () => { if (serverChannelRef.current) supabase.removeChannel(serverChannelRef.current); };
   }, [id, user?.id, isEditingMotd]);
+
+  // Heartbeat Polling: Fixes "Buttons unreliable" and "Needs refresh"
+  // Fetches data periodically to ensure UI is in sync if Realtime packet is missed.
+  useEffect(() => {
+    if (!id || !user?.id) return;
+
+    const heartbeat = setInterval(() => {
+      // Only poll if window is visible and we aren't already aggressively polling for an action
+      if (!document.hidden && !pollRef.current && mountedRef.current) {
+         fetchServer(id, user.id);
+      }
+    }, 15000); // Check every 15 seconds
+
+    return () => clearInterval(heartbeat);
+  }, [id, user?.id]);
 
   useEffect(() => {
     if (!server?.id || fileToken || !user) return;
@@ -231,10 +255,15 @@ export default function ServerDetailPage({ initialServer }) {
     setOnlinePlayers(getOnlinePlayersArray(server));
   }, [server?.players_online, server?.status]);
 
+  // Countdown Logic - Improved to be player-aware
   useEffect(() => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
 
-    if (server?.status === 'Running' && server?.last_empty_at && server?.auto_stop_timeout > 0) {
+    // Explicitly check player count to clear countdown immediately when someone joins
+    const hasPlayers = (server?.player_count && server.player_count > 0) || 
+                       (server?.players_online && server.players_online.length > 0);
+
+    if (server?.status === 'Running' && server?.last_empty_at && server?.auto_stop_timeout > 0 && !hasPlayers) {
       const updateCountdown = () => {
         const lastEmpty = new Date(server.last_empty_at).getTime();
         const timeoutMs = server.auto_stop_timeout * 60 * 1000;
@@ -253,14 +282,16 @@ export default function ServerDetailPage({ initialServer }) {
       setAutoStopCountdown(null);
     }
     return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
-  }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout, t]);
+  }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout, server?.player_count, t]);
 
+  // Notifications Logic
   useEffect(() => {
     const prevStatus = prevStatusRef.current;
     const currentStatus = server?.status;
     const serverName = server?.name;
 
     const startingStatuses = ['Starting', 'Provisioning', 'Recreating'];
+    // Trigger if we were in a starting state and now we are running
     const isTransitioning = startingStatuses.includes(prevStatus) && currentStatus === 'Running';
 
     if (isTransitioning) {
@@ -297,6 +328,7 @@ export default function ServerDetailPage({ initialServer }) {
     return res.json();
   };
 
+  // Debounced fetch to prevent spam, but used by poller
   const fetchServer = useCallback(
     debounce(async (serverId, userId) => {
       const { data } = await supabase.from('servers').select('*').eq('id', serverId).eq('user_id', userId).single();
@@ -308,11 +340,17 @@ export default function ServerDetailPage({ initialServer }) {
   );
 
   const pollUntilStatus = (expectedStatuses, timeout = 120000) => {
+    // Clear any existing poll to avoid duplicates
+    if (pollRef.current) clearInterval(pollRef.current);
+
     const startTime = Date.now();
     pollRef.current = setInterval(() => {
       fetchServer(id, user?.id);
+      
+      // Check if we reached target status (or if status became valid/Running unexpectedly)
       if (expectedStatuses.includes(server?.status) || Date.now() - startTime > timeout) {
         clearInterval(pollRef.current);
+        pollRef.current = null; // Clear ref so heartbeat can resume
         if (Date.now() - startTime > timeout) setError(t('errors.timeout'));
       }
     }, 3000);
@@ -402,6 +440,7 @@ export default function ServerDetailPage({ initialServer }) {
       }
     } catch (e) {
       setError(t('errors.failed_action', { action, message: e.message }));
+      // Immediately fetch if error to reset status
       await fetchServer(server.id, user.id);
     } finally {
       setActionLoading(false);
@@ -488,10 +527,9 @@ export default function ServerDetailPage({ initialServer }) {
   const isBusy = !isRunning && !isStopped && !isUnknown;
   
   // Define stuck states where we show the KILL button
-  // We also show it if stopping/restarting in case that gets stuck.
   const isStuck = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting'].includes(status);
   
-  // Show Kill button if explicitly stuck, or if not stopped/unknown (general fallback, but emphasized for stuck)
+  // Show Kill button if explicitly stuck
   const canKill = isStuck;
 
   const sType = (server.type || '').toLowerCase();
