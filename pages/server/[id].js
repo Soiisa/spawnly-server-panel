@@ -203,7 +203,6 @@ export default function ServerDetailPage({ initialServer }) {
             }
             return updated;
           });
-          // Clear errors on successful update reception
           setError(null);
         }
       )
@@ -213,8 +212,7 @@ export default function ServerDetailPage({ initialServer }) {
     return () => { if (serverChannelRef.current) supabase.removeChannel(serverChannelRef.current); };
   }, [id, user?.id, isEditingMotd]);
 
-  // Heartbeat Polling: Fixes "Buttons unreliable" and "Needs refresh"
-  // Fetches data periodically to ensure UI is in sync if Realtime packet is missed.
+  // Heartbeat Polling: Ensures UI stays in sync even if Realtime events are missed
   useEffect(() => {
     if (!id || !user?.id) return;
 
@@ -255,27 +253,31 @@ export default function ServerDetailPage({ initialServer }) {
     setOnlinePlayers(getOnlinePlayersArray(server));
   }, [server?.players_online, server?.status]);
 
-  // Countdown Logic - Improved to be player-aware
+  // Countdown Logic - Fixed Visibility
   useEffect(() => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
 
-    // Explicitly check player count to clear countdown immediately when someone joins
-    const hasPlayers = (server?.player_count && server.player_count > 0) || 
-                       (server?.players_online && server.players_online.length > 0);
+    // FIX: Only check player_count > 0 to hide the timer.
+    // If player_count is 0, we trust last_empty_at.
+    // We ignore the 'players_online' string here as it can be stale or contain whitespace formatting.
+    const hasActivePlayers = server?.player_count && server.player_count > 0;
 
-    if (server?.status === 'Running' && server?.last_empty_at && server?.auto_stop_timeout > 0 && !hasPlayers) {
+    if (server?.status === 'Running' && server?.last_empty_at && server?.auto_stop_timeout > 0 && !hasActivePlayers) {
       const updateCountdown = () => {
         const lastEmpty = new Date(server.last_empty_at).getTime();
-        const timeoutMs = server.auto_stop_timeout * 60 * 1000;
+        const timeoutMs = (server.auto_stop_timeout || 0) * 60 * 1000;
         const diff = (lastEmpty + timeoutMs) - Date.now();
 
-        if (diff <= 0) setAutoStopCountdown(t('config.stopping_soon'));
-        else {
+        if (diff <= 0) {
+            // Time is up, but backend hasn't stopped it yet
+            setAutoStopCountdown(t('config.stopping_soon'));
+        } else {
           const minutes = Math.floor(diff / 60000);
           const seconds = Math.floor((diff % 60000) / 1000);
           setAutoStopCountdown(t('config.stopping_in', { time: `${minutes}m ${seconds}s` }));
         }
       };
+      
       updateCountdown();
       countdownIntervalRef.current = setInterval(updateCountdown, 1000);
     } else {
@@ -291,7 +293,6 @@ export default function ServerDetailPage({ initialServer }) {
     const serverName = server?.name;
 
     const startingStatuses = ['Starting', 'Provisioning', 'Recreating'];
-    // Trigger if we were in a starting state and now we are running
     const isTransitioning = startingStatuses.includes(prevStatus) && currentStatus === 'Running';
 
     if (isTransitioning) {
@@ -328,7 +329,6 @@ export default function ServerDetailPage({ initialServer }) {
     return res.json();
   };
 
-  // Debounced fetch to prevent spam, but used by poller
   const fetchServer = useCallback(
     debounce(async (serverId, userId) => {
       const { data } = await supabase.from('servers').select('*').eq('id', serverId).eq('user_id', userId).single();
@@ -340,17 +340,17 @@ export default function ServerDetailPage({ initialServer }) {
   );
 
   const pollUntilStatus = (expectedStatuses, timeout = 120000) => {
-    // Clear any existing poll to avoid duplicates
+    // Clear existing poll to avoid duplicates
     if (pollRef.current) clearInterval(pollRef.current);
 
     const startTime = Date.now();
     pollRef.current = setInterval(() => {
       fetchServer(id, user?.id);
       
-      // Check if we reached target status (or if status became valid/Running unexpectedly)
+      // Stop polling if status matches or timeout reached
       if (expectedStatuses.includes(server?.status) || Date.now() - startTime > timeout) {
         clearInterval(pollRef.current);
-        pollRef.current = null; // Clear ref so heartbeat can resume
+        pollRef.current = null; // Free up the ref for the heartbeat
         if (Date.now() - startTime > timeout) setError(t('errors.timeout'));
       }
     }, 3000);
@@ -440,7 +440,6 @@ export default function ServerDetailPage({ initialServer }) {
       }
     } catch (e) {
       setError(t('errors.failed_action', { action, message: e.message }));
-      // Immediately fetch if error to reset status
       await fetchServer(server.id, user.id);
     } finally {
       setActionLoading(false);
