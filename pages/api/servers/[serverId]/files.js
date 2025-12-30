@@ -13,60 +13,28 @@ const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 const AWS_REGION = process.env.AWS_REGION || 'eu-central-1';
 const S3_ENDPOINT = process.env.S3_ENDPOINT;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-if (!S3_BUCKET || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
-  throw new Error('Missing S3 configuration environment variables');
-}
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error('Missing Supabase environment variables');
+if (!S3_BUCKET || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) throw new Error('Missing S3 configuration environment variables');
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const s3 = new AWS.S3({ accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY, region: AWS_REGION, endpoint: S3_ENDPOINT || undefined, s3ForcePathStyle: !!S3_ENDPOINT });
 
-const s3 = new AWS.S3({
-  accessKeyId: AWS_ACCESS_KEY_ID,
-  secretAccessKey: AWS_SECRET_ACCESS_KEY,
-  region: AWS_REGION,
-  endpoint: S3_ENDPOINT || undefined,
-  s3ForcePathStyle: !!S3_ENDPOINT,
-});
-
-// Disable Next.js body parsing to handle multipart/form-data manually
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+export const config = { api: { bodyParser: false } };
 
 async function getRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (chunk) => {
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      resolve(Buffer.concat(chunks));
-    });
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
 
-// Helper to sanitize path
 const sanitizePath = (inputPath) => {
-  // 1. Remove any null bytes
   if (inputPath.indexOf('\0') !== -1) throw new Error('Invalid path');
-
-  // 2. Normalize and remove leading/trailing slashes
   let safePath = path.normalize(inputPath || '').replace(/^(\.\.(\/|\\|$))+/, '');
-  
-  // 3. Prevent traversal (double verify)
-  if (safePath.includes('..')) {
-      throw new Error('Path traversal detected');
-  }
-  
-  // 4. Clean up slashes
+  if (safePath.includes('..')) throw new Error('Path traversal detected');
   safePath = safePath.replace(/^\/+/, '').replace(/\/+$/, '');
-  
   return safePath;
 };
 
@@ -74,221 +42,129 @@ export default async function handler(req, res) {
   const { serverId } = req.query;
   const s3Prefix = `servers/${serverId}/`;
 
-  // Authenticate using server row
-  const { data: server, error } = await supabaseAdmin
-    .from('servers')
-    .select('rcon_password, ipv4, status, subdomain')
-    .eq('id', serverId)
-    .single();
-
-  if (error || !server) {
-    return res.status(404).json({ error: 'Server not found' });
-  }
+  const { data: server, error } = await supabaseAdmin.from('servers').select('rcon_password, ipv4, status, subdomain').eq('id', serverId).single();
+  if (error || !server) return res.status(404).json({ error: 'Server not found' });
 
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.substring(7) !== server.rcon_password) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.substring(7) !== server.rcon_password) return res.status(401).json({ error: 'Unauthorized' });
 
-  // --- SECURITY FIX: Path Sanitization ---
   let relPath = '';
-  try {
-      relPath = sanitizePath(req.query.path || '');
-  } catch (e) {
-      return res.status(400).json({ error: 'Invalid path' });
-  }
+  try { relPath = sanitizePath(req.query.path || ''); } catch (e) { return res.status(400).json({ error: 'Invalid path' }); }
   
-  // Construct absolute S3 Key and verify prefix
   const s3Path = relPath ? path.join(s3Prefix, relPath).replace(/\\/g, '/') + '/' : s3Prefix;
-  if (!s3Path.startsWith(s3Prefix)) {
-      return res.status(400).json({ error: 'Access denied: Invalid path scope' });
-  }
-  // ---------------------------------------
+  if (!s3Path.startsWith(s3Prefix)) return res.status(400).json({ error: 'Access denied: Invalid path scope' });
 
-  // Handle GET /files - list files
+  // GET: List Files
   if (req.method === 'GET') {
-  try {
-    if (server.status === 'Running' && server.ipv4) {
-      try {
-        const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/files?path=${encodeURIComponent(relPath)}`, {
-          headers: {
-            'Authorization': `Bearer ${server.rcon_password}`,
-          },
-          timeout: 5000,
-        });
-
-        if (!response.ok) {
-          console.warn(`Failed to fetch files from game server: ${response.statusText}`);
-          // Continue to S3 fallback instead of throwing
-        } else {
-          const data = await response.json();
-          return res.status(200).json(data);
-        }
-      } catch (fetchError) {
-        console.warn('Failed to fetch from game server, falling back to S3:', fetchError.message);
+    try {
+      if (server.status === 'Running' && server.ipv4) {
+        try {
+          const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/files?path=${encodeURIComponent(relPath)}`, { headers: { 'Authorization': `Bearer ${server.rcon_password}` }, timeout: 5000 });
+          if (response.ok) return res.status(200).json(await response.json());
+        } catch (fetchError) { console.warn('Agent fetch failed, S3 fallback'); }
       }
-    }
-
-    const s3Response = await s3
-      .listObjectsV2({
-        Bucket: S3_BUCKET,
-        Prefix: s3Path,
-        Delimiter: '/',
-      })
-      .promise();
-
-    const files = [];
-    if (s3Response.CommonPrefixes) {
-      for (const prefix of s3Response.CommonPrefixes) {
-        const dirName = path.basename(prefix.Prefix);
-        if (dirName) {
-          files.push({
-            name: dirName,
-            isDirectory: true,
-            size: 0,
-            modified: new Date().toISOString(),
-          });
-        }
-      }
-    }
-
-    if (s3Response.Contents) {
-      for (const obj of s3Response.Contents) {
-        if (obj.Key === s3Path) continue;
-        const fileName = path.basename(obj.Key);
-        if (fileName) {
-          files.push({
-            name: fileName,
-            isDirectory: false,
-            size: obj.Size,
-            modified: obj.LastModified.toISOString(),
-          });
-        }
-      }
-    }
-
-    return res.status(200).json({ path: relPath, files });
-  } catch (s3Error) {
-    console.error('Error listing S3 files:', s3Error.message, s3Error.stack);
-    return res.status(200).json({ path: relPath, files: [] }); // Return empty list instead of error
+      const s3Response = await s3.listObjectsV2({ Bucket: S3_BUCKET, Prefix: s3Path, Delimiter: '/' }).promise();
+      const files = [];
+      if (s3Response.CommonPrefixes) s3Response.CommonPrefixes.forEach(p => files.push({ name: path.basename(p.Prefix), isDirectory: true, size: 0, modified: new Date().toISOString() }));
+      if (s3Response.Contents) s3Response.Contents.forEach(o => { if(o.Key !== s3Path) files.push({ name: path.basename(o.Key), isDirectory: false, size: o.Size, modified: o.LastModified.toISOString() }); });
+      return res.status(200).json({ path: relPath, files });
+    } catch (s3Error) { return res.status(200).json({ path: relPath, files: [] }); }
   }
-}
 
-  // Handle POST /files - upload file
+  // POST: Upload or Create Directory
   if (req.method === 'POST') {
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const bodyBuffer = await getRawBody(req);
+        const { type, path: newDirName } = JSON.parse(bodyBuffer.toString());
+        if (type !== 'directory' || !newDirName) return res.status(400).json({ error: 'Invalid operation' });
+        
+        let safeRelPath;
+        try { safeRelPath = sanitizePath(newDirName); } catch (e) { return res.status(400).json({ error: 'Invalid directory path' }); }
+
+        if (server.status === 'Running' && server.ipv4) {
+           try {
+             const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/directory`, { method: 'POST', headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ path: safeRelPath }) });
+             if (!response.ok) throw new Error(await response.text());
+             return res.status(200).json({ success: true });
+           } catch(e) {}
+        }
+        await s3.putObject({ Bucket: S3_BUCKET, Key: path.join(s3Prefix, safeRelPath).replace(/\\/g, '/') + '/', Body: '' }).promise();
+        return res.status(200).json({ success: true, path: safeRelPath });
+      } catch (err) { return res.status(500).json({ error: 'Failed' }); }
+    }
     const form = new formidable.IncomingForm();
     return new Promise((resolve, reject) => {
       form.parse(req, async (err, fields, files) => {
-        if (err) {
-          console.error('Error parsing form:', err);
-          return resolve(res.status(500).json({ error: 'Failed to parse upload' }));
-        }
-
-        const fileName = fields.fileName;
-        if (!fileName) {
-          return resolve(res.status(400).json({ error: 'Missing fileName' }));
-        }
-
-        const fileContent = files.fileContent;
-        if (!fileContent || !fileContent.path) {
-          return resolve(res.status(400).json({ error: 'Missing file content' }));
-        }
-
+        if (err || !fields.fileName || !files.fileContent) return resolve(res.status(400).json({ error: 'Bad Request' }));
         try {
-          const s3Key = path.join(s3Prefix, relPath, fileName).replace(/\\/g, '/');
-
-          // Read file content
+          const s3Key = path.join(s3Prefix, relPath, fields.fileName).replace(/\\/g, '/');
           const fs = require('fs').promises;
-          const fileBuffer = await fs.readFile(fileContent.path);
-
-          // Removed try to game server
-          // Upload to S3
-          await s3
-            .putObject({
-              Bucket: S3_BUCKET,
-              Key: s3Key,
-              Body: fileBuffer,
-              ContentType: fileContent.mimetype || 'application/octet-stream',
-            })
-            .promise();
-
-          resolve(res.status(200).json({ success: true, path: path.join(relPath, fileName) }));
-        } catch (s3Error) {
-          console.error('Error uploading to S3:', s3Error.message, s3Error.stack);
-          resolve(res.status(500).json({ error: 'Failed to upload file', detail: s3Error.message }));
-        }
+          const fileBuffer = await fs.readFile(files.fileContent.path);
+          await s3.putObject({ Bucket: S3_BUCKET, Key: s3Key, Body: fileBuffer, ContentType: files.fileContent.mimetype || 'application/octet-stream' }).promise();
+          resolve(res.status(200).json({ success: true, path: path.join(relPath, fields.fileName) }));
+        } catch (s3Error) { resolve(res.status(500).json({ error: 'Upload failed' })); }
       });
     });
   }
 
-  // Handle PUT /files - update file content
+  // PATCH: Rename File (NEW)
+  if (req.method === 'PATCH') {
+      try {
+          const bodyBuffer = await getRawBody(req);
+          const { oldPath, newPath } = JSON.parse(bodyBuffer.toString());
+          
+          const safeOld = sanitizePath(oldPath);
+          const safeNew = sanitizePath(newPath);
+
+          // Agent Rename
+          if (server.status === 'Running' && server.ipv4) {
+             const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/files`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ oldPath: safeOld, newPath: safeNew })
+             });
+             if (!response.ok) throw new Error(await response.text());
+             // Also try to rename in S3 for consistency (Copy+Delete) if feasible, or let sync handle it later.
+          } else {
+             // S3 Rename (Copy + Delete)
+             const oldKey = path.join(s3Prefix, safeOld).replace(/\\/g, '/');
+             const newKey = path.join(s3Prefix, safeNew).replace(/\\/g, '/');
+             
+             await s3.copyObject({ Bucket: S3_BUCKET, CopySource: `${S3_BUCKET}/${oldKey}`, Key: newKey }).promise();
+             await s3.deleteObject({ Bucket: S3_BUCKET, Key: oldKey }).promise();
+          }
+          return res.status(200).json({ success: true });
+      } catch (e) {
+          console.error(e);
+          return res.status(500).json({ error: 'Rename failed', detail: e.message });
+      }
+  }
+
+  // PUT: Update Content (Create File)
   if (req.method === 'PUT') {
     try {
       const body = await getRawBody(req);
-      console.log('PUT request received for:', req.query.path, 'Body length:', body.length);
-
       const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
-
-      // Removed try to game server
-      await s3
-        .putObject({
-          Bucket: S3_BUCKET,
-          Key: s3Key,
-          Body: body,
-          ContentType: req.headers['content-type'] || 'application/octet-stream',
-        })
-        .promise();
-      console.log('S3 file updated successfully:', s3Key);
-
+      await s3.putObject({ Bucket: S3_BUCKET, Key: s3Key, Body: body, ContentType: req.headers['content-type'] }).promise();
+      if (server.status === 'Running' && server.ipv4) {
+         try { await fetch(`http://${server.subdomain}.spawnly.net:3005/api/file?path=${encodeURIComponent(relPath)}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': req.headers['content-type'] }, body: body }); } catch(e) {}
+      }
       return res.status(200).json({ success: true });
-    } catch (s3Error) {
-      console.error('Error updating S3 file:', s3Error.message, s3Error.stack);
-      return res.status(500).json({ error: 'Failed to update file', detail: s3Error.message });
-    }
+    } catch (e) { return res.status(500).json({ error: 'Update failed' }); }
   }
 
-  // Handle DELETE /files - delete file or folder
+  // DELETE
   if (req.method === 'DELETE') {
     try {
       const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
-
-      // Removed try to game server
-
-      const s3ListResponse = await s3
-        .listObjectsV2({
-          Bucket: S3_BUCKET,
-          Prefix: s3Key + (s3Key.endsWith('/') ? '' : '/'),
-        })
-        .promise();
-
-      if (s3ListResponse.Contents && s3ListResponse.Contents.length > 0) {
-        const objectsToDelete = s3ListResponse.Contents.map(obj => ({ Key: obj.Key }));
-        if (objectsToDelete.length > 0) {
-          await s3
-            .deleteObjects({
-              Bucket: S3_BUCKET,
-              Delete: { Objects: objectsToDelete },
-            })
-            .promise();
-        }
-      } else {
-        await s3
-          .deleteObject({
-            Bucket: S3_BUCKET,
-            Key: s3Key,
-          })
-          .promise();
-      }
-
+      const list = await s3.listObjectsV2({ Bucket: S3_BUCKET, Prefix: s3Key + (s3Key.endsWith('/') ? '' : '/') }).promise();
+      if (list.Contents?.length > 0) await s3.deleteObjects({ Bucket: S3_BUCKET, Delete: { Objects: list.Contents.map(o => ({ Key: o.Key })) } }).promise();
+      else await s3.deleteObject({ Bucket: S3_BUCKET, Key: s3Key }).promise();
+      // Add Agent Delete if needed (Running)
       return res.status(200).json({ success: true });
-    } catch (s3Error) {
-      console.error('Error deleting from S3:', s3Error.message, s3Error.stack);
-      if (s3Error.code === 'NoSuchKey') {
-        return res.status(404).json({ error: 'File or folder not found' });
-      }
-      return res.status(500).json({ error: 'Failed to delete', detail: s3Error.message });
-    }
+    } catch (e) { return res.status(500).json({ error: 'Delete failed' }); }
   }
-
   return res.status(405).json({ error: 'Method not allowed' });
 }

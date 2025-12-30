@@ -1,0 +1,7 @@
+{
+  "bonuses": [
+    { "min_euro": 50, "bonus_percent": 20 },
+    { "min_euro": 25, "bonus_percent": 10 },
+    { "min_euro": 10, "bonus_percent": 5 }
+  ]
+}
