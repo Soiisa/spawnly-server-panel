@@ -95,6 +95,8 @@ export default async function handler(req, res) {
 
   if (error) return res.status(500).json({ error: 'Database error' });
 
+  console.log(`[Auto-Stop] Checking ${servers?.length || 0} potentially empty servers...`);
+  
   const now = new Date();
   let stoppedCount = 0;
 
