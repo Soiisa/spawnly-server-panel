@@ -7,16 +7,143 @@ import Footer from "../components/ServersFooter";
 import bonusesConfig from '../lib/stripeBonuses.json';
 import { 
   CurrencyDollarIcon, 
-  ClockIcon, 
-  ServerIcon, 
   ReceiptRefundIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   XMarkIcon,
-  SparklesIcon
+  SparklesIcon,
+  ServerIcon,
+  CreditCardIcon,
+  ShieldCheckIcon,
+  InformationCircleIcon
 } from '@heroicons/react/24/outline';
 import { useTranslation } from "next-i18next"; 
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
+
+// --- STRIPE IMPORTS ---
+import { loadStripe } from "@stripe/stripe-js";
+import { 
+  Elements, 
+  PaymentElement, 
+  ExpressCheckoutElement, // <--- NEW IMPORT
+  useStripe, 
+  useElements 
+} from "@stripe/react-stripe-js";
+
+// Initialize Stripe
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+
+// --- INTERNAL COMPONENT: CHECKOUT FORM ---
+const CheckoutForm = ({ amount, onSuccess, onError }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  // Handle Standard Form Submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setLoading(true);
+    setMessage(null);
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/credits?payment_success=true`,
+      },
+    });
+
+    if (error) {
+      setMessage(error.message);
+      setLoading(false);
+      if (onError) onError(error.message);
+    } else {
+      if (onSuccess) onSuccess();
+    }
+  };
+
+  // Handle Wallet Button Click (Google Pay / Apple Pay)
+  const onExpressClick = ({ resolve }) => {
+    // You can perform validation here if needed
+    resolve();
+  };
+
+  const onExpressConfirm = async (event) => {
+    if (!stripe) return;
+    setLoading(true);
+    setMessage(null);
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      clientSecret: event.clientSecret,
+      confirmParams: {
+        return_url: `${window.location.origin}/credits?payment_success=true`,
+      },
+    });
+
+    if (error) {
+      setMessage(error.message);
+      setLoading(false);
+      if (onError) onError(error.message);
+    } else {
+      if (onSuccess) onSuccess();
+    }
+  };
+
+  return (
+    <div className="animate-in fade-in slide-in-from-right-4 duration-500">
+       
+       {/* --- NEW: EXPRESS CHECKOUT (WALLETS) --- */}
+       <div className="mb-6">
+          <ExpressCheckoutElement 
+            onClick={onExpressClick} 
+            onConfirm={onExpressConfirm}
+            options={{
+              buttonType: {
+                applePay: 'buy',
+                googlePay: 'buy',
+              },
+            }}
+          />
+       </div>
+
+       {/* DIVIDER */}
+       <div className="relative flex items-center gap-4 mb-6">
+          <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1" />
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Or pay with card</span>
+          <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1" />
+       </div>
+
+       {/* STANDARD FORM */}
+       <form onSubmit={handleSubmit}>
+         <PaymentElement options={{ layout: 'tabs' }} />
+         
+         {message && (
+           <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mt-4 border border-red-200 flex gap-2 items-start">
+             <div className="mt-0.5">⚠️</div>
+             <div>{message}</div>
+           </div>
+         )}
+         
+         <button
+          disabled={!stripe || loading}
+          className="w-full mt-6 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all flex justify-center items-center gap-2 shadow-lg shadow-indigo-200 dark:shadow-none"
+        >
+          {loading ? (
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <>
+              <span>Pay €{amount.toFixed(2)}</span>
+              <ShieldCheckIcon className="w-5 h-5 opacity-70" />
+            </>
+          )}
+        </button>
+      </form>
+    </div>
+  );
+};
 
 export default function CreditsPage() {
   const router = useRouter();
@@ -34,7 +161,8 @@ export default function CreditsPage() {
   // Payment UI State
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState(10); // Euros
-  const [loadingPayment, setLoadingPayment] = useState(false);
+  const [clientSecret, setClientSecret] = useState(null); 
+  const [agreedToRefundWaiver, setAgreedToRefundWaiver] = useState(false);
 
   // Bonus Calculation Logic
   const getBonusInfo = (euro) => {
@@ -54,6 +182,7 @@ export default function CreditsPage() {
 
   const { total: totalGet, bonus: bonusGet, percent: activePercent } = calculateTotalCredits(depositAmount);
 
+  // Initial Data Fetch
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -106,15 +235,15 @@ export default function CreditsPage() {
     router.push("/login");
   };
 
-  const handleCheckout = async () => {
+  const handleInitiatePayment = async () => {
     if (depositAmount < 3 || depositAmount > 50) return;
+    if (!agreedToRefundWaiver) return;
     
-    setLoadingPayment(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch('/api/stripe/checkout_sessions', {
+      const response = await fetch('/api/stripe/create_intent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -123,25 +252,37 @@ export default function CreditsPage() {
         body: JSON.stringify({ amount: depositAmount }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Failed to initiate payment");
+        throw new Error(data.error || "Failed to initiate payment");
       }
 
-      const { url } = await response.json();
-      if (url) {
-        window.location.href = url;
+      if (data.clientSecret) {
+        setClientSecret(data.clientSecret);
       } else {
-        throw new Error("No payment URL returned from server.");
+        throw new Error("No client secret returned.");
       }
 
     } catch (err) {
-      console.error("Payment Error:", err);
-      alert("Payment failed: " + err.message);
-      setLoadingPayment(false);
+      console.error("Payment Init Error:", err);
+      alert("Payment initialization failed: " + err.message);
     }
   };
 
+  // Reset payment state when modal closes or amount changes
+  useEffect(() => {
+    if (!isBuyModalOpen) {
+      setClientSecret(null);
+      setAgreedToRefundWaiver(false); 
+    }
+  }, [isBuyModalOpen]);
+
+  useEffect(() => {
+    setClientSecret(null);
+  }, [depositAmount]);
+
+  // --- HELPERS ---
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString(router.locale || "en-US", {
       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
@@ -289,6 +430,7 @@ export default function CreditsPage() {
           </button>
         </div>
 
+        {/* ... (Keep Credits Card and History sections as they are) ... */}
         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-200 dark:border-slate-700 p-8 mb-10 flex flex-col sm:flex-row items-center justify-between gap-8 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
             <CurrencyDollarIcon className="w-64 h-64 text-indigo-900 dark:text-indigo-400" />
@@ -332,113 +474,180 @@ export default function CreditsPage() {
 
       <Footer />
 
-      {/* --- SLIDER-BASED BUY CREDITS MODAL --- */}
+      {/* --- BUY MODAL --- */}
       {isBuyModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md transition-all">
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 dark:border-slate-800 relative animate-in fade-in zoom-in duration-300">
+          
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl max-w-4xl w-full overflow-hidden border border-gray-100 dark:border-slate-800 relative animate-in fade-in zoom-in duration-300 max-h-[95vh] flex flex-col md:flex-row">
             
-            <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-8 text-white relative">
-              <button onClick={() => setIsBuyModalOpen(false)} className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
-                <XMarkIcon className="w-5 h-5" />
-              </button>
-              <div className="flex items-center gap-3 mb-2">
-                <SparklesIcon className="w-6 h-6 text-indigo-200" />
-                <h2 className="text-2xl font-black tracking-tight">Add Credits</h2>
-              </div>
-              <p className="text-indigo-100/80 text-sm font-medium">Power your servers with instant balance.</p>
-            </div>
-
-            <div className="p-8">
-              {/* Credit Display Area */}
-              <div className="text-center mb-10">
-                <div className={`inline-block px-4 py-1.5 rounded-full mb-3 transition-colors ${bonusGet > 0 ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400' : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600'}`}>
-                  <span className="text-xs font-bold uppercase tracking-widest">
-                    {bonusGet > 0 ? `🔥 +${activePercent}% Bonus Credits!` : 'You are getting'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-6xl font-black text-slate-900 dark:text-white tracking-tighter">{totalGet.toLocaleString()}</span>
-                  <span className="text-xl font-bold text-gray-400 self-end mb-2">Credits</span>
-                </div>
-                {bonusGet > 0 && (
-                  <p className="text-[10px] font-bold text-green-500 uppercase mt-1 tracking-wider">
-                    ({depositAmount * 100} Base + {bonusGet} Free Bonus)
-                  </p>
-                )}
-              </div>
-
-              {/* Slider Component */}
-              <div className="mb-10 px-2">
-                <div className="flex justify-between text-xs font-bold text-gray-400 uppercase mb-4 tracking-widest">
-                  <span>3€</span>
-                  <span>Select Amount</span>
-                  <span>50€</span>
-                </div>
-                <input 
-                  type="range"
-                  min="3"
-                  max="50"
-                  step="1"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(Number(e.target.value))}
-                  className="w-full h-3 bg-gray-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500 transition-all"
-                />
-                <div className="flex justify-between mt-4 px-1">
-                  {[5, 10, 20, 30, 40, 50].map(val => (
-                    <div key={val} className="flex flex-col items-center gap-1.5">
-                      <div className={`h-1.5 w-1.5 rounded-full transition-colors ${depositAmount >= val ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-slate-700'}`} />
+            {/* LEFT SIDE: SELECTION (White/Light) */}
+            <div className="flex-1 p-8 md:p-10 bg-white dark:bg-slate-900 overflow-y-auto">
+                <div className="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Add Credits</h2>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1">Select an amount to recharge.</p>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Quick Access Buttons */}
-              <div className="grid grid-cols-3 gap-3 mb-10">
-                {[5, 10, 25].map((amt) => (
-                  <button
-                    key={amt}
-                    onClick={() => setDepositAmount(amt)}
-                    className={`py-3 rounded-2xl border-2 font-black text-sm transition-all transform active:scale-95 ${
-                      depositAmount === amt
-                        ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
-                        : 'border-gray-50 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/50 text-gray-500 hover:border-gray-200 dark:hover:border-slate-700'
-                    }`}
-                  >
-                    €{amt}
-                  </button>
-                ))}
-              </div>
-
-              {/* Summary and Pay */}
-              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-3xl p-6 border border-gray-100 dark:border-slate-800">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-2">
-                    <CurrencyDollarIcon className="w-5 h-5 text-indigo-600" />
-                    <span className="text-sm font-bold text-slate-600 dark:text-slate-300">Total Payment</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-2xl font-black text-slate-900 dark:text-white">€{depositAmount.toFixed(2)}</span>
-                    <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">Get {totalGet.toLocaleString()} Credits</p>
-                  </div>
+                    {/* Mobile Close Button (Hidden on Desktop) */}
+                    <button onClick={() => setIsBuyModalOpen(false)} className="md:hidden p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500">
+                        <XMarkIcon className="w-5 h-5" />
+                    </button>
                 </div>
 
-                <button
-                  onClick={handleCheckout}
-                  disabled={loadingPayment || depositAmount < 3 || depositAmount > 50}
-                  className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white font-black rounded-2xl shadow-xl shadow-indigo-200 dark:shadow-none transition-all flex justify-center items-center gap-3 transform active:scale-95 group"
-                >
-                  {loadingPayment ? (
-                    <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      Confirm & Pay
-                      <span className="bg-indigo-500 px-2 py-0.5 rounded-lg text-[10px] font-black group-hover:bg-indigo-400 transition-colors uppercase">Stripe</span>
-                    </>
-                  )}
-                </button>
-                <p className="text-center text-[10px] text-gray-400 font-bold uppercase mt-4 tracking-widest">Secure checkout with Stripe</p>
-              </div>
+                {/* VISUALIZATION */}
+                <div className="bg-indigo-50 dark:bg-indigo-900/10 rounded-3xl p-8 mb-8 text-center border border-indigo-100 dark:border-indigo-900/30">
+                    <div className={`inline-block px-4 py-1.5 rounded-full mb-4 transition-colors ${bonusGet > 0 ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400'}`}>
+                        <span className="text-xs font-bold uppercase tracking-widest">{bonusGet > 0 ? `🔥 +${activePercent}% Bonus Active` : 'Current Offer'}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                        <span className="text-6xl font-black text-slate-900 dark:text-white tracking-tighter">{totalGet.toLocaleString()}</span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Credits Received</p>
+                    
+                    {bonusGet > 0 && (
+                         <div className="mt-4 text-xs font-medium text-green-600 dark:text-green-400 flex items-center justify-center gap-1">
+                            <SparklesIcon className="w-4 h-4" />
+                            <span>{depositAmount * 100} Base + <strong>{bonusGet} Bonus</strong></span>
+                         </div>
+                    )}
+                </div>
+
+                {/* SLIDER CONTROLS */}
+                <div className="mb-8">
+                    <div className="flex justify-between text-xs font-bold text-gray-400 uppercase mb-4 tracking-widest">
+                        <span>3€</span>
+                        <span>Drag to Adjust</span>
+                        <span>50€</span>
+                    </div>
+                    <input 
+                      type="range"
+                      min="3"
+                      max="50"
+                      step="1"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(Number(e.target.value))}
+                      className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500 transition-all"
+                    />
+                </div>
+
+                {/* PRESET BUTTONS */}
+                <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-widest">Quick Select</p>
+                    <div className="grid grid-cols-4 gap-3">
+                        {[5, 10, 20, 50].map((amt) => (
+                        <button
+                            key={amt}
+                            onClick={() => setDepositAmount(amt)}
+                            className={`py-2 rounded-xl border font-bold text-sm transition-all transform active:scale-95 ${
+                            depositAmount === amt
+                                ? 'border-indigo-600 bg-indigo-600 text-white'
+                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-indigo-300'
+                            }`}
+                        >
+                            €{amt}
+                        </button>
+                        ))}
+                    </div>
+                </div>
             </div>
+
+            {/* RIGHT SIDE: CHECKOUT (Darker/Different BG) */}
+            <div className="w-full md:w-[400px] bg-slate-50 dark:bg-slate-950/50 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-800 p-8 flex flex-col">
+                {/* Desktop Close Button */}
+                <button onClick={() => setIsBuyModalOpen(false)} className="hidden md:block self-end p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors mb-4">
+                    <XMarkIcon className="w-6 h-6" />
+                </button>
+
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                    <CreditCardIcon className="w-5 h-5 text-indigo-500" />
+                    Order Summary
+                </h3>
+
+                {/* SUMMARY CARD */}
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 mb-6 shadow-sm">
+                    <div className="flex justify-between text-sm">
+                        <span className="text-slate-500 dark:text-slate-400">Amount</span>
+                        <span className="font-mono text-slate-900 dark:text-white">€{depositAmount.toFixed(2)}</span>
+                    </div>
+                    {bonusGet > 0 && (
+                         <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                            <span>Bonus Applied</span>
+                            <span className="font-mono">+{activePercent}%</span>
+                         </div>
+                    )}
+                    <div className="h-px bg-slate-100 dark:bg-slate-800 my-2" />
+                    <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-900 dark:text-white">Total</span>
+                        <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">€{depositAmount.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                {/* PAYMENT AREA */}
+                <div className="mt-auto">
+                    {!clientSecret ? (
+                         <>
+                             {/* --- CHECKBOX FOR EU WAIVER --- */}
+                             <div className="flex items-start gap-3 mb-6 p-3 bg-slate-100 dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700">
+                                <div className="flex items-center h-5 mt-0.5">
+                                    <input
+                                        id="eu-refund-waiver"
+                                        type="checkbox"
+                                        checked={agreedToRefundWaiver}
+                                        onChange={(e) => setAgreedToRefundWaiver(e.target.checked)}
+                                        className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 dark:bg-slate-700 dark:border-slate-600 cursor-pointer"
+                                    />
+                                </div>
+                                <div className="ml-1 text-xs leading-relaxed">
+                                    <label htmlFor="eu-refund-waiver" className="font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
+                                        {t('checkout.refund_waiver', { defaultValue: 'I acknowledge that by purchasing immediate access to digital credits, I waive my 14-day right of withdrawal under EU consumer protection regulations.' })}
+                                    </label>
+                                </div>
+                             </div>
+
+                             <button
+                                onClick={handleInitiatePayment}
+                                disabled={depositAmount < 3 || depositAmount > 50 || !agreedToRefundWaiver}
+                                className="w-full py-4 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-slate-900 font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-3 transform active:scale-95"
+                             >
+                                Continue to Checkout
+                             </button>
+                         </>
+                    ) : (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                             <div className="flex items-center justify-between mb-4">
+                                <span className="text-xs font-bold uppercase text-slate-400 tracking-wider">Payment Details</span>
+                                <button onClick={() => setClientSecret(null)} className="text-xs text-indigo-500 hover:underline">Change Amount</button>
+                             </div>
+                             
+                             {/* STRIPE ELEMENTS WRAPPER */}
+                             <Elements 
+                                stripe={stripePromise} 
+                                options={{ 
+                                  clientSecret, 
+                                  appearance: { 
+                                    theme: 'stripe',
+                                    variables: {
+                                        colorPrimary: '#4f46e5',
+                                    }
+                                  } 
+                                }}
+                             >
+                                <CheckoutForm 
+                                  amount={depositAmount} 
+                                  onSuccess={() => setIsBuyModalOpen(false)} 
+                                  onError={(msg) => alert(msg)} 
+                                />
+                             </Elements>
+                        </div>
+                    )}
+                    
+                    <p className="text-center text-[10px] text-slate-400 mt-4 flex items-center justify-center gap-1">
+                        <ShieldCheckIcon className="w-3 h-3" />
+                        Secure Payment via Stripe
+                    </p>
+                </div>
+            </div>
+
           </div>
         </div>
       )}

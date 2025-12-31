@@ -30,6 +30,9 @@ export default async function handler(req, res) {
     const bonusCredits = bonusTier ? Math.floor(baseCredits * (bonusTier.bonus_percent / 100)) : 0;
     const totalCredits = baseCredits + bonusCredits;
 
+    // Get origin to serve the image. Fallback to a production URL if origin is missing.
+    const origin = req.headers.origin || process.env.NEXT_PUBLIC_SITE_URL || 'https://spawnly.net';
+
     const session = await stripe.checkout.sessions.create({
       line_items: [
         {
@@ -40,6 +43,8 @@ export default async function handler(req, res) {
               description: bonusCredits > 0 
                 ? `Includes ${bonusCredits} bonus credits (${bonusTier.bonus_percent}% bonus!)`
                 : `Instant deposit of ${baseCredits} credits.`,
+              // NEW: Add image to the product display on Stripe
+              images: [`${origin}/logo.png`], 
             },
             unit_amount: Math.round(amount * 100),
           },
@@ -47,8 +52,12 @@ export default async function handler(req, res) {
         },
       ],
       mode: 'payment',
-      success_url: `${req.headers.origin}/credits?payment_success=true`,
-      cancel_url: `${req.headers.origin}/credits?payment_canceled=true`,
+      // NEW: Customizes the pay button text (e.g., "Pay €10.00")
+      submit_type: 'pay', 
+      // NEW: Allows you to create coupons in Stripe Dashboard and users can use them
+      allow_promotion_codes: true, 
+      success_url: `${origin}/credits?payment_success=true`,
+      cancel_url: `${origin}/credits?payment_canceled=true`,
       metadata: { 
         user_id: user.id 
       },

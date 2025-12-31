@@ -26,13 +26,23 @@ export default async function handler(req, res) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const userId = session.metadata.user_id;
-    const amountEuro = session.amount_total / 100;
+  // --- HANDLES BOTH OLD CHECKOUT AND NEW PAYMENT INTENTS ---
+  if (event.type === 'checkout.session.completed' || event.type === 'payment_intent.succeeded') {
+    const object = event.data.object;
+    
+    // In PaymentIntent, metadata is directly on the object. 
+    // In CheckoutSession, it is also on the object.
+    const userId = object.metadata.user_id;
+    
+    // Note: Checkout Session amounts are integers (cents), and PaymentIntent amounts are also integers (cents).
+    // If the event is payment_intent, the amount is in 'amount'.
+    // If checkout_session, it is 'amount_total'.
+    const amountInCents = object.amount || object.amount_total;
+    const amountEuro = amountInCents / 100; 
 
     // Calculate Credits + Bonus using the JSON config
-    const baseCredits = session.amount_total; // 1 cent = 1 credit
+    // 1 Euro cent = 1 Credit
+    const baseCredits = amountInCents; 
     const bonusTier = bonusesConfig.bonuses.find(b => amountEuro >= b.min_euro);
     const bonusCredits = bonusTier ? Math.floor(baseCredits * (bonusTier.bonus_percent / 100)) : 0;
     const totalCreditsToAdd = baseCredits + bonusCredits;
