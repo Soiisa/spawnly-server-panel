@@ -25,7 +25,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { 
   Elements, 
   PaymentElement, 
-  ExpressCheckoutElement, // <--- NEW IMPORT
+  ExpressCheckoutElement, 
   useStripe, 
   useElements 
 } from "@stripe/react-stripe-js";
@@ -66,7 +66,6 @@ const CheckoutForm = ({ amount, onSuccess, onError }) => {
 
   // Handle Wallet Button Click (Google Pay / Apple Pay)
   const onExpressClick = ({ resolve }) => {
-    // You can perform validation here if needed
     resolve();
   };
 
@@ -95,7 +94,7 @@ const CheckoutForm = ({ amount, onSuccess, onError }) => {
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-500">
        
-       {/* --- NEW: EXPRESS CHECKOUT (WALLETS) --- */}
+       {/* --- EXPRESS CHECKOUT (WALLETS) --- */}
        <div className="mb-6">
           <ExpressCheckoutElement 
             onClick={onExpressClick} 
@@ -270,7 +269,7 @@ export default function CreditsPage() {
     }
   };
 
-  // Reset payment state when modal closes or amount changes
+  // Reset payment state
   useEffect(() => {
     if (!isBuyModalOpen) {
       setClientSecret(null);
@@ -430,14 +429,15 @@ export default function CreditsPage() {
           </button>
         </div>
 
-        {/* ... (Keep Credits Card and History sections as they are) ... */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-200 dark:border-slate-700 p-8 mb-10 flex flex-col sm:flex-row items-center justify-between gap-8 relative overflow-hidden">
+        {/* --- CREDITS CARD (MOBILE OPTIMIZED) --- */}
+        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-200 dark:border-slate-700 p-5 md:p-8 mb-10 flex flex-col sm:flex-row items-center justify-between gap-8 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
             <CurrencyDollarIcon className="w-64 h-64 text-indigo-900 dark:text-indigo-400" />
           </div>
           <div className="relative z-10">
             <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{t('card.title')}</p>
-            <p className="text-5xl font-black text-slate-900 dark:text-white mt-2">
+            {/* Reduced text size on mobile to prevent overflow */}
+            <p className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mt-2">
               {loadingData ? "..." : credits.toLocaleString()} 
               <span className="text-lg font-medium text-gray-400 dark:text-gray-500 ml-3">Credits</span>
             </p>
@@ -474,33 +474,38 @@ export default function CreditsPage() {
 
       <Footer />
 
-      {/* --- BUY MODAL --- */}
+      {/* --- BUY MODAL (MOBILE RESPONSIVE) --- */}
       {isBuyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md transition-all">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-md transition-all">
           
-          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl max-w-4xl w-full overflow-hidden border border-gray-100 dark:border-slate-800 relative animate-in fade-in zoom-in duration-300 max-h-[95vh] flex flex-col md:flex-row">
+          {/* MOBILE CHANGES: 
+            - h-[100dvh] for full screen on mobile
+            - rounded-none on mobile, rounded-[2.5rem] on desktop
+          */}
+          <div className="bg-white dark:bg-slate-900 sm:rounded-[2.5rem] shadow-2xl w-full sm:max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[95vh] overflow-hidden border-0 sm:border border-gray-100 dark:border-slate-800 relative animate-in fade-in zoom-in duration-300 flex flex-col md:flex-row">
             
-            {/* LEFT SIDE: SELECTION (White/Light) */}
-            <div className="flex-1 p-8 md:p-10 bg-white dark:bg-slate-900 overflow-y-auto">
+            {/* LEFT SIDE: SELECTION */}
+            <div className="flex-1 p-5 md:p-10 bg-white dark:bg-slate-900 overflow-y-auto">
                 <div className="flex justify-between items-start mb-6">
                     <div>
                         <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Add Credits</h2>
                         <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1">Select an amount to recharge.</p>
                     </div>
-                    {/* Mobile Close Button (Hidden on Desktop) */}
-                    <button onClick={() => setIsBuyModalOpen(false)} className="md:hidden p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500">
-                        <XMarkIcon className="w-5 h-5" />
+                    {/* Mobile Close Button (Visible) */}
+                    <button onClick={() => setIsBuyModalOpen(false)} className="md:hidden p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:bg-slate-200">
+                        <XMarkIcon className="w-6 h-6" />
                     </button>
                 </div>
 
                 {/* VISUALIZATION */}
-                <div className="bg-indigo-50 dark:bg-indigo-900/10 rounded-3xl p-8 mb-8 text-center border border-indigo-100 dark:border-indigo-900/30">
+                <div className="bg-indigo-50 dark:bg-indigo-900/10 rounded-3xl p-6 md:p-8 mb-8 text-center border border-indigo-100 dark:border-indigo-900/30">
                     <div className={`inline-block px-4 py-1.5 rounded-full mb-4 transition-colors ${bonusGet > 0 ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400'}`}>
                         <span className="text-xs font-bold uppercase tracking-widest">{bonusGet > 0 ? `🔥 +${activePercent}% Bonus Active` : 'Current Offer'}</span>
                     </div>
                     
                     <div className="flex items-center justify-center gap-2 mb-2">
-                        <span className="text-6xl font-black text-slate-900 dark:text-white tracking-tighter">{totalGet.toLocaleString()}</span>
+                        {/* Smaller text on mobile */}
+                        <span className="text-5xl md:text-6xl font-black text-slate-900 dark:text-white tracking-tighter">{totalGet.toLocaleString()}</span>
                     </div>
                     <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Credits Received</p>
                     
@@ -526,7 +531,7 @@ export default function CreditsPage() {
                       step="1"
                       value={depositAmount}
                       onChange={(e) => setDepositAmount(Number(e.target.value))}
-                      className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500 transition-all"
+                      className="w-full h-6 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500 transition-all touch-action-manipulation"
                     />
                 </div>
 
@@ -538,7 +543,7 @@ export default function CreditsPage() {
                         <button
                             key={amt}
                             onClick={() => setDepositAmount(amt)}
-                            className={`py-2 rounded-xl border font-bold text-sm transition-all transform active:scale-95 ${
+                            className={`py-2.5 rounded-xl border font-bold text-sm transition-all transform active:scale-95 ${
                             depositAmount === amt
                                 ? 'border-indigo-600 bg-indigo-600 text-white'
                                 : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-indigo-300'
@@ -552,7 +557,7 @@ export default function CreditsPage() {
             </div>
 
             {/* RIGHT SIDE: CHECKOUT (Darker/Different BG) */}
-            <div className="w-full md:w-[400px] bg-slate-50 dark:bg-slate-950/50 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-800 p-8 flex flex-col">
+            <div className="w-full md:w-[400px] bg-slate-50 dark:bg-slate-950/50 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-800 p-5 md:p-8 flex flex-col overflow-y-auto">
                 {/* Desktop Close Button */}
                 <button onClick={() => setIsBuyModalOpen(false)} className="hidden md:block self-end p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors mb-4">
                     <XMarkIcon className="w-6 h-6" />
@@ -583,10 +588,10 @@ export default function CreditsPage() {
                 </div>
 
                 {/* PAYMENT AREA */}
-                <div className="mt-auto">
+                <div className="mt-auto pb-4 md:pb-0">
                     {!clientSecret ? (
                          <>
-                             {/* --- CHECKBOX FOR EU WAIVER --- */}
+                             {/* EU WAIVER */}
                              <div className="flex items-start gap-3 mb-6 p-3 bg-slate-100 dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700">
                                 <div className="flex items-center h-5 mt-0.5">
                                     <input
@@ -619,7 +624,6 @@ export default function CreditsPage() {
                                 <button onClick={() => setClientSecret(null)} className="text-xs text-indigo-500 hover:underline">Change Amount</button>
                              </div>
                              
-                             {/* STRIPE ELEMENTS WRAPPER */}
                              <Elements 
                                 stripe={stripePromise} 
                                 options={{ 
@@ -628,6 +632,7 @@ export default function CreditsPage() {
                                     theme: 'stripe',
                                     variables: {
                                         colorPrimary: '#4f46e5',
+                                        fontSizeBase: '14px', // Optimized for mobile
                                     }
                                   } 
                                 }}
