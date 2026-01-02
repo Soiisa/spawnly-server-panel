@@ -116,7 +116,6 @@ const getFabricDownloadUrl = async (version) => {
 };
 
 const getQuiltDownloadUrl = async (version) => {
-  // Use generic installer endpoint
   const installerRes = await fetch('https://meta.quiltmc.org/v3/versions/installer');
   const installerData = await installerRes.json();
   const installerVersion = installerData[0].version; 
@@ -255,8 +254,14 @@ const deleteCloudflareRecords = async (subdomain) => {
         const response = await fetch(url, {
           headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
         });
-        const { result } = await response.json();
-        for (const record of result) {
+        
+        const json = await response.json();
+        if (!json.success || !Array.isArray(json.result)) {
+             console.warn(`[DNS] Failed to list records for ${recordType.name}:`, json.errors || 'Unknown error');
+             continue; 
+        }
+
+        for (const record of json.result) {
           await fetch(`${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record.id}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
@@ -357,7 +362,7 @@ const deleteS3Files = async (serverId, s3Config) => {
 
 // --- Cloud-Init Builder ---
 
-const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '', pendingRestoreKey = null, forceInstall = false) => {
+const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, serverId, s3Config = {}, version, needsFileDeletion = false, subdomain = '', pendingRestoreKey = null, forceInstall = false, allocations = []) => {
   const ramNum = Number(ramGb);
   const heapGb = Math.max(1, ramNum);
   
@@ -375,7 +380,6 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
 
   const isModpack = software.startsWith('modpack-');
 
-  // Java Version Logic
   let javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'; 
   if (effectiveVersion) {
       const vClean = effectiveVersion.replace(/[^0-9.]/g, '');
@@ -409,6 +413,10 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
   const AWS_SECRET_ACCESS_KEY = (s3Config.AWS_SECRET_ACCESS_KEY || '').replace(/'/g, "'\"'\"'");
   const S3_ENDPOINT = (s3Config.S3_ENDPOINT || '').replace(/'/g, "'\"'\"'");
   const s5cmdEndpointOpt = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
+
+  const allocationFirewallRules = allocations && allocations.length > 0
+    ? allocations.map(a => `  - ufw allow ${a.port_number}`).join('\n')
+    : '';
 
   const userData = `#cloud-config
 users:
@@ -444,6 +452,54 @@ write_files:
       ::1 localhost ip6-localhost ip6-loopback
       ff02::1 ip6-allnodes
       ff02::2 ip6-allrouters
+  
+  # --- THANOS & CODEX SCRIPTS ---
+  # FIX: Use single-escaped backslashes (\\\\ -> \\ in JS -> \\ in file)
+  - path: /opt/tools/prune.php
+    permissions: '0755'
+    content: |
+      <?php
+      require '/opt/tools/vendor/autoload.php';
+      use Aternos\\Thanos\\Thanos;
+      
+      $worldDir = $argv[1] ?? null;
+      if (!$worldDir || !is_dir($worldDir)) exit(0);
+      
+      echo "[Thanos] Optimizing world at $worldDir...\\n";
+      $thanos = new Thanos();
+      $thanos->setMinInhabitedTime(0); 
+      $removed = $thanos->prune($worldDir);
+      echo "[Thanos] Removed $removed chunks.\\n";
+  - path: /opt/tools/analyze.php
+    permissions: '0755'
+    content: |
+      <?php
+      require '/opt/tools/vendor/autoload.php';
+      use Aternos\\Codex\\Log\\File\\PathLogFile;
+      use Aternos\\Codex\\Minecraft\\Analysis\\MinecraftReportAnalyzer;
+      
+      $logPath = $argv[1] ?? null;
+      if (!$logPath || !file_exists($logPath)) exit(json_encode(['error' => 'No log found']));
+      
+      $logFile = new PathLogFile($logPath);
+      $analyzer = new MinecraftReportAnalyzer();
+      $report = $analyzer->analyze($logFile);
+      
+      $problems = [];
+      foreach ($report->getProblems() as $problem) {
+          $solutions = [];
+          foreach ($problem->getSolutions() as $solution) {
+              $solutions[] = $solution->getMessage();
+          }
+          $problems[] = [
+              'message' => $problem->getMessage(),
+              'solutions' => $solutions
+          ];
+      }
+      
+      echo json_encode(['problems' => $problems]);
+  # ------------------------------
+
   - path: /usr/local/bin/mc-sync.sh
     permissions: '0755'
     content: |
@@ -467,6 +523,13 @@ write_files:
       
       echo "[mc-sync] Processing..."
       cd "$SRC"
+
+      # --- THANOS OPTIMIZATION ---
+      if [ -f "/opt/tools/prune.php" ] && [ -d "$SRC/world/region" ]; then
+          echo "[mc-sync] Running Thanos World Optimizer..."
+          php /opt/tools/prune.php "$SRC/world" || echo "[mc-sync] Thanos failed, skipping."
+      fi
+      # ---------------------------
       
       SYNC_EXCLUDES=""
       WORLD_NAME=$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\\r')
@@ -598,7 +661,8 @@ write_files:
       IS_MODPACK='${isModpack}'
       MC_VERSION='${escapedVersion}'
       
-      AIKAR_FLAGS="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
+      # Added ExitOnOutOfMemoryError to fix Zombie process issue
+      AIKAR_FLAGS="-XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
       
       echo "[Startup] Initializing for software: $SOFTWARE"
       
@@ -677,6 +741,12 @@ write_files:
              sudo -u minecraft wget -O server-installer.jar "$DOWNLOAD_URL"
              sudo -u minecraft $JAVA_BIN -jar server-installer.jar --installServer
              rm -f server-installer.jar
+             
+             # --- FIX: Inject Flags into NeoForge Argument File ---
+             echo "[Startup] Injecting AIKAR flags into user_jvm_args.txt..."
+             echo "$AIKAR_FLAGS" >> user_jvm_args.txt
+             # -----------------------------------------------------
+
              if [ -f "run.sh" ]; then
                  chmod +x run.sh
              else
@@ -762,6 +832,7 @@ write_files:
       Environment=VERSION=${escapedVersion}
       Environment=SERVER_ID=${serverId}
       Environment=NEXTJS_API_URL=${appBaseUrl.replace(/\/+$/, '')}/api/servers/log
+      Environment=CRASH_API_URL=${appBaseUrl.replace(/\/+$/, '')}/api/servers/crash-report
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=HEAP_GB=${heapGb}
       Environment="AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
@@ -877,6 +948,29 @@ write_files:
 runcmd:
   - chown -R minecraft:minecraft /opt/minecraft /home/minecraft
   
+  # --- FIREWALL CONFIGURATION ---
+  - apt-get update && apt-get install -y ufw php-cli php-xml php-mbstring unzip
+  
+  # --- THANOS & CODEX INSTALL ---
+  # FIX 2: Run all installation steps in a single shell block so 'cd' persists
+  - |
+    mkdir -p /opt/tools
+    cd /opt/tools
+    export COMPOSER_ALLOW_SUPERUSER=1
+    curl -sS https://getcomposer.org/installer | php
+    php composer.phar require aternos/thanos aternos/codex
+  # ------------------------------
+
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22
+  - ufw allow OpenSSH
+  - ufw allow 25565
+  - ufw allow 25575
+${allocationFirewallRules}
+  - ufw --force enable
+  # ------------------------------
+
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js
@@ -940,6 +1034,13 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
        console.warn('Failed to clear console logs:', consoleErr.message);
     }
 
+    // --- FETCH ALLOCATIONS ---
+    const { data: allocations } = await supabaseAdmin
+      .from('allocations')
+      .select('port_number')
+      .eq('server_id', serverRow.id);
+    // -------------------------
+
     let downloadUrl = null;
     try {
       downloadUrl = await getSoftwareDownloadUrl(software, version);
@@ -960,7 +1061,8 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       needsFileDeletion,
       subdomain,
       pendingRestoreKey,
-      forceInstall
+      forceInstall,
+      allocations || []
     );
 
     const sanitizedUserData = sanitizeYaml(userData);

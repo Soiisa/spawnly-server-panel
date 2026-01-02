@@ -350,7 +350,7 @@ export default function CreditsPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={loadingData} onLogout={handleLogout} />
 
-      <main className="flex-grow w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-grow w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div><h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1><p className="text-gray-600 dark:text-gray-400 mt-1">{t('subtitle')}</p></div>
           <button onClick={() => setIsBuyModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all flex items-center gap-2 transform active:scale-95"><CurrencyDollarIcon className="w-5 h-5" />{t('buy_credits')}</button>

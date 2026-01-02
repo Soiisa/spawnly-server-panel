@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabaseClient'; 
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
+import { useTranslation } from 'next-i18next';
 import { 
   MagnifyingGlassIcon, 
   CommandLineIcon, 
@@ -12,7 +12,10 @@ import {
   PuzzlePieceIcon,
   ArrowPathIcon,
   CheckCircleIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  TrashIcon,       // <--- ADDED
+  PlusIcon,        // <--- ADDED
+  WifiIcon         // <--- ADDED
 } from '@heroicons/react/24/outline';
 
 // --- Helper Functions ---
@@ -101,10 +104,152 @@ const TextInput = ({ label, value, placeholder, onChange }) => (
   </div>
 );
 
+// --- Allocations Component ---
+
+const AllocationsManager = ({ serverId, t }) => {
+  const [allocations, setAllocations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newPort, setNewPort] = useState('');
+  const [newNote, setNewNote] = useState('');
+  const [error, setError] = useState(null);
+
+  const fetchAllocations = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('allocations')
+      .select('*')
+      .eq('server_id', serverId)
+      .order('port_number', { ascending: true });
+    
+    if (data) setAllocations(data);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (serverId) fetchAllocations();
+  }, [serverId]);
+
+  const handleAdd = async () => {
+    setError(null);
+    const port = parseInt(newPort);
+    
+    // Validation
+    if (isNaN(port) || port < 1024 || port > 65535) {
+      setError(t('allocations.errors.invalid_range', { defaultValue: 'Port must be between 1024 and 65535' }));
+      return;
+    }
+    if ([25565, 25575].includes(port)) {
+      setError(t('allocations.errors.reserved', { defaultValue: 'This port is reserved by Minecraft' }));
+      return;
+    }
+    if (allocations.find(a => a.port_number === port)) {
+      setError(t('allocations.errors.duplicate', { defaultValue: 'Port already allocated' }));
+      return;
+    }
+
+    const { error: dbError } = await supabase
+      .from('allocations')
+      .insert({ server_id: serverId, port_number: port, notes: newNote });
+
+    if (dbError) {
+      setError(dbError.message);
+    } else {
+      setNewPort('');
+      setNewNote('');
+      fetchAllocations();
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm(t('allocations.confirm_delete', { defaultValue: 'Release this port?' }))) return;
+    await supabase.from('allocations').delete().eq('id', id);
+    fetchAllocations();
+  };
+
+  return (
+    <div className="mt-8 pt-8 border-t border-gray-100 dark:border-slate-700 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+        <WifiIcon className="w-5 h-5 text-indigo-500" />
+        {t('allocations.title', { defaultValue: 'Network Allocations' })}
+      </h3>
+      
+      <div className="bg-gray-50 dark:bg-slate-700 rounded-xl border border-gray-200 dark:border-slate-600 overflow-hidden">
+        {/* Header */}
+        <div className="grid grid-cols-12 gap-4 p-4 border-b border-gray-200 dark:border-slate-600 bg-gray-100 dark:bg-slate-800 text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">
+          <div className="col-span-3">Port</div>
+          <div className="col-span-7">Notes</div>
+          <div className="col-span-2 text-right">Action</div>
+        </div>
+
+        {/* List */}
+        <div className="divide-y divide-gray-200 dark:divide-slate-600">
+          {allocations.length === 0 && !loading && (
+            <div className="p-8 text-center text-gray-500 dark:text-gray-400 text-sm italic">
+              {t('allocations.empty', { defaultValue: 'No extra ports allocated.' })}
+            </div>
+          )}
+          
+          {allocations.map((alloc) => (
+            <div key={alloc.id} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-white dark:hover:bg-slate-600 transition-colors">
+              <div className="col-span-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">{alloc.port_number}</div>
+              <div className="col-span-7 text-sm text-gray-700 dark:text-gray-300 truncate">{alloc.notes || '-'}</div>
+              <div className="col-span-2 text-right">
+                <button 
+                  onClick={() => handleDelete(alloc.id)}
+                  className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                  title={t('actions.delete')}
+                >
+                  <TrashIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer / Add New */}
+        <div className="p-4 bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-600">
+          <div className="flex gap-2 items-start">
+            <div className="w-1/4">
+               <input 
+                 type="number" 
+                 placeholder="1234" 
+                 value={newPort}
+                 onChange={e => setNewPort(e.target.value)}
+                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+               />
+            </div>
+            <div className="flex-1">
+               <input 
+                 type="text" 
+                 placeholder={t('allocations.notes_placeholder', { defaultValue: 'e.g. Simple Voice Chat' })}
+                 value={newNote}
+                 onChange={e => setNewNote(e.target.value)}
+                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+               />
+            </div>
+            <button 
+              onClick={handleAdd}
+              disabled={!newPort}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <PlusIcon className="w-5 h-5" />
+            </button>
+          </div>
+          {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+          <p className="text-xs text-gray-400 mt-2">
+            {t('allocations.help', { defaultValue: 'Allocated ports will be automatically opened in the firewall on the next server restart.' })}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 // --- Main Component ---
 
 export default function ServerPropertiesEditor({ server }) {
-  const { t } = useTranslation('server'); // <--- INITIALIZED
+  const { t } = useTranslation('server'); 
   
   const [propertiesText, setPropertiesText] = useState('');
   const [originalText, setOriginalText] = useState('');
@@ -275,7 +420,7 @@ export default function ServerPropertiesEditor({ server }) {
         .eq('id', server.id);
 
       setOriginalText(propertiesText);
-      setMessage(t('properties.ui.save_success')); // <--- TRANSLATED
+      setMessage(t('properties.ui.save_success')); 
       setTimeout(() => setMessage(null), 5000);
     } catch (err) {
       setError(err.message);
@@ -285,7 +430,7 @@ export default function ServerPropertiesEditor({ server }) {
   };
 
   const handleReset = () => {
-    if (confirm(t('properties.ui.confirm_discard'))) { // <--- TRANSLATED
+    if (confirm(t('properties.ui.confirm_discard'))) { 
       setPropertiesText(originalText);
     }
   };
@@ -337,7 +482,7 @@ export default function ServerPropertiesEditor({ server }) {
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
           <input 
             type="text" 
-            placeholder={t('properties.ui.search_placeholder')} // <--- TRANSLATED
+            placeholder={t('properties.ui.search_placeholder')} 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
@@ -351,7 +496,7 @@ export default function ServerPropertiesEditor({ server }) {
               viewMode === 'visual' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
-            <AdjustmentsHorizontalIcon className="w-4 h-4" /> {t('properties.ui.visual_view')} {/* <--- TRANSLATED */}
+            <AdjustmentsHorizontalIcon className="w-4 h-4" /> {t('properties.ui.visual_view')} 
           </button>
           <button
             onClick={() => setViewMode('raw')}
@@ -359,7 +504,7 @@ export default function ServerPropertiesEditor({ server }) {
               viewMode === 'raw' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
-            <CommandLineIcon className="w-4 h-4" /> {t('properties.ui.raw_view')} {/* <--- TRANSLATED */}
+            <CommandLineIcon className="w-4 h-4" /> {t('properties.ui.raw_view')} 
           </button>
         </div>
       </div>
@@ -369,7 +514,7 @@ export default function ServerPropertiesEditor({ server }) {
         {viewMode === 'raw' ? (
           <div className="h-full flex flex-col">
             <div className="bg-gray-50 dark:bg-slate-700 px-6 py-3 border-b border-gray-200 dark:border-slate-700 text-xs text-gray-500 dark:text-gray-400 font-mono">
-              {t('properties.ui.file_name')} {/* <--- TRANSLATED */}
+              {t('properties.ui.file_name')} 
             </div>
             <textarea
               value={propertiesText}
@@ -407,7 +552,7 @@ export default function ServerPropertiesEditor({ server }) {
             {/* Show "Other" properties not in our strict groups if searched */}
             {searchQuery && (
               <div className="pt-4">
-                <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase">{t('properties.ui.other_matches')}</h4> {/* <--- TRANSLATED */}
+                <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase">{t('properties.ui.other_matches')}</h4> 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {Object.keys(properties)
                     .filter(k => !CONFIG.KEY_TO_GROUP[k] && k.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -416,6 +561,12 @@ export default function ServerPropertiesEditor({ server }) {
                 </div>
               </div>
             )}
+
+            {/* --- NEW: Allocations Manager (Inside Visual View) --- */}
+            {!searchQuery && (
+              <AllocationsManager serverId={server.id} t={t} />
+            )}
+
           </div>
         )}
       </div>
@@ -430,8 +581,8 @@ export default function ServerPropertiesEditor({ server }) {
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border border-indigo-200 dark:border-indigo-900 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 max-w-lg w-[90%]"
           >
             <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('properties.ui.unsaved_title')}</p> {/* <--- TRANSLATED */}
-              <p className="text-xs text-gray-500 dark:text-gray-400">{t('properties.ui.unsaved_desc')}</p> {/* <--- TRANSLATED */}
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('properties.ui.unsaved_title')}</p> 
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('properties.ui.unsaved_desc')}</p> 
             </div>
             <div className="flex items-center gap-3">
               <button 
@@ -439,7 +590,7 @@ export default function ServerPropertiesEditor({ server }) {
                 disabled={isSaving}
                 className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-red-600 transition-colors"
               >
-                {t('properties.ui.discard')} {/* <--- TRANSLATED */}
+                {t('properties.ui.discard')} 
               </button>
               <button
                 onClick={handleSave}
@@ -447,7 +598,7 @@ export default function ServerPropertiesEditor({ server }) {
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <CheckCircleIcon className="w-4 h-4" />}
-                {t('properties.ui.save')} {/* <--- TRANSLATED */}
+                {t('properties.ui.save')} 
               </button>
             </div>
           </motion.div>

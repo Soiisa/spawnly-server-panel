@@ -324,7 +324,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={isLoadingServers} onLogout={handleLogout} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         
         {/* Error Toast */}
         {error && (
