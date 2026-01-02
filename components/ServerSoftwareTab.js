@@ -66,6 +66,11 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const [customZipUrl, setCustomZipUrl] = useState('');
   const [customJavaVer, setCustomJavaVer] = useState('17');
   const [modpackVersionId, setModpackVersionId] = useState('');
+  
+  // Modpack Pagination
+  const [modpackPage, setModpackPage] = useState(0);
+  const [hasMorePacks, setHasMorePacks] = useState(true);
+  const [loadingMorePacks, setLoadingMorePacks] = useState(false);
 
   // Shared State
   const [loadingVersions, setLoadingVersions] = useState(false);
@@ -165,11 +170,9 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   const checkVersionChangeImpact = (newType, newVersion, isModpackSwitch) => {
     if (!server?.id) return { severity: 'none', message: t('software.impact.new_config'), requiresRecreation: false };
 
-    // Display helpers
     const currentVerDisplay = typeof server?.version === 'string' && server.version.includes('::') ? server.version.split('::')[0] : server.version;
     const newVerDisplay = typeof newVersion === 'string' && newVersion.includes('::') ? newVersion.split('::')[0] : newVersion;
 
-    // --- CASE 1: Different Software Type (High Severity) ---
     if (serverType !== server?.type && !isModpackSwitch) {
       return {
         severity: 'high',
@@ -180,13 +183,8 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       };
     } 
     
-    // --- CASE 2: Modpack Switches ---
     if (isModpackSwitch || activeTab === 'modpacks') {
-       // Check if it's the SAME modpack (Update) or a DIFFERENT one (Switch)
        let isSamePack = false;
-       
-       // Simple check: do the names match? (Or Provider + ID for precision)
-       // Current format: "URL::Version::Name"
        const currentName = server?.version ? server.version.split('::')[2] : '';
        const newName = newVersion.split('::')[2];
 
@@ -195,17 +193,14 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
        }
 
        if (isSamePack) {
-           // MEDIUM SEVERITY: Same pack, new version.
-           // Keep user files (world, whitelist), but backend MUST wipe mods/config.
            return {
                severity: 'medium',
                requiresRecreation: !!server?.hetzner_id,
                requiresFileDeletion: false, 
-               message: t('software.impact.modpack_update', { pack: newName }), // "Updating [Pack]. World will be kept, mods will be reset."
+               message: t('software.impact.modpack_update', { pack: newName }),
                backupMessage: t('software.impact.backup_recommend')
            };
        } else {
-           // HIGH SEVERITY: Different pack.
            return {
                 severity: 'high',
                 requiresRecreation: !!server?.hetzner_id,
@@ -216,14 +211,12 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
        }
     }
 
-    // --- CASE 3: Standard Software Version Change ---
     if (newVersion !== server?.version) {
       const isModded = ['arclight', 'mohist', 'forge', 'neoforge', 'fabric', 'quilt'].includes(serverType);
       
-      // If Modded: Check for Major Version Jump (e.g. 1.20 -> 1.21) OR Loader Switch
       if (isModded) {
-          const oldMC = currentVerDisplay.split('.').slice(0, 2).join('.'); // 1.20
-          const newMC = newVerDisplay.split('.').slice(0, 2).join('.'); // 1.21
+          const oldMC = currentVerDisplay.split('.').slice(0, 2).join('.');
+          const newMC = newVerDisplay.split('.').slice(0, 2).join('.');
           
           const oldLoader = server.version.includes('::') ? server.version.split('::')[1] : 'forge';
           const newLoader = newVersion.includes('::') ? newVersion.split('::')[1] : 'forge';
@@ -232,14 +225,13 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
               return {
                  severity: 'high',
                  requiresRecreation: !!server?.hetzner_id,
-                 requiresFileDeletion: true, // Force clean install for major jumps
-                 message: t('software.impact.modpack_install'), // Reuse "clean install" message
+                 requiresFileDeletion: true,
+                 message: t('software.impact.modpack_install'),
                  backupMessage: t('software.impact.backup_recommend')
               };
           }
       }
 
-      // Minor update or Vanilla update (Keep Files)
       return {
         severity: 'medium',
         requiresRecreation: !!server?.hetzner_id,
@@ -315,7 +307,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             break;
             
           case 'arclight':
-            // Fetch Releases to get body text and assets
             const arcRes = await fetchWithLocalProxy('https://api.github.com/repos/IzzelAliz/Arclight/releases');
             const releases = Array.isArray(arcRes) ? arcRes : [];
             const processedVersions = [];
@@ -389,53 +380,103 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
   }, [availableVersions, showAllVersions, serverType, searchQuery]);
 
 
-  // --- Modpack Logic ---
+  // --- Modpack Logic with Infinite Scroll ---
 
   useEffect(() => {
     if (activeTab === 'modpacks' && modpackProvider !== 'custom') {
-      searchModpacks();
+      fetchModpacks(0);
     }
   }, [activeTab, modpackProvider]);
 
-  const searchModpacks = async () => {
-    setLoadingVersions(true);
-    setModpackList([]);
-    setSelectedModpack(null);
-    setModpackFiles([]);
-    setModpackVersionId('');
-    setError(null);
+  const fetchModpacks = async (page = 0) => {
+    const isLoadMore = page > 0;
+    
+    if (isLoadMore) {
+        setLoadingMorePacks(true);
+    } else {
+        setLoadingVersions(true);
+        setModpackList([]);
+        setSelectedModpack(null);
+        setModpackFiles([]);
+        setModpackVersionId('');
+        setError(null);
+        setHasMorePacks(true);
+        setModpackPage(0);
+    }
 
     try {
+        let newPacks = [];
+
         if (modpackProvider === 'curseforge') {
             const term = modpackSearch ? encodeURIComponent(modpackSearch) : '';
+            const pageSize = 20;
+            const index = page * pageSize;
+            
             const queryUrl = modpackSearch 
-                ? `https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&searchFilter=${term}&pageSize=20&sortField=2&sortOrder=desc`
-                : `https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&pageSize=20&sortField=2&sortOrder=desc`;
+                ? `https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&searchFilter=${term}&pageSize=${pageSize}&index=${index}&sortField=2&sortOrder=desc`
+                : `https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&pageSize=${pageSize}&index=${index}&sortField=2&sortOrder=desc`;
             
             const res = await fetchWithLocalProxy(queryUrl);
-            setModpackList(res.data || []);
+            newPacks = res.data || [];
+            
+            if (newPacks.length < pageSize) setHasMorePacks(false);
+
         } else if (modpackProvider === 'modrinth') {
             const term = modpackSearch ? encodeURIComponent(modpackSearch) : '';
+            const limit = 20;
+            const offset = page * limit;
+
             const queryUrl = term 
-               ? `https://api.modrinth.com/v2/search?query=${term}&facets=[["project_type:modpack"]]`
-               : `https://api.modrinth.com/v2/search?facets=[["project_type:modpack"]]`; 
+               ? `https://api.modrinth.com/v2/search?query=${term}&facets=[["project_type:modpack"]]&limit=${limit}&offset=${offset}`
+               : `https://api.modrinth.com/v2/search?facets=[["project_type:modpack"]]&limit=${limit}&offset=${offset}`; 
+            
             const res = await fetchWithLocalProxy(queryUrl);
-            setModpackList(res.hits || []);
+            newPacks = res.hits || [];
+            
+            if (newPacks.length < limit) setHasMorePacks(false);
+
         } else if (modpackProvider === 'ftb') {
+            if (page > 0) {
+                 setHasMorePacks(false); // FTB API limited pagination support in this simplified endpoint
+                 setLoadingMorePacks(false);
+                 return;
+            }
+
             const term = modpackSearch ? encodeURIComponent(modpackSearch) : '';
             const queryUrl = term
                ? `https://api.feed-the-beast.com/v1/modpacks/public/modpack/search/20?term=${term}`
                : `https://api.feed-the-beast.com/v1/modpacks/public/modpack/popular/20`;
             
             const res = await fetchWithLocalProxy(queryUrl);
-            if (res && res.packs) setModpackList(res.packs);
-            else if (Array.isArray(res)) setModpackList(res);
-            else setModpackList([]);
+            if (res && res.packs) newPacks = res.packs;
+            else if (Array.isArray(res)) newPacks = res;
+            else newPacks = [];
+            
+            setHasMorePacks(false);
         }
+
+        if (isLoadMore) {
+            setModpackList(prev => [...prev, ...newPacks]);
+            setModpackPage(page);
+        } else {
+            setModpackList(newPacks);
+        }
+
     } catch (err) {
-        setError(t('software.errors.modpack_fail', { error: err.message }));
+        if (!isLoadMore) setError(t('software.errors.modpack_fail', { error: err.message }));
     } finally {
         setLoadingVersions(false);
+        setLoadingMorePacks(false);
+    }
+  };
+
+  const handlePackListScroll = (e) => {
+    if (loadingMorePacks || !hasMorePacks || loadingVersions) return;
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    
+    // Trigger when within 50px of bottom
+    if (scrollHeight - scrollTop <= clientHeight + 50) {
+        fetchModpacks(modpackPage + 1);
     }
   };
 
@@ -463,7 +504,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                         mcVersion: mcVer,
                         loader: loader,
                         downloadUrl: f.downloadUrl,
-                        releaseType: f.releaseType, // 1=Release, 2=Beta, 3=Alpha
+                        releaseType: f.releaseType,
                         fileDate: f.fileDate,
                         serverPackFileId: f.serverPackFileId || null
                     };
@@ -817,17 +858,20 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                             placeholder={t('software.placeholders.search_modpack', { provider: modpackProvider })}
                             value={modpackSearch}
                             onChange={(e) => setModpackSearch(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && searchModpacks()}
+                            onKeyDown={(e) => e.key === 'Enter' && fetchModpacks(0)}
                             className="flex-1 p-2.5 border rounded-lg dark:bg-slate-700 dark:text-white dark:border-slate-600"
                         />
-                        <button onClick={searchModpacks} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">{t('software.buttons.search')}</button>
+                        <button onClick={() => fetchModpacks(0)} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">{t('software.buttons.search')}</button>
                     </div>
 
                     {modpackList.length > 0 && !selectedModpack && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar p-1">
+                        <div 
+                          onScroll={handlePackListScroll}
+                          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar p-1"
+                        >
                             {modpackList.map(pack => (
                                 <div key={pack.id || pack.project_id} 
-                                     className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-indigo-300 hover:shadow-md transition-all flex flex-col h-full">
+                                     className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 hover:border-indigo-300 hover:shadow-md transition-all flex flex-col h-full animate-in fade-in duration-300">
                                     <div className="flex gap-4 mb-3">
                                         {pack.icon_url || pack.logo?.url || pack.art?.square ? (
                                             <img src={pack.icon_url || pack.logo?.url || pack.art?.square} className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-slate-700 object-cover" />
@@ -855,6 +899,11 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                                     </button>
                                 </div>
                             ))}
+                            {loadingMorePacks && (
+                                <div className="col-span-full py-4 flex justify-center text-gray-400">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent" />
+                                </div>
+                            )}
                         </div>
                     )}
 

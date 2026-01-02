@@ -451,12 +451,30 @@ export default function ServerDetailPage({ initialServer }) {
     if (newRam < 2 || newRam > 32) return setError(t('errors.ram_range'));
     setActionLoading(true);
     try {
-      const { error } = await supabase.from('servers').update({ ram: newRam }).eq('id', server.id);
+      // 2. Update both RAM and Cost in the database
+      const { error } = await supabase
+        .from('servers')
+        .update({ 
+          ram: newRam,
+          cost_per_hour: newCost 
+        })
+        .eq('id', server.id);
+
       if (error) throw error;
-      setServer(prev => ({ ...prev, ram: newRam }));
+      
+      // 3. Update local state so the UI reflects the change immediately
+      setServer(prev => ({ 
+        ...prev, 
+        ram: newRam,
+        cost_per_hour: newCost 
+      }));
+      
       setEditingRam(false);
-    } catch (e) { setError(e.message); }
-    finally { setActionLoading(false); }
+    } catch (e) { 
+      setError(e.message); 
+    } finally { 
+      setActionLoading(false); 
+    }
   };
 
   const handleSaveMotd = async () => {
