@@ -468,23 +468,30 @@ write_files:
       $thanos->setMinInhabitedTime(0); 
       $removed = $thanos->prune($worldDir);
       echo "[Thanos] Removed $removed chunks.\\n";
+  
+  # FIX: Rewrote analyzer to use Codex v3 'Detective' API (MinecraftReportAnalyzer is deprecated)
   - path: /opt/tools/analyze.php
     permissions: '0755'
     content: |
       <?php
       require '/opt/tools/vendor/autoload.php';
       use Aternos\\Codex\\Log\\File\\PathLogFile;
-      use Aternos\\Codex\\Minecraft\\Analysis\\MinecraftReportAnalyzer;
+      use Aternos\\Codex\\Minecraft\\Detective\\Detective;
       
       $logPath = $argv[1] ?? null;
       if (!$logPath || !file_exists($logPath)) exit(json_encode(['error' => 'No log found']));
       
       $logFile = new PathLogFile($logPath);
-      $analyzer = new MinecraftReportAnalyzer();
-      $report = $analyzer->analyze($logFile);
+      $detective = new Detective();
+      $detective->setLogFile($logFile);
+      
+      // Auto-detect log type (Vanilla, Forge, etc.) and analyze
+      $log = $detective->detect();
+      $log->parse();
+      $analysis = $log->analyse();
       
       $problems = [];
-      foreach ($report->getProblems() as $problem) {
+      foreach ($analysis->getProblems() as $problem) {
           $solutions = [];
           foreach ($problem->getSolutions() as $solution) {
               $solutions[] = $solution->getMessage();
@@ -735,7 +742,6 @@ write_files:
               setup_generic_start_script
               
               # --- FIX: Inject Flags into user_jvm_args.txt AFTER setup logic ---
-              # This ensures the file exists (created by install) or we create it
               echo "[Startup] Injecting AIKAR flags into user_jvm_args.txt (Modpack Mode)..."
               echo "$AIKAR_FLAGS" >> user_jvm_args.txt
               chown minecraft:minecraft user_jvm_args.txt || true
@@ -955,14 +961,14 @@ runcmd:
   - apt-get update && apt-get install -y ufw php-cli php-xml php-mbstring unzip
   
   # --- THANOS & CODEX INSTALL ---
-  # FIX: Use global install, explicit HOME, and multi-line block to persist directory change
+  # FIX: Install correct package (aternos/codex-minecraft)
   - |
     mkdir -p /opt/tools
     cd /opt/tools
     export COMPOSER_ALLOW_SUPERUSER=1
     export HOME=/root
     curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-    composer require aternos/thanos aternos/codex
+    composer require aternos/thanos aternos/codex-minecraft
   # ------------------------------
 
   - ufw default deny incoming
