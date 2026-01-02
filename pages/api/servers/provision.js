@@ -1,4 +1,3 @@
-// pages/api/servers/provision.js
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
@@ -454,7 +453,9 @@ write_files:
       ff02::2 ip6-allrouters
   
   # --- THANOS & CODEX SCRIPTS ---
-  # FIX: Use single-escaped backslashes (\\\\ -> \\ in JS -> \\ in file)
+  # FIX: Correct namespace escaping (\\\\ -> \\ in JS -> \\ in file = \\ in PHP)
+  # Wait, standard PHP namespaces use a single backslash. 
+  # So \\ in JS -> \ in file.
   - path: /opt/tools/prune.php
     permissions: '0755'
     content: |
@@ -742,10 +743,8 @@ write_files:
              sudo -u minecraft $JAVA_BIN -jar server-installer.jar --installServer
              rm -f server-installer.jar
              
-             # --- FIX: Inject Flags into NeoForge Argument File ---
              echo "[Startup] Injecting AIKAR flags into user_jvm_args.txt..."
              echo "$AIKAR_FLAGS" >> user_jvm_args.txt
-             # -----------------------------------------------------
 
              if [ -f "run.sh" ]; then
                  chmod +x run.sh
@@ -952,13 +951,14 @@ runcmd:
   - apt-get update && apt-get install -y ufw php-cli php-xml php-mbstring unzip
   
   # --- THANOS & CODEX INSTALL ---
-  # FIX 2: Run all installation steps in a single shell block so 'cd' persists
+  # FIX: Use global install, explicit HOME, and multi-line block to persist directory change
   - |
     mkdir -p /opt/tools
     cd /opt/tools
     export COMPOSER_ALLOW_SUPERUSER=1
-    curl -sS https://getcomposer.org/installer | php
-    php composer.phar require aternos/thanos aternos/codex
+    export HOME=/root
+    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    composer require aternos/thanos aternos/codex
   # ------------------------------
 
   - ufw default deny incoming
