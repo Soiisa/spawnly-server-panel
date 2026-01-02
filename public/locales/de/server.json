@@ -4,7 +4,7 @@
   "actions": {
     "start": "Server starten",
     "stop": "Stoppen",
-    "restart": "Neu starten",
+    "restart": "Neustarten",
     "copy_ip": "Klicken zum Kopieren",
     "copied": "Kopiert!",
     "edit_motd": "MOTD bearbeiten",
@@ -40,7 +40,7 @@
   "config": {
     "title": "Konfiguration",
     "auto_stop": "Auto-Stopp (Leer)",
-    "auto_stop_never": "Nie",
+    "auto_stop_never": "Niemals",
     "auto_stop_5m": "5 Minuten",
     "auto_stop_15m": "15 Minuten",
     "auto_stop_30m": "30 Minuten",
@@ -52,20 +52,20 @@
   },
   "billing": {
     "title": "Abrechnungsstatus",
-    "hourly_cost": "Kosten pro Stunde",
+    "hourly_cost": "Stündliche Kosten",
     "credits_hr": "Credits/Std",
     "est_runtime": "Gesch. Laufzeit",
     "hours_left": "Stunden übrig",
-    "warning_low": "Warnung: Guthaben niedrig. Server könnte bald stoppen."
+    "warning_low": "Warnung: Niedriges Guthaben. Server könnte bald stoppen."
   },
   "errors": {
-    "load_session": "Fehler beim Laden der Sitzungsdaten.",
+    "load_session": "Sitzungsdaten konnten nicht geladen werden.",
     "timeout": "Zeitüberschreitung. Bitte aktualisieren.",
-    "update_auto_stop": "Fehler beim Aktualisieren der Auto-Stopp-Einstellung",
+    "update_auto_stop": "Auto-Stopp-Einstellung konnte nicht aktualisiert werden",
     "failed_action": "Fehler bei {{action}}: {{message}}",
     "stop_ram": "Server muss gestoppt sein, um RAM zu ändern.",
     "ram_range": "RAM muss zwischen 2 und 32 GB liegen.",
-    "save_motd": "Fehler beim Speichern der MOTD"
+    "save_motd": "MOTD konnte nicht gespeichert werden"
   },
   "notifications": {
     "ready_title": "{{serverName}} ist BEREIT!",
@@ -78,15 +78,15 @@
     "running": "Läuft",
     "stopped": "Gestoppt",
     "offline": "Offline",
-    "initializing": "Initialisierung",
+    "initializing": "Initialisiert",
     "unknown": "Unbekannt",
-    "provisioning": "Bereitstellung",
+    "provisioning": "Wird bereitgestellt",
     "disconnected": "Getrennt"
   },
   "console": {
     "title": "Terminal",
     "status": {
-      "fetching": "Lade Logs...",
+      "fetching": "Rufe Logs ab...",
       "error": "Fehler beim Laden der Logs",
       "ready": "Bereit",
       "live": "Live-Stream aktiv",
@@ -102,10 +102,10 @@
     },
     "input": {
       "placeholder": "Befehl eingeben (z.B. /op user, /time set day)...",
-      "disconnected": "* Konsole ist getrennt. Starte den Server, um Befehle zu senden."
+      "disconnected": "* Konsole ist getrennt. Starte den Server, um Befehle einzugeben."
     },
     "errors": {
-      "failed_send": "Fehler beim Senden des Befehls",
+      "failed_send": "Befehl konnte nicht gesendet werden",
       "no_session": "Keine aktive Sitzung"
     }
   },
@@ -130,7 +130,7 @@
       "white-list": "Whitelist aktivieren",
       "pvp": "PvP aktiviert",
       "allow-flight": "Fliegen erlauben",
-      "enable-command-block": "Befehlsblöcke",
+      "enable-command-block": "Kommandoblöcke",
       "spawn-animals": "Tiere spawnen",
       "spawn-monsters": "Monster spawnen",
       "spawn-npcs": "NPCs spawnen",
@@ -148,7 +148,7 @@
       "hardcore": "Hardcore-Modus",
       "rate-limit": "Ratenbegrenzung",
       "server-port": "Server-Port",
-      "enforce-whitelist": "Whitelist erzwingen",
+      "enforce-whitelist": "Whitelist durchsetzen",
       "enable-rcon": "RCON aktivieren",
       "level-type": "Level-Typ",
       "generate-structures": "Strukturen generieren"
@@ -170,11 +170,11 @@
       "file_name": "server.properties",
       "other_matches": "Andere Treffer",
       "unsaved_title": "Ungespeicherte Änderungen",
-      "unsaved_desc": "Änderungen werden nach einem Neustart angewendet.",
+      "unsaved_desc": "Änderungen werden nach einem Server-Neustart wirksam.",
       "discard": "Verwerfen",
       "save": "Änderungen speichern",
       "confirm_discard": "Alle ungespeicherten Änderungen verwerfen?",
-      "save_success": "Eigenschaften gespeichert! Server neu starten zum Anwenden."
+      "save_success": "Eigenschaften gespeichert! Starte den Server neu, um sie anzuwenden."
     }
   },
   "files": {
@@ -184,8 +184,8 @@
     "refresh": "Aktualisieren",
     "download_fail": "Download fehlgeschlagen",
     "upload_fail": "Upload fehlgeschlagen",
-    "load_fail": "Fehler beim Laden der Dateien",
-    "save_fail": "Fehler beim Speichern",
+    "load_fail": "Dateien konnten nicht geladen werden",
+    "save_fail": "Speichern fehlgeschlagen",
     "delete_fail": "Löschen fehlgeschlagen",
     "delete_confirm": "{{name}} löschen? Dies kann nicht rückgängig gemacht werden.",
     "columns": {
@@ -196,7 +196,7 @@
     },
     "editor": {
       "save_changes": "Änderungen speichern",
-      "saving": "Speichere..."
+      "saving": "Speichert..."
     }
   },
   "backups": {
@@ -210,20 +210,20 @@
     "retention": "Aufbewahrung (Anzahl)",
     "save_settings": "Einstellungen speichern",
     "empty_title": "Keine Backups gefunden",
-    "empty_desc": "Erstelle manuell ein Backup oder aktiviere automatische Backups.",
+    "empty_desc": "Erstelle manuell ein Backup oder aktiviere Auto-Backups.",
     "restore": "Wiederherstellen",
-    "stop_to_restore": "Stoppen zum Wiederherstellen",
+    "stop_to_restore": "Zum Wiederherstellen stoppen",
     "pending_title": "Wiederherstellung ausstehend",
-    "pending_desc": "Eine Wiederherstellung ist in der Warteschlange. Wenn du das nächste Mal auf Start klickst, wird der Server gelöscht und wiederhergestellt von:",
+    "pending_desc": "Eine Wiederherstellung ist in der Warteschlange. Wenn du das nächste Mal auf 'Start' klickst, wird der Server gelöscht und wiederhergestellt von:",
     "alerts": {
-      "started": "Backup gestartet! Es erscheint bald in der Liste.",
-      "queued": "Wiederherstellung in Warteschlange! Das Backup wird beim nächsten START automatisch angewendet.",
-      "stop_required": "Der Server muss VOLLSTÄNDIG GESTOPPT sein, um eine Wiederherstellung zu planen.",
-      "confirm_restore": "WARNUNG: Dies plant eine Wiederherstellung.\n\nWenn du das NÄCHSTE Mal auf 'Start' klickst, werden deine aktuellen Dateien GELÖSCHT und durch dieses Backup ersetzt.\n\nFortfahren?"
+      "started": "Backup gestartet! Es erscheint in Kürze in der Liste.",
+      "queued": "Wiederherstellung eingereiht! Das Backup wird automatisch beim nächsten START des Servers angewendet.",
+      "stop_required": "Der Server muss VOLLSTÄNDIG GESTOPPT sein, um eine Wiederherstellung einzureihen.",
+      "confirm_restore": "WARNUNG: Dies reiht eine Wiederherstellung ein.\n\nBeim NÄCHSTEN Klick auf 'Start' werden deine aktuellen Dateien GELÖSCHT und durch dieses Backup ersetzt.\n\nFortfahren?"
     }
   },
   "players": {
-    "online_title": "Spieler Online",
+    "online_title": "Online-Spieler",
     "no_online": "Keine Spieler online",
     "tabs": {
       "whitelist": "Whitelist",
@@ -241,20 +241,20 @@
       "bypass_limit": "Spielerlimit umgehen",
       "reason": "Grund",
       "expires": "Läuft ab",
-      "forever": "Für immer",
+      "forever": "Nie",
       "specific_date": "Bestimmtes Datum",
-      "confirm": "Bestätigen"
+      "confirm": "Hinzufügen bestätigen"
     },
     "levels": {
       "l1": "Level 1 (Schutz umgehen)",
-      "l2": "Level 2 (Befehlsblöcke)",
+      "l2": "Level 2 (Kommandoblöcke)",
       "l3": "Level 3 (Kicken/Bannen)",
-      "l4": "Level 4 (Stoppen/Operator)"
+      "l4": "Level 4 (Stopp/Operator)"
     }
   },
   "schedules": {
     "title": "Automatisierung",
-    "subtitle": "Plane Neustarts, Befehle und Energieaktionen.",
+    "subtitle": "Plane Neustarts, Befehle und Energie-Aktionen.",
     "new_task": "Neue Aufgabe",
     "cancel": "Abbrechen",
     "create": "Zeitplan erstellen",
@@ -272,15 +272,15 @@
     "actions": {
       "start": "Server starten",
       "stop": "Server stoppen",
-      "restart": "Server neu starten",
+      "restart": "Server neustarten",
       "command": "Befehl senden"
     },
     "list": {
       "empty_title": "Keine Aufgaben geplant",
       "empty_desc": "Erstelle eine Aufgabe, um deinen Server zu automatisieren.",
       "runs_prefix": "Läuft",
-      "processing": "Verarbeitung...",
-      "last_result": "Letztes:"
+      "processing": "Verarbeite...",
+      "last_result": "Zuletzt:"
     }
   },
   "software": {
@@ -316,33 +316,33 @@
     },
     "placeholders": {
       "search_version": "Version suchen...",
-      "search_modpack": "Suche {{provider}} Modpacks...",
+      "search_modpack": "{{provider}} Modpacks suchen...",
       "custom_url": "https://beispiel.de/modpack.zip"
     },
     "modpacks": {
       "custom_zip": "Benutzerdefinierte Zip",
       "url_label": "Direkter Download-Link (Zip)",
-      "url_hint": "Muss ein direkter Link zu einer Zip-Datei sein, die die Server-Dateien enthält.",
+      "url_hint": "Muss ein direkter Link zu einer Zip-Datei sein, die die Serverdateien enthält.",
       "java_label": "Ziel-Java-Version",
       "java_hint": "Dies bestimmt, welche Java Runtime Environment auf dem Server installiert wird.",
       "no_desc": "Keine Beschreibung verfügbar.",
       "select_version": "Wähle eine Version zur Installation",
       "released": "Veröffentlicht:",
-      "no_files": "Keine Server-Dateien für dieses Modpack gefunden."
+      "no_files": "Keine Serverdateien für dieses Modpack gefunden."
     },
     "impact": {
-      "high": "Änderung mit hoher Auswirkung",
+      "high": "Änderung mit hohem Einfluss",
       "confirm": "Änderung bestätigen",
-      "clean_install": "Wechsel von {{old}} zu {{new}} erfordert eine Neuinstallation. ALLE existierenden Dateien werden gelöscht.",
-      "modpack_install": "Die Installation eines Modpacks erfordert eine komplette Server-Neuinstallation. ALLE existierenden Dateien (Welt, Configs) werden gelöscht.",
+      "clean_install": "Der Wechsel von {{old}} zu {{new}} erfordert eine saubere Installation. ALLE existierenden Dateien werden gelöscht.",
+      "modpack_install": "Die Installation eines neuen Modpacks erfordert eine komplette Server-Neuinstallation. ALLE existierenden Dateien (Welt, Configs) werden gelöscht.",
       "modpack_update": "Aktualisiere {{pack}}. Deine Welt und server.properties bleiben erhalten, aber Mods, Configs und Skripte werden zurückgesetzt.",
-      "version_change": "Ändere Version von {{old}} zu {{new}}. Existierende Dateien werden behalten, aber ein Downgrade kann deine Welt beschädigen.",
+      "version_change": "Ändere Version von {{old}} zu {{new}}. Existierende Dateien bleiben erhalten, aber ein Downgrade kann deine Welt beschädigen.",
       "backup_download": "Lade deine Welt-Dateien herunter, bevor du fortfährst!",
-      "backup_recommend": "Wir empfehlen ein Backup deiner Welt, bevor du Versionen änderst.",
+      "backup_recommend": "Wir empfehlen, vor dem Wechsel der Version ein Backup deiner Welt zu machen.",
       "new_config": "Neue Server-Konfiguration."
     },
     "errors": {
-      "invalid_url": "Bitte gib eine gültige HTTP/HTTPS URL für die Zip-Datei ein.",
+      "invalid_url": "Bitte gib eine gültige HTTP/HTTPS-URL für die Zip-Datei ein.",
       "no_download": "Diese Datei hat keine Download-URL.",
       "resolve_fail": "Fehler beim Auflösen des Server-Packs: {{error}}.",
       "fetch_fail": "Fehler beim Laden der Versionen: {{error}}",
@@ -359,12 +359,12 @@
     "warning_running_desc": "Du musst den Server stoppen, um die Welt hochzuladen, herunterzuladen oder neu zu generieren, um Datenkorruption zu vermeiden.",
     "download": {
       "title": "Welt herunterladen",
-      "desc": "Backup deiner aktuellen Welt als .zip Datei",
+      "desc": "Backup deiner aktuellen Welt als .zip-Datei",
       "started": "Welt-Download gestartet"
     },
     "upload": {
       "title": "Welt hochladen",
-      "desc": "Stelle eine Welt aus einem .zip Backup wieder her",
+      "desc": "Stelle eine Welt aus einem .zip-Backup wieder her",
       "success": "Welt erfolgreich hochgeladen und entpackt!"
     },
     "generate": {
@@ -376,7 +376,7 @@
       "fields": {
         "level_name": "Level-Name",
         "seed": "Seed",
-        "world_type": "Welt-Typ",
+        "world_type": "Welttyp",
         "datapacks": "Datapacks (URLs)",
         "datapacks_hint": "Kommagetrennte direkte Download-Links.",
         "structures": "Strukturen",
@@ -391,14 +391,14 @@
       }
     },
     "level_config": {
-      "title": "Level-Konfiguration",
+      "title": "Level-Konfig",
       "desc": "Bearbeite level.dat, Seeds und Spielregeln",
       "modal_title": "Welt-Konfiguration (level.dat)",
       "saved": "Welt-Konfiguration gespeichert!",
       "sections": {
         "general": "Allgemein",
         "spawn": "Spawn-Punkt",
-        "gamerules": "Spielregeln"
+        "gamerules": "Spielregeln (GameRules)"
       },
       "labels": {
         "difficulty": "Schwierigkeit",
@@ -414,12 +414,12 @@
     },
     "errors": {
       "server_must_stop": "Server muss gestoppt sein, um diese Aktion durchzuführen.",
-      "invalid_zip": "Bitte wähle eine gültige .zip Datei.",
+      "invalid_zip": "Bitte wähle eine gültige .zip-Datei.",
       "download_fail": "Download fehlgeschlagen",
       "upload_fail": "Upload fehlgeschlagen",
       "generate_fail": "Generierung fehlgeschlagen",
       "load_level_fail": "Konnte world/level.dat nicht finden. Wurde die Welt generiert?",
-      "save_fail": "Fehler beim Speichern der level.dat"
+      "save_fail": "Speichern von level.dat fehlgeschlagen"
     }
   }
 }

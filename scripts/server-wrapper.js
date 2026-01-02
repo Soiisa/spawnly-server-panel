@@ -1,16 +1,18 @@
 // scripts/server-wrapper.js
 require('dotenv').config();
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+// DELETED: const fetch = require('node-fetch');  <-- This line caused the crash
 
 // --- Configuration ---
 const PORT = 3006;
 const SERVER_ID = process.env.SERVER_ID;
 const NEXTJS_API_URL = process.env.NEXTJS_API_URL;
+const CRASH_API_URL = process.env.CRASH_API_URL; 
 const RCON_PASSWORD = process.env.RCON_PASSWORD; 
 const HEAP_GB = process.env.HEAP_GB || '2';
 const USE_RUN_SH = fs.existsSync(path.join(process.cwd(), 'run.sh'));
@@ -46,8 +48,7 @@ const appendLog = (data) => {
   if (!line) return;
   console.log(line); 
 
-  // --- NEW: Scan for Boot Completion ---
-  // Checks for the standard message indicating the server is open for business
+  // --- Scan for Boot Completion ---
   if (line.includes('Thread RCON Listener started')) {
     console.log('[Wrapper] RCON detected. Setting status to Running.');
     updateState('Running');
@@ -75,7 +76,7 @@ const sendUpdate = async (statusOverride = null) => {
       body: JSON.stringify({
         serverId: SERVER_ID,
         console_log: logsToSend,
-        status: statusOverride, // Signal crash status if needed
+        status: statusOverride,
       }),
     });
     
@@ -89,6 +90,52 @@ const sendUpdate = async (statusOverride = null) => {
 
 setInterval(() => sendUpdate(), UPDATE_INTERVAL);
 
+// --- CODEX CRASH HANDLER ---
+const handleCrash = (code) => {
+  console.log('[Wrapper] Server crashed. Running Codex analysis...');
+  const logPath = path.join(process.cwd(), 'logs', 'latest.log');
+  
+  if (!fs.existsSync('/opt/tools/analyze.php')) {
+      console.warn('[Wrapper] Codex analyze.php not found. Skipping analysis.');
+      return;
+  }
+
+  exec(`php /opt/tools/analyze.php "${logPath}"`, async (error, stdout, stderr) => {
+    if (error) {
+      console.error(`[Wrapper] Codex execution failed: ${error.message}`);
+      return;
+    }
+
+    try {
+      const analysis = JSON.parse(stdout);
+      
+      if (analysis.problems && analysis.problems.length > 0) {
+        console.log(`[Wrapper] Codex found ${analysis.problems.length} problems. Uploading report...`);
+        
+        const rawLogContext = logBuffer.join('\n');
+
+        await fetch(CRASH_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${RCON_PASSWORD}`
+          },
+          body: JSON.stringify({
+            serverId: SERVER_ID,
+            analysis: analysis,
+            log: rawLogContext
+          })
+        });
+        console.log('[Wrapper] Crash report uploaded successfully.');
+      } else {
+        console.log('[Wrapper] Codex found no specific known issues.');
+      }
+    } catch (e) {
+      console.error('[Wrapper] Failed to parse/upload crash report:', e.message);
+    }
+  });
+};
+
 // --- Process Spawning ---
 let mcProcess;
 console.log(`[Wrapper] Starting server... Mode: ${USE_RUN_SH ? 'run.sh' : 'Direct Java'}`);
@@ -97,12 +144,12 @@ if (USE_RUN_SH) {
   try { fs.chmodSync('./run.sh', '755'); } catch (e) {}
   mcProcess = spawn('./run.sh', [], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
 } else {
-  // Add flags to this array
-  // UPDATED: Xms=1G (Minimum), Xmx=HEAP_GB (Maximum)
+  // Standard Flags (Aikar's)
   const args = [
     `-Xmx${HEAP_GB}G`, 
     `-Xms1G`, 
     '-XX:+UseG1GC',
+    '-XX:+ExitOnOutOfMemoryError',
     '-XX:+ParallelRefProcEnabled',
     '-XX:MaxGCPauseMillis=200',
     '-XX:+UnlockExperimentalVMOptions',
@@ -130,9 +177,15 @@ mcProcess.stderr.on('data', appendLog);
 
 mcProcess.on('close', async (code) => {
   console.log(`[Wrapper] Minecraft process exited with code ${code}`);
-  // If exit code is not 0 or null, signal a crash to the API
+  
+  if (code !== 0 && code !== null) {
+      handleCrash(code);
+      console.log('[Wrapper] Waiting for crash report upload...');
+      await new Promise(r => setTimeout(r, 3000));
+  }
+
   const finalStatus = (code !== 0 && code !== null) ? 'Crashed' : 'Stopped';
-  updateState(finalStatus); // Update local state file
+  updateState(finalStatus); 
   await sendUpdate(finalStatus).finally(() => process.exit(code || 0));
 });
 

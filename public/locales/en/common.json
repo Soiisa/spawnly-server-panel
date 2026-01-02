@@ -28,8 +28,7 @@
     "support": "Support"
   },
   "cookie": {
-    "message": "We use cookies to ensure you get the best experience on Spawnly. By continuing, you agree to our",
-    "and": "and",
+    "text": "We use cookies to ensure you get the best experience on Spawnly. By continuing, you agree to our <1>Privacy Policy</1> and <3>Terms of Service</3>.",
     "accept": "Accept & Continue"
   },
   "settings": {

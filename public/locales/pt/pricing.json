@@ -9,27 +9,27 @@
     "capabilities": "Capacidades:",
     "estimated_cost": "Custo Estimado",
     "hourly_rate": "Taxa Horária",
-    "deploy_btn": "Implementar Servidor de {{ram}}GB Agora",
+    "deploy_btn": "Criar Servidor de {{ram}}GB Agora",
     "no_card": "Não é necessário cartão de crédito para se registar."
   },
   "recommendations": {
-    "small": "Bom para servidores Vanilla pequenos com até 5 amigos. Não recomendado para mods.",
+    "small": "Bom para pequenos servidores Vanilla com até 5 amigos. Não recomendado para mods.",
     "medium": "Perfeito para Vanilla com até 10 amigos, ou modpacks leves (aprox. 50 mods).",
     "standard": "Ótimo para modpacks padrão (100+ mods) ou servidores Vanilla com 20+ jogadores.",
     "heavy": "Ideal para modpacks pesados (200+ mods) ou comunidades maiores (40+ jogadores).",
     "very_heavy": "Desempenho poderoso para modpacks muito pesados (300+ mods) ou 60+ jogadores.",
-    "massive": "Poder de nível empresarial para redes massivas, 100+ jogadores, ou os modpacks mais exigentes."
+    "massive": "Potência de nível empresarial para redes massivas, 100+ jogadores ou os modpacks mais exigentes."
   },
   "features": {
     "ddos": "Proteção DDoS Incluída",
-    "slots": "Slots de Jogador Ilimitados",
-    "files": "Acesso a Ficheiros",
+    "slots": "Slots de Jogadores Ilimitados",
+    "files": "Acesso aos Ficheiros",
     "mods": "Suporte a Mods e Plugins",
     "setup": "Configuração Instantânea",
-    "uptime": "99.9% de Uptime da Plataforma"
+    "uptime": "99.9% de Tempo de Atividade"
   },
   "faq": {
     "title": "Como funciona a faturação?",
-    "answer": "O Spawnly utiliza um sistema baseado em créditos. Você compra créditos (1 Crédito ≈ €0.01), e nós deduzimo-los do seu saldo a cada minuto que o servidor estiver <1>Em execução</1>. Se <3>Parar</3> o servidor, a faturação pausa imediatamente, mas os seus ficheiros são mantidos seguros gratuitamente."
+    "answer": "A Spawnly utiliza um sistema baseado em créditos. Você compra créditos (1 Crédito ≈ €0.01), e nós descontamo-los do seu saldo a cada minuto que o seu servidor estiver <1>A Executar</1>. Se <3>Parar</3> o seu servidor, a faturação pausa imediatamente, mas os seus ficheiros são mantidos em segurança gratuitamente."
   }
 }

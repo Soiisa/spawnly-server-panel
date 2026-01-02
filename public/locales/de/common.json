@@ -6,8 +6,8 @@
     "settings": "Einstellungen"
   },
   "theme": {
-    "switch_light": "Heller Modus",
-    "switch_dark": "Dunkler Modus"
+    "switch_light": "Zum hellen Modus wechseln",
+    "switch_dark": "Zum dunklen Modus wechseln"
   },
   "brand": "Spawnly",
   "wallet": {
@@ -15,7 +15,7 @@
   },
   "public_nav": {
     "pricing": "Preise",
-    "login": "Login",
+    "login": "Einloggen",
     "get_started": "Loslegen"
   },
   "footer": {
@@ -28,8 +28,7 @@
     "support": "Support"
   },
   "cookie": {
-    "message": "Wir verwenden Cookies, um dir das beste Erlebnis auf Spawnly zu bieten. Indem du fortfährst, stimmst du unseren",
-    "and": "und",
+    "text": "Wir verwenden Cookies, um sicherzustellen, dass du das beste Erlebnis auf Spawnly hast. Indem du fortfährst, stimmst du unserer <1>Datenschutzerklärung</1> und den <3>Nutzungsbedingungen</3> zu.",
     "accept": "Akzeptieren & Weiter"
   },
   "settings": {

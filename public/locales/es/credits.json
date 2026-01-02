@@ -4,9 +4,9 @@
   "buy_credits": "Comprar Créditos",
   "card": {
     "title": "Saldo Actual",
-    "value_approx": "~€{{value}} valor",
-    "info_title": "Facturación en Tiempo Real",
-    "info_desc": "Los servidores se facturan por minuto de ejecución. Los créditos se deducen automáticamente mientras tu servidor esté corriendo."
+    "value_approx": "Valor aprox. ~€{{value}}",
+    "info_title": "Facturación en tiempo real",
+    "info_desc": "Los servidores se facturan por minuto de tiempo de ejecución. Los créditos se deducen automáticamente mientras tu servidor esté funcionando."
   },
   "history": {
     "title": "Historial de Transacciones",

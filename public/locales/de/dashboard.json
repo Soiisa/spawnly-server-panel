@@ -5,17 +5,17 @@
     "new_server": "Neuer Server"
   },
   "stats": {
-    "total_servers": "Gesamtanzahl Server",
-    "active_now": "Gerade aktiv",
-    "total_ram": "Gesamte RAM",
-    "hourly_cost": "Kosten pro Stunde"
+    "total_servers": "Server Gesamt",
+    "active_now": "Jetzt aktiv",
+    "total_ram": "RAM Gesamt",
+    "hourly_cost": "Kosten pro Std."
   },
   "server_card": {
-    "memory": "Arbeitsspeicher",
+    "memory": "Speicher",
     "address": "Adresse",
-    "start": "Starten",
-    "stop": "Stoppen",
-    "processing": "Verarbeitung...",
+    "start": "Start",
+    "stop": "Stopp",
+    "processing": "Verarbeite...",
     "connection": "Verbindung",
     "players": "Spieler",
     "copy_ip": "IP kopieren",
@@ -27,20 +27,20 @@
     "running": "Läuft",
     "stopping": "Stoppt",
     "restarting": "Startet neu",
-    "provisioning": "Bereitstellung",
+    "provisioning": "Wird bereitgestellt",
     "unknown": "Unbekannt",
     "disconnected": "Getrennt"
   },
   "empty_state": {
     "title": "Noch keine Server",
-    "description": "Erstelle jetzt deinen ersten Hochleistungs-Gameserver.",
+    "description": "Leg los und erstelle deinen ersten High-Performance Gameserver.",
     "button": "Server erstellen"
   },
   "messages": {
-    "error_create": "Fehler beim Erstellen des Servers",
-    "error_delete": "Fehler beim Löschen des Servers",
-    "error_start": "Fehler beim Starten des Servers",
-    "error_stop": "Fehler beim Stoppen des Servers",
+    "error_create": "Server konnte nicht erstellt werden",
+    "error_delete": "Server konnte nicht gelöscht werden",
+    "error_start": "Server konnte nicht gestartet werden",
+    "error_stop": "Server konnte nicht gestoppt werden",
     "confirm_delete": "Bist du sicher, dass du diesen Server löschen möchtest? Dies kann nicht rückgängig gemacht werden.",
     "dismiss": "Ausblenden"
   },

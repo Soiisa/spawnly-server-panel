@@ -1,18 +1,15 @@
 {
   "header": {
-    "title": "Konto erstellen",
-    "subtitle": "Starte deinen Server in Sekunden"
+    "title": "Willkommen zurück",
+    "subtitle": "Melde dich an, um deine Server zu verwalten"
   },
   "buttons": {
-    "google_signup": "Mit Google registrieren",
-    "create_account": "Konto erstellen",
-    "creating_account": "Erstelle Konto...",
-    "sign_in": "Anmelden"
+    "google_sign_in": "Mit Google anmelden",
+    "sign_in": "Anmelden",
+    "logging_in": "Anmelden...",
+    "create_account": "Konto erstellen"
   },
-  "divider": {
-    "email": "Oder mit E-Mail registrieren",
-    "existing_account": "Hast du schon ein Konto?"
-  },
+  "divider": "Oder weiter mit E-Mail",
   "fields": {
     "email": {
       "label": "E-Mail-Adresse",
@@ -20,16 +17,11 @@
     },
     "password": {
       "label": "Passwort",
-      "placeholder": "Mindestens 6 Zeichen"
+      "placeholder": "••••••••",
+      "forgot_link": "Passwort vergessen?"
     }
   },
-  "legal": {
-    "prefix": "Mit der Erstellung eines Kontos stimmst du unseren",
-    "terms": "Nutzungsbedingungen",
-    "and": "und der",
-    "privacy": "Datenschutzerklärung zu"
-  },
-  "messages": {
-    "success": "Erfolg! Bitte überprüfe deine E-Mails, um dein Konto zu bestätigen."
+  "footer": {
+    "new_user": "Neu bei Spawnly?"
   }
 }

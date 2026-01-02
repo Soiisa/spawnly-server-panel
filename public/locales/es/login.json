@@ -9,10 +9,10 @@
     "logging_in": "Iniciando sesión...",
     "create_account": "Crear una cuenta"
   },
-  "divider": "O continúa con email",
+  "divider": "O continuar con correo electrónico",
   "fields": {
     "email": {
-      "label": "Correo electrónico",
+      "label": "Dirección de correo",
       "placeholder": "tu@ejemplo.com"
     },
     "password": {

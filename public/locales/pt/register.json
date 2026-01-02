@@ -10,7 +10,7 @@
     "sign_in": "Iniciar sessão"
   },
   "divider": {
-    "email": "Ou registar com email",
+    "email": "Ou registe-se com email",
     "existing_account": "Já tem uma conta?"
   },
   "fields": {
@@ -30,6 +30,6 @@
     "privacy": "Política de Privacidade"
   },
   "messages": {
-    "success": "Sucesso! Por favor verifique o seu email para confirmar a conta."
+    "success": "Sucesso! Por favor, verifique o seu email para confirmar a conta."
   }
 }

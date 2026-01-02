@@ -7,7 +7,7 @@
   "stats": {
     "total_servers": "Total de Servidores",
     "active_now": "Activos Ahora",
-    "total_ram": "RAM Total",
+    "total_ram": "Total de RAM",
     "hourly_cost": "Costo por Hora"
   },
   "server_card": {
@@ -24,7 +24,7 @@
   "status": {
     "stopped": "Detenido",
     "starting": "Iniciando",
-    "running": "En ejecución",
+    "running": "Ejecutando",
     "stopping": "Deteniendo",
     "restarting": "Reiniciando",
     "provisioning": "Aprovisionando",
@@ -32,7 +32,7 @@
     "disconnected": "Desconectado"
   },
   "empty_state": {
-    "title": "Sin Servidores Aún",
+    "title": "Aún no hay servidores",
     "description": "Comienza creando tu primer servidor de juegos de alto rendimiento.",
     "button": "Crear Servidor"
   },
@@ -66,7 +66,7 @@
   },
   "tooltips": {
     "console_files": "Consola y Archivos",
-    "settings": "Configuración",
+    "settings": "Ajustes",
     "delete_server": "Eliminar Servidor"
   },
   "units": {

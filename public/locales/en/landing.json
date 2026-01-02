@@ -1,5 +1,7 @@
 {
   "hero": {
+    "announcement": "🚀 Now supporting Modpacks & Plugins",
+    "read_more": "Get Started",
     "title_prefix": "Premium",
     "title_highlight": "Game Server Hosting",
     "subtitle": "Deploy high-performance game servers instantly. Experience simple hourly billing, enterprise hardware, and unlimited flexibility.",
@@ -9,6 +11,7 @@
   "features": {
     "label": "Features",
     "heading": "Everything you need to scale",
+    "subheading": "Everything you need to run a high-performance game server, built right into a modern panel.",
     "instant": {
       "title": "Instant Deployment",
       "description": "Your server is online seconds after creation. No waiting queues, no manual provisioning."
@@ -20,11 +23,66 @@
     "storage": {
       "title": "NVMe Storage",
       "description": "Lightning fast load times and chunk generation with enterprise-grade NVMe drives."
+    },
+    "autostop": {
+      "title": "Smart Auto-Stop",
+      "description": "Never pay for an empty server. Our system automatically stops your server when no players are online."
+    },
+    "files": {
+      "title": "Full File Access",
+      "description": "Manage your server files directly from the browser with our advanced file manager and editor."
+    },
+    "console": {
+      "title": "Live Console",
+      "description": "Monitor your server logs in real-time and execute commands instantly from the dashboard."
+    }
+  },
+  "steps": {
+    "heading": "Launch in seconds",
+    "subheading": "Getting started with Spawnly is easy and credit-based.",
+    "1": {
+      "title": "Create Account",
+      "desc": "Register a free account to access the dashboard."
+    },
+    "2": {
+      "title": "Top Up Credits",
+      "desc": "Add funds securely. Credits never expire."
+    },
+    "3": {
+      "title": "Deploy Server",
+      "desc": "Choose your software and RAM. Play instantly."
+    }
+  },
+  "credits_system": {
+    "title": "Smart Billing for Smart Players",
+    "subtitle": "Stop paying monthly fees for servers that sit empty. Our credit system saves you money.",
+    "recommended": "RECOMMENDED",
+    "examples": {
+      "weekend": {
+        "title": "The Weekend Warrior",
+        "description": "You only play on weekends? Turn your server off during the week and save over 70% compared to monthly hosting.",
+        "saving": "Save ~70% / mo"
+      },
+      "casual": {
+        "title": "Casual Groups",
+        "description": "Hosting a game night once a week? You could run a high-performance server for pennies a month.",
+        "saving": "Save ~90% / mo"
+      },
+      "dev": {
+        "title": "Developers & Testing",
+        "description": "Need to test a modpack or plugin configuration? Spin up a powerful server for 10 minutes, then delete it. Cost: $0.005.",
+        "saving": "Pay per minute"
+      }
     }
   },
   "stats": {
     "uptime": "Platform Uptime",
     "storage": "NVMe Storage",
     "protection": "DDoS Protection"
+  },
+  "cta": {
+    "title": "Ready to start your journey?",
+    "subtitle": "Join thousands of other players hosting on Spawnly today.",
+    "button": "Create My Server Now"
   }
 }

@@ -4,7 +4,7 @@
   "buy_credits": "Credits kaufen",
   "card": {
     "title": "Aktuelles Guthaben",
-    "value_approx": "~€{{value}} Wert",
+    "value_approx": "~{{value}} € Wert",
     "info_title": "Echtzeit-Abrechnung",
     "info_desc": "Server werden pro Minute Laufzeit abgerechnet. Credits werden automatisch abgezogen, während dein Server läuft."
   },

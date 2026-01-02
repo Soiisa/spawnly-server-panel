@@ -6,10 +6,10 @@
   "buttons": {
     "google_sign_in": "Mit Google anmelden",
     "sign_in": "Anmelden",
-    "logging_in": "Anmeldung...",
+    "logging_in": "Anmelden...",
     "create_account": "Konto erstellen"
   },
-  "divider": "Oder mit E-Mail fortfahren",
+  "divider": "Oder weiter mit E-Mail",
   "fields": {
     "email": {
       "label": "E-Mail-Adresse",

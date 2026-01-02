@@ -1,30 +1,88 @@
 {
   "hero": {
-    "title_prefix": "Premium",
-    "title_highlight": "Alojamiento de Servidores de Juego",
-    "subtitle": "Despliega servidores de juego de alto rendimiento al instante. Experimenta facturación por hora simple, hardware empresarial y flexibilidad ilimitada.",
+    "announcement": "🚀 Ahora compatible con Modpacks y Plugins",
+    "read_more": "Empezar",
+    "title_prefix": "Alojamiento Premium de",
+    "title_highlight": "Servidores de Juegos",
+    "subtitle": "Despliega servidores de juegos de alto rendimiento al instante. Experimenta una facturación simple por horas, hardware empresarial y flexibilidad ilimitada.",
     "get_started": "Empezar",
     "view_pricing": "Ver Precios"
   },
   "features": {
     "label": "Características",
     "heading": "Todo lo que necesitas para escalar",
+    "subheading": "Todo lo que necesitas para ejecutar un servidor de juegos de alto rendimiento, integrado directamente en un panel moderno.",
     "instant": {
       "title": "Despliegue Instantáneo",
-      "description": "Tu servidor está online segundos después de crearlo. Sin colas de espera, sin aprovisionamiento manual."
+      "description": "Tu servidor está en línea segundos después de su creación. Sin colas de espera, sin aprovisionamiento manual."
     },
     "billing": {
-      "title": "Facturación por Hora",
+      "title": "Facturación por Horas",
       "description": "Paga solo por lo que usas. Pausa tu servidor para detener la facturación mientras mantienes tus archivos seguros."
     },
     "storage": {
       "title": "Almacenamiento NVMe",
       "description": "Tiempos de carga y generación de chunks ultrarrápidos con unidades NVMe de grado empresarial."
+    },
+    "autostop": {
+      "title": "Parada Automática Inteligente",
+      "description": "Nunca pagues por un servidor vacío. Nuestro sistema detiene automáticamente tu servidor cuando no hay jugadores en línea."
+    },
+    "files": {
+      "title": "Acceso Total a Archivos",
+      "description": "Gestiona los archivos de tu servidor directamente desde el navegador con nuestro administrador y editor de archivos avanzado."
+    },
+    "console": {
+      "title": "Consola en Vivo",
+      "description": "Monitorea los registros de tu servidor en tiempo real y ejecuta comandos al instante desde el panel."
+    }
+  },
+  "steps": {
+    "heading": "Lanza en segundos",
+    "subheading": "Empezar con Spawnly es fácil y se basa en créditos.",
+    "1": {
+      "title": "Crear Cuenta",
+      "desc": "Registra una cuenta gratuita para acceder al panel."
+    },
+    "2": {
+      "title": "Recargar Créditos",
+      "desc": "Añade fondos de forma segura. Los créditos nunca caducan."
+    },
+    "3": {
+      "title": "Desplegar Servidor",
+      "desc": "Elige tu software y RAM. Juega al instante."
+    }
+  },
+  "credits_system": {
+    "title": "Facturación Inteligente para Jugadores Inteligentes",
+    "subtitle": "Deja de pagar tarifas mensuales por servidores que se quedan vacíos. Nuestro sistema de créditos te ahorra dinero.",
+    "recommended": "RECOMENDADO",
+    "examples": {
+      "weekend": {
+        "title": "El Guerrero de Fin de Semana",
+        "description": "¿Solo juegas los fines de semana? Apaga tu servidor durante la semana y ahorra más del 70% en comparación con el alojamiento mensual.",
+        "saving": "Ahorra ~70% / mes"
+      },
+      "casual": {
+        "title": "Grupos Casuales",
+        "description": "¿Organizas una noche de juegos una vez a la semana? Podrías ejecutar un servidor de alto rendimiento por centavos al mes.",
+        "saving": "Ahorra ~90% / mes"
+      },
+      "dev": {
+        "title": "Desarrolladores y Pruebas",
+        "description": "¿Necesitas probar un modpack o una configuración de plugin? Inicia un servidor potente por 10 minutos, luego elimínalo. Costo: $0.005.",
+        "saving": "Paga por minuto"
+      }
     }
   },
   "stats": {
-    "uptime": "Uptime de la Plataforma",
+    "uptime": "Tiempo de Actividad de la Plataforma",
     "storage": "Almacenamiento NVMe",
     "protection": "Protección DDoS"
+  },
+  "cta": {
+    "title": "¿Listo para comenzar tu viaje?",
+    "subtitle": "Únete a miles de otros jugadores alojando en Spawnly hoy.",
+    "button": "Crear Mi Servidor Ahora"
   }
 }

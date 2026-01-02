@@ -10,12 +10,12 @@
     "sign_in": "Iniciar sesión"
   },
   "divider": {
-    "email": "O regístrate con email",
+    "email": "O regístrate con correo electrónico",
     "existing_account": "¿Ya tienes una cuenta?"
   },
   "fields": {
     "email": {
-      "label": "Correo electrónico",
+      "label": "Dirección de correo",
       "placeholder": "tu@ejemplo.com"
     },
     "password": {

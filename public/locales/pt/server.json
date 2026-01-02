@@ -1,5 +1,5 @@
 {
-  "loading": "A carregar o Centro de Comando...",
+  "loading": "A carregar Centro de Comando...",
   "not_found": "Servidor não encontrado.",
   "actions": {
     "start": "Iniciar Servidor",
@@ -54,13 +54,13 @@
     "title": "Estado da Faturação",
     "hourly_cost": "Custo Horário",
     "credits_hr": "créditos/h",
-    "est_runtime": "Tempo Est. de Execução",
+    "est_runtime": "Tempo Est.",
     "hours_left": "horas restantes",
     "warning_low": "Aviso: Saldo baixo. O servidor pode parar em breve."
   },
   "errors": {
     "load_session": "Falha ao carregar dados da sessão.",
-    "timeout": "A operação expirou. Por favor atualize.",
+    "timeout": "A operação expirou. Por favor, atualize a página.",
     "update_auto_stop": "Falha ao atualizar a definição de paragem automática",
     "failed_action": "Falha ao {{action}}: {{message}}",
     "stop_ram": "O servidor deve estar parado para alterar a RAM.",
@@ -69,18 +69,18 @@
   },
   "notifications": {
     "ready_title": "{{serverName}} está PRONTO!",
-    "ready_body": "O seu servidor \"{{serverName}}\" terminou o arranque e está agora Em Execução."
+    "ready_body": "O seu servidor \"{{serverName}}\" terminou de iniciar e está agora A Executar."
   },
   "status": {
-    "starting": "A iniciar",
-    "stopping": "A parar",
-    "restarting": "A reiniciar",
-    "running": "Em execução",
+    "starting": "A Iniciar",
+    "stopping": "A Parar",
+    "restarting": "A Reiniciar",
+    "running": "A Executar",
     "stopped": "Parado",
     "offline": "Offline",
-    "initializing": "A inicializar",
+    "initializing": "A Inicializar",
     "unknown": "Desconhecido",
-    "provisioning": "A aprovisionar",
+    "provisioning": "A Provisionar",
     "disconnected": "Desligado"
   },
   "console": {
@@ -94,14 +94,14 @@
       "waiting": "A aguardar registos..."
     },
     "controls": {
-      "auto_scroll": "Deslocamento automático",
-      "pause": "Pausa",
+      "auto_scroll": "Deslocamento auto.",
+      "pause": "Pausar",
       "resume": "Retomar",
       "clear": "Limpar",
       "toggle_scroll": "Alternar deslocamento automático"
     },
     "input": {
-      "placeholder": "Escreva um comando (ex: /op user, /time set day)...",
+      "placeholder": "Digite um comando (ex: /op utilizador, /time set day)...",
       "disconnected": "* A consola está desligada. Inicie o servidor para emitir comandos."
     },
     "errors": {
@@ -110,20 +110,20 @@
     }
   },
   "metrics": {
-    "cpu": "Uso de CPU",
-    "ram": "Uso de RAM",
-    "usage": "Uso"
+    "cpu": "Utilização de CPU",
+    "ram": "Utilização de RAM",
+    "usage": "Utilização"
   },
   "properties": {
     "groups": {
       "gameplay": "Jogabilidade",
-      "world": "Geração do Mundo",
+      "world": "Geração de Mundo",
       "performance": "Desempenho e Limites",
       "security": "Segurança e Rede",
       "advanced": "Avançado / Outros"
     },
     "labels": {
-      "max-players": "Máx Jogadores",
+      "max-players": "Máx. Jogadores",
       "gamemode": "Modo de Jogo",
       "difficulty": "Dificuldade",
       "online-mode": "Modo Online (Premium)",
@@ -135,7 +135,7 @@
       "spawn-monsters": "Gerar Monstros",
       "spawn-npcs": "Gerar NPCs",
       "force-gamemode": "Forçar Modo de Jogo",
-      "player-idle-timeout": "Tempo limite de inatividade (min)",
+      "player-idle-timeout": "Tempo Limite de Inatividade (min)",
       "require-resource-pack": "Exigir Pacote de Recursos",
       "resource-pack": "URL do Pacote de Recursos",
       "resource-pack-prompt": "Aviso do Pacote de Recursos",
@@ -166,7 +166,7 @@
     "ui": {
       "search_placeholder": "Pesquisar definições...",
       "visual_view": "Visual",
-      "raw_view": "Ficheiro Raw",
+      "raw_view": "Ficheiro Bruto",
       "file_name": "server.properties",
       "other_matches": "Outras Correspondências",
       "unsaved_title": "Alterações Não Guardadas",
@@ -182,12 +182,12 @@
     "empty": "Esta pasta está vazia",
     "filter_tooltip": "Alternar ficheiros ocultos",
     "refresh": "Atualizar",
-    "download_fail": "Falha ao descarregar",
-    "upload_fail": "Falha ao carregar",
+    "download_fail": "Falha na transferência",
+    "upload_fail": "Falha no carregamento",
     "load_fail": "Falha ao carregar ficheiros",
     "save_fail": "Falha ao guardar",
     "delete_fail": "Falha ao eliminar",
-    "delete_confirm": "Eliminar {{name}}? Esta ação não pode ser desfeita.",
+    "delete_confirm": "Eliminar {{name}}? Isto não pode ser desfeito.",
     "columns": {
       "name": "Nome",
       "size": "Tamanho",
@@ -201,7 +201,7 @@
   },
   "backups": {
     "title": "Backups",
-    "subtitle": "Gira snapshots e configure backups automáticos.",
+    "subtitle": "Gerencie snapshots e configure backups automáticos.",
     "create": "Criar Backup",
     "refresh": "Atualizar Lista",
     "settings_title": "Configuração de Backup Automático",
@@ -210,15 +210,15 @@
     "retention": "Retenção (Quantidade)",
     "save_settings": "Guardar Definições",
     "empty_title": "Nenhum backup encontrado",
-    "empty_desc": "Crie um backup manualmente ou ative os backups automáticos.",
+    "empty_desc": "Crie um backup manualmente ou ative backups automáticos.",
     "restore": "Restaurar",
     "stop_to_restore": "Parar para Restaurar",
     "pending_title": "Restauro Pendente",
     "pending_desc": "Um restauro de backup está na fila. A próxima vez que clicar em Iniciar, o servidor será limpo e restaurado a partir de:",
     "alerts": {
       "started": "Backup iniciado! Aparecerá na lista em breve.",
-      "queued": "Restauro na Fila! O backup será aplicado automaticamente quando INICIAR o servidor.",
-      "stop_required": "O servidor deve estar TOTALMENTE PARADO para agendar um restauro.",
+      "queued": "Restauro na Fila! O backup será aplicado automaticamente na próxima vez que INICIAR o servidor.",
+      "stop_required": "O servidor deve estar COMPLETAMENTE PARADO para agendar um restauro.",
       "confirm_restore": "AVISO: Isto irá agendar um restauro.\n\nNa PRÓXIMA vez que clicar em 'Iniciar', os seus ficheiros atuais serão ELIMINADOS e substituídos por este backup.\n\nContinuar?"
     }
   },
@@ -241,9 +241,9 @@
       "bypass_limit": "Ignorar Limite de Jogadores",
       "reason": "Motivo",
       "expires": "Expira",
-      "forever": "Para sempre",
+      "forever": "Nunca",
       "specific_date": "Data Específica",
-      "confirm": "Confirmar"
+      "confirm": "Confirmar Adição"
     },
     "levels": {
       "l1": "Nível 1 (Ignorar proteção)",
@@ -298,21 +298,21 @@
       "plugins": "Plugins",
       "mods": "Mods",
       "proxy": "Proxy",
-      "release": "Versão Final",
+      "release": "Release",
       "beta": "Beta",
       "alpha": "Alpha",
-      "server_pack": "Pack de Servidor"
+      "server_pack": "Pacote de Servidor"
     },
     "buttons": {
       "show_all": "Mostrar Tudo",
-      "show_stable": "Mostrar Estáveis",
+      "show_stable": "Mostrar Estável",
       "search": "Pesquisar",
-      "select_pack": "Selecionar Pack",
-      "change_pack": "Alterar Pack",
+      "select_pack": "Selecionar Pacote",
+      "change_pack": "Alterar Pacote",
       "install": "Instalar Modpack",
       "save": "Guardar Alterações",
       "confirm_install": "Confirmar e Instalar",
-      "resolving": "A resolver ficheiros do servidor..."
+      "resolving": "A Resolver Ficheiros do Servidor..."
     },
     "placeholders": {
       "search_version": "Pesquisar versão...",
@@ -323,9 +323,9 @@
       "custom_zip": "Zip Personalizado",
       "url_label": "URL de Download Direto (Zip)",
       "url_hint": "Deve ser um link direto para um ficheiro zip contendo os ficheiros do servidor.",
-      "java_label": "Versão do Java Alvo",
-      "java_hint": "Isto determina qual o Java Runtime Environment que será instalado no servidor.",
-      "no_desc": "Sem descrição fornecida.",
+      "java_label": "Versão Java Alvo",
+      "java_hint": "Isto determina qual Ambiente de Execução Java será instalado no servidor.",
+      "no_desc": "Nenhuma descrição fornecida.",
       "select_version": "Selecione uma versão para instalar",
       "released": "Lançado:",
       "no_files": "Nenhuns ficheiros de servidor encontrados para este modpack."
@@ -334,17 +334,17 @@
       "high": "Alteração de Alto Impacto",
       "confirm": "Confirmar Alteração",
       "clean_install": "Mudar de {{old}} para {{new}} requer uma instalação limpa. TODOS os ficheiros existentes serão eliminados.",
-      "modpack_install": "Instalar um Modpack requer uma reinstalação completa do servidor. TODOS os ficheiros existentes (mundo, configurações) serão eliminados.",
-      "modpack_update": "A atualizar {{pack}}. O seu mundo e server.properties serão preservados, mas mods, configs e scripts serão redefinidos.",
-      "version_change": "A alterar versão de {{old}} para {{new}}. Os ficheiros existentes são preservados, mas fazer downgrade pode corromper o seu mundo.",
-      "backup_download": "Descarregue os ficheiros do seu mundo antes de prosseguir!",
+      "modpack_install": "Instalar um novo Modpack requer uma reinstalação completa do servidor. TODOS os ficheiros existentes (mundo, configurações) serão eliminados.",
+      "modpack_update": "A atualizar {{pack}}. O seu mundo e server.properties serão preservados, mas mods, configurações e scripts serão redefinidos.",
+      "version_change": "A alterar versão de {{old}} para {{new}}. Os ficheiros existentes são preservados, mas reverter para uma versão anterior pode corromper o seu mundo.",
+      "backup_download": "Transfira os ficheiros do seu mundo antes de prosseguir!",
       "backup_recommend": "Recomendamos fazer um backup do seu mundo antes de alterar versões.",
-      "new_config": "Nova configuração de servidor."
+      "new_config": "Nova configuração do servidor."
     },
     "errors": {
-      "invalid_url": "Por favor insira um URL HTTP/HTTPS válido para o ficheiro zip.",
+      "invalid_url": "Por favor, insira um URL HTTP/HTTPS válido para o ficheiro zip.",
       "no_download": "Este ficheiro não tem um URL de download.",
-      "resolve_fail": "Falha ao resolver Server Pack: {{error}}.",
+      "resolve_fail": "Falha ao resolver Pacote de Servidor: {{error}}.",
       "fetch_fail": "Falha ao carregar versões: {{error}}",
       "modpack_fail": "Falha ao obter modpacks: {{error}}",
       "versions_fail": "Falha ao carregar versões do modpack"
@@ -356,11 +356,11 @@
   },
   "world": {
     "warning_running_title": "Servidor em Execução",
-    "warning_running_desc": "Deve parar o servidor para carregar, descarregar ou regenerar o mundo para evitar corrupção de dados.",
+    "warning_running_desc": "Deve parar o servidor para carregar, transferir ou regenerar o mundo para evitar corrupção de dados.",
     "download": {
-      "title": "Descarregar Mundo",
+      "title": "Transferir Mundo",
       "desc": "Faça backup do seu mundo atual como ficheiro .zip",
-      "started": "Download do mundo iniciado"
+      "started": "Transferência do mundo iniciada"
     },
     "upload": {
       "title": "Carregar Mundo",
@@ -371,14 +371,14 @@
       "title": "Gerar Novo",
       "desc": "Crie um mundo novo com seeds personalizadas",
       "modal_title": "Gerar Mundo",
-      "warning_delete": "Aviso: Isto irá eliminar permanentemente a pasta do mundo atual.",
+      "warning_delete": "Aviso: Isto eliminará permanentemente a pasta do mundo atual.",
       "success": "Novo mundo gerado com sucesso!",
       "fields": {
         "level_name": "Nome do Nível",
         "seed": "Seed",
         "world_type": "Tipo de Mundo",
         "datapacks": "Datapacks (URLs)",
-        "datapacks_hint": "Links de download direto separados por vírgula.",
+        "datapacks_hint": "Links de download direto separados por vírgulas.",
         "structures": "Estruturas",
         "hardcore": "Hardcore"
       },
@@ -392,13 +392,13 @@
     },
     "level_config": {
       "title": "Configuração do Nível",
-      "desc": "Edite o level.dat, seeds e regras do jogo",
+      "desc": "Edite level.dat, seeds e regras do jogo",
       "modal_title": "Configuração do Mundo (level.dat)",
       "saved": "Configuração do mundo guardada!",
       "sections": {
         "general": "Geral",
         "spawn": "Ponto de Spawn",
-        "gamerules": "Regras do Jogo"
+        "gamerules": "Regras de Jogo"
       },
       "labels": {
         "difficulty": "Dificuldade",
@@ -410,13 +410,13 @@
         "normal": "Normal",
         "hard": "Difícil"
       },
-      "no_rules": "Nenhuma GameRule encontrada no level.dat"
+      "no_rules": "Nenhum GameRule encontrado no level.dat"
     },
     "errors": {
       "server_must_stop": "O servidor deve estar parado para realizar esta ação.",
-      "invalid_zip": "Por favor selecione um ficheiro .zip válido.",
-      "download_fail": "Falha ao descarregar",
-      "upload_fail": "Falha ao carregar",
+      "invalid_zip": "Por favor, selecione um ficheiro .zip válido.",
+      "download_fail": "Falha na transferência",
+      "upload_fail": "Falha no carregamento",
       "generate_fail": "Falha na geração",
       "load_level_fail": "Não foi possível encontrar world/level.dat. O mundo já foi gerado?",
       "save_fail": "Falha ao guardar level.dat"

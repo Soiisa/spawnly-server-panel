@@ -1,6 +1,6 @@
 {
   "title": "Tarification Simple et Transparente",
-  "subtitle": "Nous croyons au paiement uniquement pour les ressources que vous utilisez.",
+  "subtitle": "Nous pensons que vous ne devriez payer que pour les ressources que vous utilisez.",
   "credit_explanation": "1 Crédit = 1 Go de RAM par heure.",
   "calculator": {
     "title": "Personnalisez votre Serveur",
@@ -9,27 +9,27 @@
     "capabilities": "Capacités :",
     "estimated_cost": "Coût Estimé",
     "hourly_rate": "Taux Horaire",
-    "deploy_btn": "Déployer Serveur {{ram}}Go",
-    "no_card": "Pas de carte de crédit requise pour s'inscrire."
+    "deploy_btn": "Déployer un Serveur de {{ram}} Go",
+    "no_card": "Aucune carte de crédit requise pour s'inscrire."
   },
   "recommendations": {
     "small": "Bon pour les petits serveurs Vanilla jusqu'à 5 amis. Non recommandé pour les mods.",
     "medium": "Parfait pour Vanilla jusqu'à 10 amis, ou modpacks légers (env. 50 mods).",
-    "standard": "Idéal pour les modpacks standard (100+ mods) ou serveurs Vanilla avec 20+ joueurs.",
-    "heavy": "Idéal pour les modpacks lourds (200+ mods) ou les communautés plus larges (40+ joueurs).",
+    "standard": "Idéal pour les modpacks standards (100+ mods) ou les serveurs Vanilla avec 20+ joueurs.",
+    "heavy": "Idéal pour les modpacks lourds (200+ mods) ou les grandes communautés (40+ joueurs).",
     "very_heavy": "Performance puissante pour les modpacks très lourds (300+ mods) ou 60+ joueurs.",
-    "massive": "Puissance d'entreprise pour les réseaux massifs, 100+ joueurs, ou les modpacks les plus exigeants."
+    "massive": "Puissance de niveau entreprise pour les réseaux massifs, 100+ joueurs ou les modpacks les plus exigeants."
   },
   "features": {
     "ddos": "Protection DDoS Incluse",
-    "slots": "Slots de Joueurs Illimités",
+    "slots": "Emplacements de Joueurs Illimités",
     "files": "Accès aux Fichiers",
-    "mods": "Support Mods et Plugins",
-    "setup": "Configuration Instantanée",
-    "uptime": "Disponibilité Plateforme 99.9%"
+    "mods": "Support Mods & Plugins",
+    "setup": "Installation Instantanée",
+    "uptime": "99,9 % de Disponibilité"
   },
   "faq": {
     "title": "Comment fonctionne la facturation ?",
-    "answer": "Spawnly utilise un système basé sur des crédits. Vous achetez des crédits (1 Crédit ≈ 0,01 €), et nous les déduisons de votre solde chaque minute où votre serveur est <1>En ligne</1>. Si vous <3>Arrêtez</3> votre serveur, la facturation s'arrête immédiatement, mais vos fichiers sont conservés gratuitement."
+    "answer": "Spawnly utilise un système basé sur des crédits. Vous achetez des crédits (1 Crédit ≈ 0,01 €), et nous les déduisons de votre solde chaque minute où votre serveur est <1>En cours</1>. Si vous <3>Arrêtez</3> votre serveur, la facturation se met en pause immédiatement, mais vos fichiers sont conservés en sécurité gratuitement."
   }
 }

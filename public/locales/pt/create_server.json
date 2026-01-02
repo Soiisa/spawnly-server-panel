@@ -9,18 +9,18 @@
     "your_credits": "Os Seus Créditos"
   },
   "placeholders": {
-    "name": "o-meu-servidor-espetacular"
+    "name": "o-meu-servidor-incrivel"
   },
   "hints": {
     "name_rules": "3-20 caracteres, apenas letras, números e hífenes. Deve ser único.",
     "cost_basis": "Baseado em {{price}} créditos por GB por hora",
     "insufficient_credits": "Precisa de pelo menos {{cost}} créditos para este servidor",
-    "need_more": "Precisa de mais {{cost}} créditos"
+    "need_more": "Precisa de pelo menos {{cost}} créditos"
   },
   "buttons": {
     "cancel": "Cancelar",
     "create": "Criar Servidor",
-    "creating": "A criar...",
+    "creating": "A Criar...",
     "fix_errors": "Corrigir Erros no Nome",
     "insufficient": "Créditos Insuficientes"
   },
@@ -57,23 +57,23 @@
     "tmodloader": "tModLoader"
   },
   "software_desc": {
-    "vanilla": "Software oficial do servidor",
+    "vanilla": "Software de servidor oficial",
     "paper": "Fork do Spigot de alto desempenho",
     "purpur": "Fork do Paper com mais funcionalidades",
-    "folia": "Servidor experimental multi-thread",
-    "spigot": "Servidor padrão de plugins",
+    "folia": "Servidor experimental multithreaded",
+    "spigot": "Servidor padrão com plugins",
     "forge": "Carregador de mods clássico",
     "neoforge": "Carregador de mods moderno",
     "fabric": "Carregador de mods leve",
     "quilt": "Carregador de mods impulsionado pela comunidade",
-    "velocity": "Servidor Proxy",
-    "waterfall": "Servidor Proxy legado",
-    "modding": "Plataforma de modding",
+    "velocity": "Servidor proxy",
+    "waterfall": "Servidor proxy legado",
+    "modding": "Plataforma de mods",
     "enhanced": "Melhorado com funcionalidades de qualidade de vida"
   },
   "units": {
     "gb": "GB",
     "credits": "créditos",
-    "credits_per_hour": "créditos/hora"
+    "credits_per_hour": "créditos/h"
   }
 }

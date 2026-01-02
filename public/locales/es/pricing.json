@@ -8,7 +8,7 @@
     "ram_label": "Memoria (RAM)",
     "capabilities": "Capacidades:",
     "estimated_cost": "Costo Estimado",
-    "hourly_rate": "Tasa Por Hora",
+    "hourly_rate": "Tarifa por Hora",
     "deploy_btn": "Desplegar Servidor de {{ram}}GB Ahora",
     "no_card": "No se requiere tarjeta de crédito para registrarse."
   },
@@ -26,10 +26,10 @@
     "files": "Acceso a Archivos",
     "mods": "Soporte para Mods y Plugins",
     "setup": "Configuración Instantánea",
-    "uptime": "99.9% de Uptime de la Plataforma"
+    "uptime": "99.9% de Tiempo de Actividad"
   },
   "faq": {
     "title": "¿Cómo funciona la facturación?",
-    "answer": "Spawnly utiliza un sistema basado en créditos. Compras créditos (1 Crédito ≈ €0.01), y los deducimos de tu saldo cada minuto que tu servidor esté <1>En ejecución</1>. Si <3>Detienes</3> tu servidor, la facturación se pausa inmediatamente, pero tus archivos se mantienen seguros de forma gratuita."
+    "answer": "Spawnly utiliza un sistema basado en créditos. Compras créditos (1 Crédito ≈ €0.01), y los deducimos de tu saldo cada minuto que tu servidor esté <1>Ejecutándose</1>. Si <3>Detienes</3> tu servidor, la facturación se pausa inmediatamente, pero tus archivos se mantienen seguros de forma gratuita."
   }
 }

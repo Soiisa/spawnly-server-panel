@@ -1,30 +1,88 @@
 {
   "hero": {
-    "title_prefix": "Premium",
-    "title_highlight": "Hébergement de Serveurs de Jeux",
-    "subtitle": "Déployez des serveurs de jeux haute performance instantanément. Profitez d'une facturation horaire simple, de matériel d'entreprise et d'une flexibilité illimitée.",
+    "announcement": "🚀 Supporte maintenant Modpacks & Plugins",
+    "read_more": "Commencer",
+    "title_prefix": "Hébergement de",
+    "title_highlight": "Serveur de Jeu",
+    "subtitle": "Déployez des serveurs de jeu haute performance instantanément. Profitez d'une facturation horaire simple, de matériel d'entreprise et d'une flexibilité illimitée.",
     "get_started": "Commencer",
     "view_pricing": "Voir les Tarifs"
   },
   "features": {
     "label": "Fonctionnalités",
     "heading": "Tout ce dont vous avez besoin pour évoluer",
+    "subheading": "Tout ce dont vous avez besoin pour gérer un serveur de jeu performant, intégré directement dans un panneau moderne.",
     "instant": {
       "title": "Déploiement Instantané",
       "description": "Votre serveur est en ligne quelques secondes après sa création. Pas de files d'attente, pas de provisionnement manuel."
     },
     "billing": {
-      "title": "Facturation à l'Heure",
-      "description": "Payez uniquement pour ce que vous utilisez. Mettez votre serveur en pause pour arrêter la facturation tout en gardant vos fichiers en sécurité."
+      "title": "Facturation Horaire",
+      "description": "Payez uniquement ce que vous utilisez. Mettez votre serveur en pause pour arrêter la facturation tout en gardant vos fichiers en sécurité."
     },
     "storage": {
       "title": "Stockage NVMe",
-      "description": "Temps de chargement et génération de chunks ultra-rapides avec des disques NVMe de qualité entreprise."
+      "description": "Temps de chargement et génération de chunks ultra-rapides grâce aux disques NVMe de qualité entreprise."
+    },
+    "autostop": {
+      "title": "Arrêt Automatique Intelligent",
+      "description": "Ne payez jamais pour un serveur vide. Notre système arrête automatiquement votre serveur lorsqu'aucun joueur n'est en ligne."
+    },
+    "files": {
+      "title": "Accès Complet aux Fichiers",
+      "description": "Gérez vos fichiers serveur directement depuis le navigateur avec notre gestionnaire de fichiers avancé et notre éditeur."
+    },
+    "console": {
+      "title": "Console en Direct",
+      "description": "Surveillez les logs de votre serveur en temps réel et exécutez des commandes instantanément depuis le tableau de bord."
+    }
+  },
+  "steps": {
+    "heading": "Lancez en quelques secondes",
+    "subheading": "Commencer avec Spawnly est facile et basé sur des crédits.",
+    "1": {
+      "title": "Créer un Compte",
+      "desc": "Inscrivez-vous gratuitement pour accéder au tableau de bord."
+    },
+    "2": {
+      "title": "Recharger des Crédits",
+      "desc": "Ajoutez des fonds en toute sécurité. Les crédits n'expirent jamais."
+    },
+    "3": {
+      "title": "Déployer le Serveur",
+      "desc": "Choisissez votre logiciel et votre RAM. Jouez instantanément."
+    }
+  },
+  "credits_system": {
+    "title": "Facturation Intelligente pour Joueurs Intelligents",
+    "subtitle": "Arrêtez de payer des abonnements mensuels pour des serveurs qui restent vides. Notre système de crédits vous fait économiser de l'argent.",
+    "recommended": "RECOMMANDÉ",
+    "examples": {
+      "weekend": {
+        "title": "Le Guerrier du Week-end",
+        "description": "Vous ne jouez que le week-end ? Éteignez votre serveur la semaine et économisez plus de 70 % par rapport à un hébergement mensuel.",
+        "saving": "Économisez ~70 % / mois"
+      },
+      "casual": {
+        "title": "Groupes Occasionnels",
+        "description": "Vous organisez une soirée jeu une fois par semaine ? Vous pourriez faire tourner un serveur performant pour quelques centimes par mois.",
+        "saving": "Économisez ~90 % / mois"
+      },
+      "dev": {
+        "title": "Développeurs & Tests",
+        "description": "Besoin de tester un modpack ou une configuration de plugin ? Lancez un serveur puissant pour 10 minutes, puis supprimez-le. Coût : 0,005 $.",
+        "saving": "Payez à la minute"
+      }
     }
   },
   "stats": {
     "uptime": "Disponibilité Plateforme",
     "storage": "Stockage NVMe",
     "protection": "Protection DDoS"
+  },
+  "cta": {
+    "title": "Prêt à commencer votre aventure ?",
+    "subtitle": "Rejoignez des milliers d'autres joueurs hébergés sur Spawnly dès aujourd'hui.",
+    "button": "Créer Mon Serveur Maintenant"
   }
 }

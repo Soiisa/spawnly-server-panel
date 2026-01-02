@@ -15,7 +15,7 @@
     "name_rules": "3-20 caracteres, solo letras, números y guiones. Debe ser único.",
     "cost_basis": "Basado en {{price}} créditos por GB por hora",
     "insufficient_credits": "Necesitas al menos {{cost}} créditos para este servidor",
-    "need_more": "Necesitas {{cost}} créditos más"
+    "need_more": "Necesitas al menos {{cost}} créditos"
   },
   "buttons": {
     "cancel": "Cancelar",
@@ -66,14 +66,14 @@
     "neoforge": "Cargador de mods moderno",
     "fabric": "Cargador de mods ligero",
     "quilt": "Cargador de mods impulsado por la comunidad",
-    "velocity": "Servidor Proxy",
-    "waterfall": "Servidor Proxy legado",
-    "modding": "Plataforma de mods",
+    "velocity": "Servidor proxy",
+    "waterfall": "Servidor proxy heredado",
+    "modding": "Plataforma de modding",
     "enhanced": "Mejorado con características de calidad de vida"
   },
   "units": {
     "gb": "GB",
     "credits": "créditos",
-    "credits_per_hour": "créditos/h"
+    "credits_per_hour": "créditos/hr"
   }
 }

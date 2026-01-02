@@ -15,20 +15,20 @@
     "name_rules": "3-20 caractères, lettres, chiffres et tirets uniquement. Doit être unique.",
     "cost_basis": "Basé sur {{price}} crédits par Go par heure",
     "insufficient_credits": "Vous avez besoin d'au moins {{cost}} crédits pour ce serveur",
-    "need_more": "Il vous manque {{cost}} crédits"
+    "need_more": "Vous avez besoin d'au moins {{cost}} crédits"
   },
   "buttons": {
     "cancel": "Annuler",
     "create": "Créer le Serveur",
     "creating": "Création...",
-    "fix_errors": "Corriger les erreurs de nom",
+    "fix_errors": "Corriger les Erreurs",
     "insufficient": "Crédits Insuffisants"
   },
   "errors": {
     "required": "Le nom du serveur est requis",
     "min_length": "Le nom doit comporter au moins 3 caractères",
-    "max_length": "Le nom doit comporter au maximum 20 caractères",
-    "invalid_chars": "Le nom ne peut contenir que des lettres, des chiffres et des tirets",
+    "max_length": "Le nom doit comporter au plus 20 caractères",
+    "invalid_chars": "Le nom ne peut contenir que des lettres, chiffres et tirets",
     "exists": "Un serveur avec ce nom existe déjà",
     "credits": "Vous n'avez pas assez de crédits pour ce serveur",
     "valid_name": "Veuillez entrer un nom de serveur valide"
@@ -66,13 +66,13 @@
     "neoforge": "Chargeur de mods moderne",
     "fabric": "Chargeur de mods léger",
     "quilt": "Chargeur de mods communautaire",
-    "velocity": "Serveur Proxy",
-    "waterfall": "Serveur Proxy (ancien)",
+    "velocity": "Serveur proxy",
+    "waterfall": "Ancien serveur proxy",
     "modding": "Plateforme de modding",
     "enhanced": "Amélioré avec des fonctionnalités de qualité de vie"
   },
   "units": {
-    "gb": "Gb",
+    "gb": "Go",
     "credits": "crédits",
     "credits_per_hour": "crédits/h"
   }

@@ -1,16 +1,16 @@
 {
   "title": "Einfache, transparente Preise",
-  "subtitle": "Wir glauben daran, dass du nur für Ressourcen zahlen solltest, die du auch nutzt.",
+  "subtitle": "Wir glauben daran, dass du nur für die Ressourcen zahlen solltest, die du nutzt.",
   "credit_explanation": "1 Credit = 1 GB RAM pro Stunde.",
   "calculator": {
-    "title": "Konfiguriere deinen Server",
-    "subtitle": "Schieben, um RAM-Zuweisung anzupassen",
+    "title": "Personalisiere deinen Server",
+    "subtitle": "Schiebe den Regler, um den RAM anzupassen",
     "ram_label": "Arbeitsspeicher (RAM)",
-    "capabilities": "Fähigkeiten:",
+    "capabilities": "Leistung:",
     "estimated_cost": "Geschätzte Kosten",
     "hourly_rate": "Stundensatz",
-    "deploy_btn": "Jetzt {{ram}}GB Server bereitstellen",
-    "no_card": "Keine Kreditkarte für die Anmeldung erforderlich."
+    "deploy_btn": "{{ram}}GB Server jetzt bereitstellen",
+    "no_card": "Keine Kreditkarte für die Registrierung erforderlich."
   },
   "recommendations": {
     "small": "Gut für kleine Vanilla-Server mit bis zu 5 Freunden. Nicht für Mods empfohlen.",
@@ -18,7 +18,7 @@
     "standard": "Großartig für Standard-Modpacks (100+ Mods) oder Vanilla-Server mit 20+ Spielern.",
     "heavy": "Ideal für schwere Modpacks (200+ Mods) oder größere Communities (40+ Spieler).",
     "very_heavy": "Starke Leistung für sehr schwere Modpacks (300+ Mods) oder 60+ Spieler.",
-    "massive": "Enterprise-Leistung für riesige Netzwerke, 100+ Spieler oder die anspruchsvollsten Modpacks."
+    "massive": "Leistung auf Unternehmensniveau für massive Netzwerke, 100+ Spieler oder die anspruchsvollsten Modpacks."
   },
   "features": {
     "ddos": "DDoS-Schutz inklusive",
@@ -30,6 +30,6 @@
   },
   "faq": {
     "title": "Wie funktioniert die Abrechnung?",
-    "answer": "Spawnly verwendet ein Credit-System. Du kaufst Credits (1 Credit ≈ 0,01 €), und wir ziehen sie jede Minute von deinem Guthaben ab, während dein Server <1>Läuft</1>. Wenn du deinen Server <3>Stoppst</3>, pausiert die Abrechnung sofort, aber deine Dateien bleiben kostenlos sicher gespeichert."
+    "answer": "Spawnly verwendet ein guthabenbasiertes System. Du kaufst Credits (1 Credit ≈ 0,01 €), und wir ziehen diese jede Minute von deinem Guthaben ab, solange dein Server <1>Läuft</1>. Wenn du deinen Server <3>Stoppst</3>, pausiert die Abrechnung sofort, aber deine Dateien bleiben kostenlos sicher gespeichert."
   }
 }

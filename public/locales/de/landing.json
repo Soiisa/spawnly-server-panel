@@ -1,14 +1,17 @@
 {
   "hero": {
+    "announcement": "🚀 Jetzt mit Support für Modpacks & Plugins",
+    "read_more": "Loslegen",
     "title_prefix": "Premium",
     "title_highlight": "Gameserver-Hosting",
-    "subtitle": "Erstelle Hochleistungs-Gameserver sofort. Erlebe einfache stündliche Abrechnung, Enterprise-Hardware und unbegrenzte Flexibilität.",
+    "subtitle": "Stelle High-Performance Gameserver sofort bereit. Erlebe einfache stündliche Abrechnung, Enterprise-Hardware und unbegrenzte Flexibilität.",
     "get_started": "Loslegen",
     "view_pricing": "Preise ansehen"
   },
   "features": {
     "label": "Funktionen",
     "heading": "Alles, was du zum Skalieren brauchst",
+    "subheading": "Alles, was du brauchst, um einen High-Performance Gameserver zu betreiben, direkt in ein modernes Panel integriert.",
     "instant": {
       "title": "Sofortige Bereitstellung",
       "description": "Dein Server ist Sekunden nach der Erstellung online. Keine Warteschlangen, keine manuelle Einrichtung."
@@ -18,13 +21,68 @@
       "description": "Zahle nur für das, was du nutzt. Pausiere deinen Server, um die Abrechnung zu stoppen, während deine Dateien sicher bleiben."
     },
     "storage": {
-      "title": "NVMe Speicher",
-      "description": "Blitzschnelle Ladezeiten und Chunk-Generierung mit Enterprise-Grade NVMe-Laufwerken."
+      "title": "NVMe-Speicher",
+      "description": "Blitzschnelle Ladezeiten und Chunk-Generierung mit NVMe-Laufwerken auf Unternehmensniveau."
+    },
+    "autostop": {
+      "title": "Intelligenter Auto-Stopp",
+      "description": "Zahle niemals für einen leeren Server. Unser System stoppt deinen Server automatisch, wenn keine Spieler online sind."
+    },
+    "files": {
+      "title": "Voller Dateizugriff",
+      "description": "Verwalte deine Serverdateien direkt im Browser mit unserem fortschrittlichen Dateimanager und Editor."
+    },
+    "console": {
+      "title": "Live-Konsole",
+      "description": "Überwache deine Server-Logs in Echtzeit und führe Befehle sofort über das Dashboard aus."
+    }
+  },
+  "steps": {
+    "heading": "Startklar in Sekunden",
+    "subheading": "Der Einstieg bei Spawnly ist einfach und guthabenbasiert.",
+    "1": {
+      "title": "Konto erstellen",
+      "desc": "Registriere ein kostenloses Konto, um auf das Dashboard zuzugreifen."
+    },
+    "2": {
+      "title": "Guthaben aufladen",
+      "desc": "Füge sicher Guthaben hinzu. Credits verfallen nie."
+    },
+    "3": {
+      "title": "Server bereitstellen",
+      "desc": "Wähle deine Software und RAM. Spiele sofort."
+    }
+  },
+  "credits_system": {
+    "title": "Smarte Abrechnung für smarte Spieler",
+    "subtitle": "Hör auf, monatliche Gebühren für Server zu zahlen, die leer stehen. Unser Credit-System spart dir Geld.",
+    "recommended": "EMPFOHLEN",
+    "examples": {
+      "weekend": {
+        "title": "Der Wochenend-Krieger",
+        "description": "Du spielst nur am Wochenende? Schalte deinen Server unter der Woche aus und spare über 70% im Vergleich zu monatlichem Hosting.",
+        "saving": "Spare ~70% / Monat"
+      },
+      "casual": {
+        "title": "Gelegenheitsgruppen",
+        "description": "Hostest du einmal pro Woche einen Spieleabend? Du könntest einen High-Performance Server für Pennies im Monat betreiben.",
+        "saving": "Spare ~90% / Monat"
+      },
+      "dev": {
+        "title": "Entwickler & Tests",
+        "description": "Musst du ein Modpack oder eine Plugin-Konfiguration testen? Starte einen leistungsstarken Server für 10 Minuten, dann lösche ihn. Kosten: 0,005 $.",
+        "saving": "Zahle pro Minute"
+      }
     }
   },
   "stats": {
     "uptime": "Plattform-Verfügbarkeit",
-    "storage": "NVMe Speicher",
+    "storage": "NVMe-Speicher",
     "protection": "DDoS-Schutz"
+  },
+  "cta": {
+    "title": "Bereit, deine Reise zu beginnen?",
+    "subtitle": "Schließe dich heute tausenden anderen Spielern an, die auf Spawnly hosten.",
+    "button": "Meinen Server jetzt erstellen"
   }
 }

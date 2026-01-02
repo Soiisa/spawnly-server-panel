@@ -6,7 +6,7 @@
   "buttons": {
     "google_signup": "S'inscrire avec Google",
     "create_account": "Créer un Compte",
-    "creating_account": "Création du Compte...",
+    "creating_account": "Création du compte...",
     "sign_in": "Se connecter"
   },
   "divider": {
