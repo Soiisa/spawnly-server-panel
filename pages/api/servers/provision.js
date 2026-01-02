@@ -453,9 +453,6 @@ write_files:
       ff02::2 ip6-allrouters
   
   # --- THANOS & CODEX SCRIPTS ---
-  # FIX: Correct namespace escaping (\\\\ -> \\ in JS -> \\ in file = \\ in PHP)
-  # Wait, standard PHP namespaces use a single backslash. 
-  # So \\ in JS -> \ in file.
   - path: /opt/tools/prune.php
     permissions: '0755'
     content: |
@@ -736,6 +733,13 @@ write_files:
               fi
               if [ -f "user_jvm_args.txt" ]; then rm user_jvm_args.txt; fi
               setup_generic_start_script
+              
+              # --- FIX: Inject Flags into user_jvm_args.txt AFTER setup logic ---
+              # This ensures the file exists (created by install) or we create it
+              echo "[Startup] Injecting AIKAR flags into user_jvm_args.txt (Modpack Mode)..."
+              echo "$AIKAR_FLAGS" >> user_jvm_args.txt
+              chown minecraft:minecraft user_jvm_args.txt || true
+              # ------------------------------------------------------------------
               
           elif [ "$SOFTWARE" = "forge" ] || [ "$SOFTWARE" = "neoforge" ]; then
              echo "[Startup] Downloading Forge/NeoForge Installer..."
