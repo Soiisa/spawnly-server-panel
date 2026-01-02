@@ -1,3 +1,4 @@
+// pages/api/servers/provision.js
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
@@ -452,7 +453,7 @@ write_files:
       ff02::1 ip6-allnodes
       ff02::2 ip6-allrouters
   
-  # --- THANOS & CODEX SCRIPTS ---
+  # --- THANOS OPTIMIZATION SCRIPT ---
   - path: /opt/tools/prune.php
     permissions: '0755'
     content: |
@@ -468,48 +469,13 @@ write_files:
       $thanos->setMinInhabitedTime(0); 
       $removed = $thanos->prune($worldDir);
       echo "[Thanos] Removed $removed chunks.\\n";
-  
-  # FIX: Rewrote analyzer to use Codex v3 'Detective' API (MinecraftReportAnalyzer is deprecated)
-  - path: /opt/tools/analyze.php
-    permissions: '0755'
-    content: |
-      <?php
-      require '/opt/tools/vendor/autoload.php';
-      use Aternos\\Codex\\Log\\File\\PathLogFile;
-      use Aternos\\Codex\\Minecraft\\Detective\\Detective;
-      
-      $logPath = $argv[1] ?? null;
-      if (!$logPath || !file_exists($logPath)) exit(json_encode(['error' => 'No log found']));
-      
-      $logFile = new PathLogFile($logPath);
-      $detective = new Detective();
-      $detective->setLogFile($logFile);
-      
-      // Auto-detect log type (Vanilla, Forge, etc.) and analyze
-      $log = $detective->detect();
-      $log->parse();
-      $analysis = $log->analyse();
-      
-      $problems = [];
-      foreach ($analysis->getProblems() as $problem) {
-          $solutions = [];
-          foreach ($problem->getSolutions() as $solution) {
-              $solutions[] = $solution->getMessage();
-          }
-          $problems[] = [
-              'message' => $problem->getMessage(),
-              'solutions' => $solutions
-          ];
-      }
-      
-      echo json_encode(['problems' => $problems]);
-  # ------------------------------
+  # ----------------------------------
 
   - path: /usr/local/bin/mc-sync.sh
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -eo pipefail
+      set -u
       
       SRC="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
@@ -520,11 +486,6 @@ write_files:
       export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
       export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
       export AWS_REGION="${s3Config.AWS_REGION || 'eu-central-1'}"
-      
-      if [ -z "$BUCKET" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-        echo "[mc-sync] Missing S3 configuration, skipping sync."
-        exit 0
-      fi
       
       echo "[mc-sync] Processing..."
       cd "$SRC"
@@ -537,7 +498,7 @@ write_files:
       # ---------------------------
       
       SYNC_EXCLUDES=""
-      WORLD_NAME=$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\\r')
+      WORLD_NAME=$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\\r') || WORLD_NAME="world"
       [ -z "$WORLD_NAME" ] && WORLD_NAME="world"
 
       if [ "$IS_MODPACK" = "true" ]; then
@@ -586,19 +547,25 @@ write_files:
           --exclude 'libraries/*' \
           $SYNC_EXCLUDES \
           . "s3://$BUCKET/$SERVER_PATH/"
+      
+      EXIT_CODE=$?
       set +f
 
-      EXIT_CODE=$?
+      # --- FAIL-SAFE TEARDOWN ---
       if [ $EXIT_CODE -eq 0 ]; then
         echo "[mc-sync] Sync complete. Notifying API for teardown..."
-        curl -X POST -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${escapedRconPassword}" \
-            -d '{"serverId": "${serverId}", "sync_complete": true}' \
-            "${appBaseUrl.replace(/\/+$/, '')}/api/servers/update-status" || true
+        SYNC_STATUS="true"
       else
-        echo "[mc-sync] Sync failed with exit code $EXIT_CODE"
-        exit $EXIT_CODE
+        echo "[mc-sync] Sync FAILED with exit code $EXIT_CODE. Forcing teardown anyway."
+        SYNC_STATUS="false"
       fi
+
+      curl -X POST -H "Content-Type: application/json" \
+          -H "Authorization: Bearer ${escapedRconPassword}" \
+          -d "{\\"serverId\\": \\"${serverId}\\", \\"sync_complete\\": $SYNC_STATUS}" \
+          "${appBaseUrl.replace(/\/+$/, '')}/api/servers/update-status" || true
+      
+      exit $EXIT_CODE
   - path: /usr/local/bin/mc-sync-from-s3.sh
     permissions: '0755'
     content: |
@@ -741,11 +708,11 @@ write_files:
               if [ -f "user_jvm_args.txt" ]; then rm user_jvm_args.txt; fi
               setup_generic_start_script
               
-              # --- FIX: Inject Flags into user_jvm_args.txt AFTER setup logic ---
+              # --- Inject Flags into user_jvm_args.txt (Modpack Mode) ---
               echo "[Startup] Injecting AIKAR flags into user_jvm_args.txt (Modpack Mode)..."
               echo "$AIKAR_FLAGS" >> user_jvm_args.txt
               chown minecraft:minecraft user_jvm_args.txt || true
-              # ------------------------------------------------------------------
+              # ----------------------------------------------------------
               
           elif [ "$SOFTWARE" = "forge" ] || [ "$SOFTWARE" = "neoforge" ]; then
              echo "[Startup] Downloading Forge/NeoForge Installer..."
@@ -841,7 +808,6 @@ write_files:
       Environment=VERSION=${escapedVersion}
       Environment=SERVER_ID=${serverId}
       Environment=NEXTJS_API_URL=${appBaseUrl.replace(/\/+$/, '')}/api/servers/log
-      Environment=CRASH_API_URL=${appBaseUrl.replace(/\/+$/, '')}/api/servers/crash-report
       Environment=RCON_PASSWORD=${escapedRconPassword}
       Environment=HEAP_GB=${heapGb}
       Environment="AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
@@ -960,15 +926,14 @@ runcmd:
   # --- FIREWALL CONFIGURATION ---
   - apt-get update && apt-get install -y ufw php-cli php-xml php-mbstring unzip
   
-  # --- THANOS & CODEX INSTALL ---
-  # FIX: Install correct package (aternos/codex-minecraft)
+  # --- THANOS INSTALL (Reduced) ---
   - |
     mkdir -p /opt/tools
     cd /opt/tools
     export COMPOSER_ALLOW_SUPERUSER=1
     export HOME=/root
     curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-    composer require aternos/thanos aternos/codex-minecraft
+    composer require aternos/thanos
   # ------------------------------
 
   - ufw default deny incoming
