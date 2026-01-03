@@ -1,3 +1,4 @@
+// pages/admin/index.js
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
@@ -11,6 +12,7 @@ import {
   ArrowTopRightOnSquareIcon,
   UsersIcon,
   ServerIcon,
+  ChatBubbleLeftRightIcon // <--- IMPORTED
 } from "@heroicons/react/24/outline";
 
 export default function AdminDashboard() {
@@ -52,7 +54,6 @@ export default function AdminDashboard() {
     if (showLoading) setLoading(false);
   };
 
-  // Helper to calculate 24h revenue from the chart data
   const revenue24h = useMemo(() => {
     if (!stats?.economics?.chart) return 0;
     return stats.economics.chart.reduce((acc, curr) => acc + (curr.value || 0), 0);
@@ -103,19 +104,30 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        <Link 
-            href="/admin/live" 
-            target="_blank"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm shadow-lg shadow-indigo-500/20"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-            </span>
-            <span className="hidden sm:inline">Launch Live View</span>
-            <span className="sm:hidden">Live</span>
-            <ArrowTopRightOnSquareIcon className="h-4 w-4 opacity-70" />
-        </Link>
+        <div className="flex items-center gap-3">
+            {/* Added Support Link */}
+            <Link 
+                href="/admin/support" 
+                className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
+            >
+                <ChatBubbleLeftRightIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Support</span>
+            </Link>
+
+            <Link 
+                href="/admin/live" 
+                target="_blank"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm shadow-lg shadow-indigo-500/20"
+            >
+                <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                </span>
+                <span className="hidden sm:inline">Launch Live View</span>
+                <span className="sm:hidden">Live</span>
+                <ArrowTopRightOnSquareIcon className="h-4 w-4 opacity-70" />
+            </Link>
+        </div>
       </header>
       
       {/* Main Content */}

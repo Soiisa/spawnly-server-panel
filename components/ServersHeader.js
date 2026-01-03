@@ -8,7 +8,8 @@ import {
   CreditCardIcon, 
   SunIcon,
   MoonIcon,
-  Cog6ToothIcon // <--- IMPORTED
+  Cog6ToothIcon,
+  ChatBubbleLeftRightIcon // <--- IMPORTED
 } from '@heroicons/react/24/outline';
 import CreditBalance from "./CreditBalance";
 import { useDarkMode } from '../pages/_app';
@@ -18,13 +19,13 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
   const { isDarkMode, toggleDarkMode } = useDarkMode();
   const { t } = useTranslation('common');
 
-  const isActive = (path) => router.pathname === path;
+  const isActive = (path) => router.pathname.startsWith(path);
 
-  // Add Settings to the navLinks array
   const navLinks = [
     { name: t('nav.dashboard'), href: '/dashboard', icon: ServerIcon },
     { name: t('nav.billing'), href: '/credits', icon: CreditCardIcon },
-    { name: t('nav.settings', 'Settings'), href: '/settings', icon: Cog6ToothIcon }, // <--- ADDED
+    { name: 'Support', href: '/support', icon: ChatBubbleLeftRightIcon }, // <--- ADDED
+    { name: t('nav.settings', 'Settings'), href: '/settings', icon: Cog6ToothIcon },
   ];
 
   return (
@@ -68,7 +69,6 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
 
           {/* Right Side: Toggle, Credits & User */}
           <div className="flex items-center gap-4">
-            
             <button
               onClick={toggleDarkMode}
               className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
@@ -76,11 +76,8 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
             >
               {isDarkMode ? <SunIcon className="w-6 h-6" /> : <MoonIcon className="w-6 h-6" />}
             </button>
-            
             <CreditBalance credits={credits} isLoading={isLoading} />
-            
             <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 hidden sm:block"></div>
-
             <div className="flex items-center gap-3 pl-2">
               <div className="hidden sm:flex flex-col items-end">
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-none">
@@ -93,13 +90,11 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
                   {t('nav.logout')}
                 </button>
               </div>
-              
               <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-white dark:ring-slate-800 shadow-sm">
                 {user?.email?.charAt(0).toUpperCase()}
               </div>
             </div>
           </div>
-
         </div>
       </div>
     </header>
