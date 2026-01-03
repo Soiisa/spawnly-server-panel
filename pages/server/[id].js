@@ -456,7 +456,7 @@ export default function ServerDetailPage({ initialServer }) {
         .from('servers')
         .update({ 
           ram: newRam,
-          cost_per_hour: newCost 
+          cost_per_hour: newRam 
         })
         .eq('id', server.id);
 
@@ -466,7 +466,7 @@ export default function ServerDetailPage({ initialServer }) {
       setServer(prev => ({ 
         ...prev, 
         ram: newRam,
-        cost_per_hour: newCost 
+        cost_per_hour: newRam 
       }));
       
       setEditingRam(false);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -11,7 +11,6 @@ import {
   ArrowTopRightOnSquareIcon,
   UsersIcon,
   ServerIcon,
-  BanknotesIcon
 } from "@heroicons/react/24/outline";
 
 export default function AdminDashboard() {
@@ -22,17 +21,11 @@ export default function AdminDashboard() {
 
   const router = useRouter();
 
-  // --- UPDATED: Polling Logic ---
   useEffect(() => {
-    // 1. Initial Fetch
     fetchData();
-
-    // 2. Set up Interval (every 5 seconds)
     const interval = setInterval(() => {
-        fetchData(false); // Pass false to avoid showing "Loading..." spinner on updates
+        fetchData(false);
     }, 5000);
-
-    // 3. Cleanup on unmount
     return () => clearInterval(interval);
   }, []);
 
@@ -58,6 +51,12 @@ export default function AdminDashboard() {
     
     if (showLoading) setLoading(false);
   };
+
+  // Helper to calculate 24h revenue from the chart data
+  const revenue24h = useMemo(() => {
+    if (!stats?.economics?.chart) return 0;
+    return stats.economics.chart.reduce((acc, curr) => acc + (curr.value || 0), 0);
+  }, [stats]);
 
   if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-mono">Loading Command...</div>;
 
@@ -127,21 +126,21 @@ export default function AdminDashboard() {
           <StatCard 
              title="Est. Profit / Hour" 
              value={
-                <span className={`transition-colors duration-500 ${stats?.profit?.profitPerHour >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                   {stats?.profit?.profitPerHour >= 0 ? '+' : ''}{stats?.profit?.profitPerHour.toFixed(3)}€
+                <span className={`transition-colors duration-500 ${stats?.economics?.profit_hr >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                   {stats?.economics?.profit_hr >= 0 ? '+' : ''}{stats?.economics?.profit_hr?.toFixed(3)}€
                 </span>
              }
              subValue={
                <div className="flex gap-2 text-xs mt-1">
-                 <span className="text-green-600/70">In: {stats?.profit?.revenuePerHour.toFixed(3)}€</span>
-                 <span className="text-red-600/70">Out: {stats?.profit?.costPerHour.toFixed(3)}€</span>
+                 <span className="text-green-600/70">In: {stats?.economics?.revenue_hr?.toFixed(3)}€</span>
+                 <span className="text-red-600/70">Out: {stats?.economics?.cost_hr?.toFixed(3)}€</span>
                </div>
              }
           />
-          <StatCard title="Active Servers" value={`${stats?.servers.active} / ${stats?.servers.total}`} />
-          <StatCard title="Total Users" value={stats?.users} />
-          <StatCard title="24h Revenue" value={`${stats?.financials.revenue24h.toFixed(0)} CR`} />
-          <StatCard title="Total Liability" value={`${(stats?.financials.liability || 0).toFixed(0)} CR`} />
+          <StatCard title="Active Servers" value={`${stats?.overview?.active_nodes} / ${stats?.overview?.servers}`} />
+          <StatCard title="Total Users" value={stats?.overview?.users} />
+          <StatCard title="24h Revenue" value={`${revenue24h.toFixed(0)} CR`} />
+          <StatCard title="Total Liability" value={`${(stats?.overview?.liability || 0).toFixed(0)} CR`} />
         </div>
 
         {/* Content Area */}
