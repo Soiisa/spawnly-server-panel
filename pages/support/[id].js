@@ -11,6 +11,7 @@ export default function TicketDetail() {
   const router = useRouter();
   const { id } = router.query;
   const [user, setUser] = useState(null);
+  const [credits, setCredits] = useState(0); // <--- ADDED STATE
   const [ticket, setTicket] = useState(null);
   const [messages, setMessages] = useState([]);
   const [reply, setReply] = useState('');
@@ -27,6 +28,15 @@ export default function TicketDetail() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return router.push('/login');
       setUser(session.user);
+
+      // <--- ADDED CREDITS FETCH ---
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('credits')
+        .eq('id', session.user.id)
+        .single();
+      if (profile) setCredits(profile.credits);
+      // ----------------------------
 
       const { data: tData } = await supabase.from('support_tickets').select('*').eq('id', id).single();
       if (tData) setTicket(tData);
@@ -87,7 +97,8 @@ export default function TicketDetail() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col font-sans">
-      <ServersHeader user={user} credits={0} />
+      {/* <--- UPDATED PROP: credits={credits} (was 0) */}
+      <ServersHeader user={user} credits={credits} />
       
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8 flex flex-col h-[calc(100vh-64px)]">
         
@@ -213,11 +224,10 @@ export default function TicketDetail() {
   );
 }
 
-// --- FIX IS HERE: ADDED getStaticPaths ---
 export async function getStaticPaths() {
   return {
     paths: [],
-    fallback: 'blocking', // Allows pages to be generated on demand
+    fallback: 'blocking',
   };
 }
 

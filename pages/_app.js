@@ -1,37 +1,33 @@
 // pages/_app.js
 import { useState, useEffect, createContext, useContext } from 'react';
-import { appWithTranslation } from 'next-i18next'; // <--- IMPORTED
+import { appWithTranslation } from 'next-i18next';
 import '../styles/globals.css';
 import CookieBanner from '../components/CookieBanner';
+import SupportWidget from '../components/SupportWidget'; // <--- IMPORT THIS
 
-// 1. Create Context
 export const DarkModeContext = createContext();
 
-// 2. Create Hook for easier consumption
 export function useDarkMode() {
   return useContext(DarkModeContext);
 }
 
-// 3. Create Provider Component
 function DarkModeProvider({ children }) {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [mounted, setMounted] = useState(false); 
 
   useEffect(() => {
-    // Check local storage for theme preference
+    setMounted(true);
+
     const storedTheme = localStorage.getItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    // Set initial state: stored preference OR system preference
     const initialDarkMode = storedTheme === 'dark' || (storedTheme === null && prefersDark);
     setIsDarkMode(initialDarkMode);
     
-    // Apply class on initial load
     if (initialDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-
   }, []);
 
   const toggleDarkMode = () => {
@@ -48,10 +44,9 @@ function DarkModeProvider({ children }) {
     });
   };
 
-  const contextValue = {
-    isDarkMode,
-    toggleDarkMode,
-  };
+  const contextValue = { isDarkMode, toggleDarkMode };
+
+  if (!mounted) return <div style={{ visibility: 'hidden' }}></div>;
 
   return (
     <DarkModeContext.Provider value={contextValue}>
@@ -64,10 +59,10 @@ function App({ Component, pageProps }) {
   return (
     <DarkModeProvider>
       <Component {...pageProps} />
+      <SupportWidget /> {/* <--- ADD THIS HERE */}
       <CookieBanner />
     </DarkModeProvider>
   );
 }
 
-// Wrap the App component with translation provider
 export default appWithTranslation(App);
