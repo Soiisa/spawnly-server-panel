@@ -23,7 +23,9 @@ const hetznerShutdown = async (hetznerId) => {
     }
 };
 
-async function deductCredits(supabaseAdmin, userId, amount, description, sessionId) { 
+// MODIFIED: Now supports Session-Based Aggregation
+async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds) { 
+  // 1. Update User Balance (Always Incremental)
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
   if (error || profile.credits < amount) {
     throw new Error('Insufficient credits');
@@ -32,14 +34,52 @@ async function deductCredits(supabaseAdmin, userId, amount, description, session
   const newCredits = profile.credits - amount;
   await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
 
-  await supabaseAdmin.from('credit_transactions').insert({
-    user_id: userId,
-    amount: -amount,
-    type: 'usage',
-    description,
-    created_at: new Date().toISOString(),
-    session_id: sessionId
-  });
+  // 2. Update Transaction History (Aggregated)
+  let existingTx = null;
+
+  // Try to find an open transaction for this session
+  if (sessionId) {
+      const { data } = await supabaseAdmin
+        .from('credit_transactions')
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('type', 'usage')
+        .single();
+      existingTx = data;
+  }
+
+  if (existingTx) {
+      // UPDATE existing row
+      const currentAmount = existingTx.amount; 
+      const newAmount = currentAmount - amount; // Add more negative debt
+
+      // Parse current seconds from description to keep the total accurate
+      // Format: "Runtime charge for server <ID> (<NUM> seconds)"
+      const timeMatch = existingTx.description.match(/\((\d+)\s*seconds\)/);
+      let totalSeconds = billableSeconds;
+      if (timeMatch && timeMatch[1]) {
+          totalSeconds += parseInt(timeMatch[1], 10);
+      }
+
+      const newDescription = `Runtime charge for server ${serverId} (${totalSeconds} seconds)`;
+
+      await supabaseAdmin.from('credit_transactions').update({
+        amount: newAmount,
+        description: newDescription,
+        // We do NOT update created_at, so it serves as the "Session Start" time
+      }).eq('id', existingTx.id);
+
+  } else {
+      // INSERT new row (Start of Session)
+      await supabaseAdmin.from('credit_transactions').insert({
+        user_id: userId,
+        amount: -amount,
+        type: 'usage',
+        description: `Runtime charge for server ${serverId} (${billableSeconds} seconds)`,
+        created_at: new Date().toISOString(),
+        session_id: sessionId
+      });
+  }
 }
 
 export default async function handler(req, res) {
@@ -114,7 +154,8 @@ export default async function handler(req, res) {
 
       // Deduct Credits
       try {
-        await deductCredits(supabaseAdmin, server.user_id, cost, `Runtime charge for server ${server.id} (${billableSeconds} seconds)`, server.current_session_id);
+        // Updated Call: Pass metadata separately for aggregation logic
+        await deductCredits(supabaseAdmin, server.user_id, cost, server.id, server.current_session_id, billableSeconds);
         processedCount++;
       } catch (deductErr) {
         console.error(`Failed to deduct credits for user ${server.user_id} server ${server.id}:`, deductErr && deductErr.message);
