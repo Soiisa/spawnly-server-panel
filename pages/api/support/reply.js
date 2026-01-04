@@ -16,26 +16,24 @@ export default async function handler(req, res) {
   const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
   if (authError || !user) return res.status(401).json({ error: 'Unauthorized' });
 
-  // 2. Parse Request
   const { ticketId, message, isAdminAction, statusOverride } = req.body;
 
-  if (!ticketId || !message) return res.status(400).json({ error: 'Missing fields' });
+  if (!ticketId || (!message && statusOverride !== 'Closed')) {
+      return res.status(400).json({ error: 'Missing fields' });
+  }
 
   try {
-    // 3. Admin Check (Database Lookup)
-    // Query the 'profiles' table to see if this user is an admin
+    // 3. Admin Check
     const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('is_admin')
       .eq('id', user.id)
       .single();
     
-    // Check if profile exists and is_admin is explicitly true
     const isActuallyAdmin = profile && profile.is_admin === true;
     const isStaffReply = isAdminAction && isActuallyAdmin;
 
     // 4. Permission Check
-    // If you are NOT an admin acting as staff, you can only touch your own tickets
     if (!isStaffReply) {
         const { data: ticket } = await supabaseAdmin
             .from('support_tickets')
@@ -43,38 +41,45 @@ export default async function handler(req, res) {
             .eq('id', ticketId)
             .single();
         
-        // If ticket doesn't exist OR you don't own it -> 403
         if (!ticket || ticket.user_id !== user.id) {
-            return res.status(403).json({ error: 'Forbidden: You do not own this ticket' });
+            return res.status(403).json({ error: 'Forbidden' });
         }
     }
 
     // 5. Insert Message
-    const { error: msgError } = await supabaseAdmin
-      .from('support_messages')
-      .insert({
-        ticket_id: ticketId,
-        user_id: user.id,
-        message,
-        is_staff_reply: isStaffReply
-      });
-
-    if (msgError) throw msgError;
-
-    // 6. Update Ticket Status
-    let newStatus = isStaffReply ? 'Answered' : 'Customer Reply';
-    
-    // Allow admins to override status (e.g., to "Closed")
-    if (isStaffReply && statusOverride) {
-        newStatus = statusOverride;
+    if (message) {
+        const { error: msgError } = await supabaseAdmin
+        .from('support_messages')
+        .insert({
+            ticket_id: ticketId,
+            user_id: user.id,
+            message,
+            is_staff_reply: isStaffReply
+        });
+        if (msgError) throw msgError;
     }
+
+    // 6. Determine Updates
+    const updatePayload = {
+        updated_at: new Date().toISOString()
+    };
+
+    // LOGIC:
+    // 1. If statusOverride is provided (e.g. "Closed"), use it.
+    // 2. If Admin replies, set to 'Ongoing'.
+    // 3. If User replies, DO NOT change status (keep it as Open or Ongoing).
+    
+    if (statusOverride) {
+        updatePayload.status = statusOverride;
+    } else if (isStaffReply) {
+        updatePayload.status = 'Ongoing';
+    }
+    // Else: We simply omit the 'status' field from updatePayload, 
+    // effectively preserving the current database value.
 
     await supabaseAdmin
       .from('support_tickets')
-      .update({ 
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', ticketId);
 
     return res.status(200).json({ success: true });
