@@ -16,9 +16,11 @@ export default async function handler(req, res) {
   const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
   if (authError || !user) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { ticketId, message, isAdminAction, statusOverride } = req.body;
+  // 2. Parse Request
+  const { ticketId, message, isAdminAction, statusOverride, attachments } = req.body;
 
-  if (!ticketId || (!message && statusOverride !== 'Closed')) {
+  // Validate: Must have ticketId AND (message OR status change OR attachments)
+  if (!ticketId || (!message && statusOverride !== 'Closed' && (!attachments || attachments.length === 0))) {
       return res.status(400).json({ error: 'Missing fields' });
   }
 
@@ -47,35 +49,39 @@ export default async function handler(req, res) {
     }
 
     // 5. Insert Message
-    if (message) {
+    // Only insert if there is actual content (text or files)
+    if (message || (attachments && attachments.length > 0)) {
         const { error: msgError } = await supabaseAdmin
         .from('support_messages')
         .insert({
             ticket_id: ticketId,
             user_id: user.id,
-            message,
+            message: message || '', // Allow empty text if sending file
+            attachments: attachments || [], 
             is_staff_reply: isStaffReply
         });
         if (msgError) throw msgError;
     }
 
-    // 6. Determine Updates
-    const updatePayload = {
-        updated_at: new Date().toISOString()
-    };
-
-    // LOGIC:
-    // 1. If statusOverride is provided (e.g. "Closed"), use it.
-    // 2. If Admin replies, set to 'Ongoing'.
-    // 3. If User replies, DO NOT change status (keep it as Open or Ongoing).
+    // 6. Update Ticket Status
+    let newStatus = isStaffReply ? 'Ongoing' : 'Open';
     
     if (statusOverride) {
-        updatePayload.status = statusOverride;
-    } else if (isStaffReply) {
-        updatePayload.status = 'Ongoing';
+        if (isStaffReply) {
+            newStatus = statusOverride;
+        } else if (statusOverride === 'Closed') {
+            newStatus = 'Closed';
+        }
+    } else if (!isStaffReply) {
+        newStatus = 'Open';
     }
-    // Else: We simply omit the 'status' field from updatePayload, 
-    // effectively preserving the current database value.
+
+    const updatePayload = { updated_at: new Date().toISOString() };
+    
+    // Only update status if explicitly changed or valid default logic applies
+    if (statusOverride || isStaffReply || (!isStaffReply && !statusOverride)) {
+        updatePayload.status = newStatus;
+    }
 
     await supabaseAdmin
       .from('support_tickets')
