@@ -24,5 +24,31 @@
   },
   "tooltips": {
     "payment_soon": "Payment integration coming soon"
+  },
+  "modal": {
+    "title": "Add Credits",
+    "subtitle": "Select an amount to recharge.",
+    "current_offer": "Current Offer",
+    "bonus_active": "{{percent}}% BONUS ACTIVE",
+    "credits_received": "Credits Received",
+    "bonus_breakdown": "{{base}} + {{bonus}} Bonus",
+    "drag_adjust": "Drag to Adjust",
+    "quick_select": "Quick Select"
+  },
+  "checkout": {
+    "summary_title": "Order Summary",
+    "amount": "Amount",
+    "bonus_applied": "Bonus Applied",
+    "total": "Total",
+    "or_card": "Or pay with card",
+    "pay_button": "Pay €{{amount}}",
+    "continue_btn": "Continue to Payment",
+    "refund_waiver": "I acknowledge that by purchasing immediate access to digital credits, I waive my 14-day right of withdrawal.",
+    "payment_details": "Payment Details",
+    "change_amount": "Change Amount",
+    "secure_msg": "Secure Payment via Stripe"
+  },
+  "errors": {
+    "payment_init_failed": "Failed to initialize payment processor"
   }
 }

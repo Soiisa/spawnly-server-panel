@@ -40,5 +40,12 @@
     "security": "Security",
     "security_desc": "Manage your password and account security",
     "change_password": "Change Password"
+  },
+  "support": {
+    "contact": "Contact Support",
+    "tooltip": "Support & Help"
+  },
+  "actions": {
+    "cancel": "Cancel"
   }
 }

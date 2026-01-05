@@ -206,20 +206,35 @@
     "refresh": "Refresh List",
     "settings_title": "Auto-Backup Configuration",
     "enable_auto": "Enable Auto-Backup",
+    "enable_auto_desc": "Runs automatically when server stops.",
     "frequency": "Frequency (Hours)",
+    "frequency_desc": "Minimum time between backups.",
     "retention": "Retention (Count)",
+    "max": "Max",
     "save_settings": "Save Settings",
+    "saving": "Saving...",
     "empty_title": "No backups found",
     "empty_desc": "Create a backup manually or enable auto-backups.",
+    "badge_auto": "Auto",
     "restore": "Restore",
     "stop_to_restore": "Stop to Restore",
     "pending_title": "Restore Pending",
     "pending_desc": "A backup restore is queued. The next time you click Start, the server will be wiped and restored from:",
+    "tooltips": {
+      "must_stop": "Server must be STOPPED to queue a restore.",
+      "queue_restore": "Queue Restore"
+    },
     "alerts": {
       "started": "Backup started! It will appear in the list shortly.",
       "queued": "Restore Queued! The backup will be applied automatically when you next START the server.",
       "stop_required": "Server must be FULLY STOPPED to queue a restore.",
-      "confirm_restore": "WARNING: This will queue a restore.\n\nThe NEXT time you click 'Start', your current files will be DELETED and replaced with this backup.\n\nContinue?"
+      "confirm_restore": "WARNING: This will queue a restore.\n\nThe NEXT time you click 'Start', your current files will be DELETED and replaced with this backup.\n\nContinue?",
+      "settings_saved": "Backup settings saved successfully."
+    },
+    "errors": {
+      "create_failed": "Failed to start backup",
+      "save_failed": "Failed to save settings",
+      "restore_failed": "Restore request failed"
     }
   },
   "players": {
