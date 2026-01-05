@@ -1,4 +1,3 @@
-// pages/support/[id].js
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/router';
@@ -11,10 +10,12 @@ import {
     XMarkIcon,
     DocumentIcon 
 } from '@heroicons/react/24/solid';
+import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 export default function TicketDetail() {
   const router = useRouter();
+  const { t } = useTranslation('support');
   const { id } = router.query;
   const [user, setUser] = useState(null);
   const [credits, setCredits] = useState(0);
@@ -83,7 +84,7 @@ export default function TicketDetail() {
 
         if (uploadError) {
             console.error('Upload failed:', uploadError);
-            alert(`Failed to upload ${file.name}`);
+            alert(t('detail.upload_failed', { name: file.name, defaultValue: `Failed to upload ${file.name}` }));
             continue;
         }
 
@@ -129,7 +130,7 @@ export default function TicketDetail() {
   };
 
   const markResolved = async () => {
-    if(!confirm("Are you sure you want to close this ticket?")) return;
+    if(!confirm(t('detail.confirm_close', { defaultValue: "Are you sure you want to close this ticket?" }))) return;
     setSending(true);
     const { data: { session } } = await supabase.auth.getSession();
     await fetch('/api/support/reply', {
@@ -166,7 +167,7 @@ export default function TicketDetail() {
     );
   };
 
-  if (!ticket) return <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex items-center justify-center text-gray-500">Loading conversation...</div>;
+  if (!ticket) return <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex items-center justify-center text-gray-500">{t('detail.loading', { defaultValue: 'Loading conversation...' })}</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 flex flex-col font-sans">
@@ -179,14 +180,14 @@ export default function TicketDetail() {
                 <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
                     <span className="bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded text-gray-600 dark:text-gray-300 font-medium">#{id.slice(0,8)}</span>
                     <span>•</span>
-                    <span>{ticket.category}</span>
+                    <span>{t(`categories.${ticket.category.toLowerCase().replace(' ', '_')}`, { defaultValue: ticket.category })}</span>
                 </div>
             </div>
             <div className="flex items-center gap-3">
                 {ticket.status !== 'Closed' && (
                     <button onClick={markResolved} disabled={sending} className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-900/10 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800/30 rounded-lg text-sm font-medium hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors">
                         <CheckCircleIcon className="w-4 h-4" />
-                        Mark as Resolved
+                        {t('detail.mark_resolved', { defaultValue: 'Mark as Resolved' })}
                     </button>
                 )}
                 <div className={`px-4 py-1.5 rounded-full text-xs font-bold border flex items-center gap-2 shadow-sm ${
@@ -195,7 +196,7 @@ export default function TicketDetail() {
                     'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800'
                 }`}>
                     <span className={`w-2 h-2 rounded-full ${ticket.status === 'Open' ? 'bg-orange-500 animate-pulse' : ticket.status === 'Closed' ? 'bg-gray-400' : 'bg-indigo-500'}`}></span>
-                    {ticket.status === 'Open' ? 'Waiting for Staff' : ticket.status}
+                    {ticket.status === 'Open' ? t('detail.waiting_staff', { defaultValue: 'Waiting for Staff' }) : t(`status.${ticket.status.toLowerCase().replace(' ', '_')}`, { defaultValue: ticket.status })}
                 </div>
             </div>
         </div>
@@ -216,7 +217,7 @@ export default function TicketDetail() {
                    </div>
                 )}
                 <div className={`max-w-[85%] sm:max-w-[75%]`}>
-                  {!isMe && showAvatar && <span className="text-[10px] ml-1 mb-1 block text-gray-500 dark:text-gray-400 font-medium">{isStaff ? 'Support Team' : 'User'}</span>}
+                  {!isMe && showAvatar && <span className="text-[10px] ml-1 mb-1 block text-gray-500 dark:text-gray-400 font-medium">{isStaff ? t('detail.support_team', { defaultValue: 'Support Team' }) : t('detail.user', { defaultValue: 'User' })}</span>}
                   <div className={`px-5 py-3 shadow-sm text-sm whitespace-pre-wrap leading-relaxed ${
                       isMe ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm' : 
                       isStaff ? 'bg-white dark:bg-slate-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-slate-700 rounded-2xl rounded-tl-sm' : 
@@ -253,7 +254,7 @@ export default function TicketDetail() {
           {ticket.status === 'Closed' ? (
             <div className="flex flex-col items-center justify-center py-4 text-gray-500 dark:text-gray-400">
                 <LockClosedIcon className="w-6 h-6 mb-2 opacity-50" />
-                <p className="text-sm">This conversation has been closed.</p>
+                <p className="text-sm">{t('detail.closed_msg', { defaultValue: 'This conversation has been closed.' })}</p>
             </div>
           ) : (
             <form onSubmit={sendReply} className="flex gap-3 items-end">
@@ -269,7 +270,7 @@ export default function TicketDetail() {
               
               <textarea 
                 className="flex-1 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white transition-all shadow-inner resize-none max-h-32"
-                placeholder="Type your message here..."
+                placeholder={t('detail.type_placeholder', { defaultValue: 'Type your message here...' })}
                 rows="1"
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
@@ -292,4 +293,4 @@ export default function TicketDetail() {
 }
 
 export async function getStaticPaths() { return { paths: [], fallback: 'blocking' }; }
-export async function getStaticProps({ locale }) { return { props: { ...(await serverSideTranslations(locale, ['common'])) } }; }
+export async function getStaticProps({ locale }) { return { props: { ...(await serverSideTranslations(locale, ['common', 'support'])) } }; }

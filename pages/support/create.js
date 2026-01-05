@@ -3,10 +3,12 @@ import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/router';
 import ServersHeader from '../../components/ServersHeader';
 import ServersFooter from '../../components/ServersFooter';
+import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 export default function CreateTicket() {
   const router = useRouter();
+  const { t } = useTranslation('support');
   const [user, setUser] = useState(null);
   const [servers, setServers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -49,7 +51,7 @@ export default function CreateTicket() {
       const { ticketId } = await res.json();
       router.push(`/support/${ticketId}`);
     } else {
-      alert('Failed to create ticket');
+      alert(t('create.error', { defaultValue: 'Failed to create ticket' }));
       setLoading(false);
     }
   };
@@ -58,70 +60,70 @@ export default function CreateTicket() {
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <ServersHeader user={user} credits={0} />
       <main className="max-w-3xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Create Support Ticket</h1>
+        <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">{t('create.title', { defaultValue: 'Create Support Ticket' })}</h1>
         
         <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-gray-200 dark:border-slate-700 space-y-6">
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Category</label>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">{t('create.category', { defaultValue: 'Category' })}</label>
               <select 
                 className="w-full p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-transparent dark:text-white"
                 value={formData.category}
                 onChange={(e) => setFormData({...formData, category: e.target.value})}
               >
-                <option value="General">General Inquiry</option>
-                <option value="Technical">Technical Issue</option>
-                <option value="Billing">Billing</option>
-                <option value="Feature Request">Feature Request</option>
+                <option value="General">{t('categories.general', { defaultValue: 'General Inquiry' })}</option>
+                <option value="Technical">{t('categories.technical', { defaultValue: 'Technical Issue' })}</option>
+                <option value="Billing">{t('categories.billing', { defaultValue: 'Billing' })}</option>
+                <option value="Feature Request">{t('categories.feature_request', { defaultValue: 'Feature Request' })}</option>
               </select>
             </div>
             
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Related Server (Optional)</label>
+              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">{t('create.related_server', { defaultValue: 'Related Server (Optional)' })}</label>
               <select 
                 className="w-full p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-transparent dark:text-white"
                 value={formData.serverId}
                 onChange={(e) => setFormData({...formData, serverId: e.target.value})}
               >
-                <option value="">None</option>
+                <option value="">{t('create.none', { defaultValue: 'None' })}</option>
                 {servers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Subject</label>
+            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">{t('create.subject', { defaultValue: 'Subject' })}</label>
             <input 
               type="text" 
               required
               className="w-full p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-transparent dark:text-white"
               value={formData.subject}
               onChange={(e) => setFormData({...formData, subject: e.target.value})}
-              placeholder="Brief description of the issue"
+              placeholder={t('create.subject_placeholder', { defaultValue: 'Brief description of the issue' })}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Message</label>
+            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">{t('create.message', { defaultValue: 'Message' })}</label>
             <textarea 
               required
               rows={6}
               className="w-full p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-transparent dark:text-white"
               value={formData.message}
               onChange={(e) => setFormData({...formData, message: e.target.value})}
-              placeholder="Describe your issue in detail..."
+              placeholder={t('create.message_placeholder', { defaultValue: 'Describe your issue in detail...' })}
             />
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
-            <button type="button" onClick={() => router.back()} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
+            <button type="button" onClick={() => router.back()} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button>
             <button 
               type="submit" 
               disabled={loading}
               className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium disabled:opacity-50"
             >
-              {loading ? 'Creating...' : 'Submit Ticket'}
+              {loading ? t('create.creating', { defaultValue: 'Creating...' }) : t('create.submit', { defaultValue: 'Submit Ticket' })}
             </button>
           </div>
         </form>
@@ -132,5 +134,5 @@ export default function CreateTicket() {
 }
 
 export async function getStaticProps({ locale }) {
-  return { props: { ...(await serverSideTranslations(locale, ['common'])) } };
+  return { props: { ...(await serverSideTranslations(locale, ['common', 'support'])) } };
 }

@@ -1,4 +1,3 @@
-// pages/support/index.js
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/router';
@@ -11,7 +10,7 @@ import { PlusIcon, InboxIcon, ChevronRightIcon } from '@heroicons/react/24/outli
 
 export default function SupportDashboard() {
   const router = useRouter();
-  const { t } = useTranslation('common');
+  const { t } = useTranslation('support'); // Changed to use 'support' namespace
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -40,13 +39,16 @@ export default function SupportDashboard() {
     const getStatusBadge = (status) => {
         const styles = {
         'Open': 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400 border-gray-200 dark:border-slate-700',
-        'Ongoing': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800', // <--- New
+        'Ongoing': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800',
         'Customer Reply': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800',
         'Closed': 'bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-gray-400 border-gray-200 dark:border-slate-700'
         };
+        // Attempt to translate status, fallback to original string
+        const translatedStatus = t(`status.${status.toLowerCase().replace(' ', '_')}`, { defaultValue: status });
+        
         return (
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${styles[status] || styles['Closed']}`}>
-                {status}
+                {translatedStatus}
             </span>
         );
     };
@@ -58,15 +60,15 @@ export default function SupportDashboard() {
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-12">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">Support Center</h1>
-            <p className="text-gray-500 dark:text-gray-400 mt-1">Manage your tickets and get help from our team.</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">{t('dashboard.title', { defaultValue: 'Support Center' })}</h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.subtitle', { defaultValue: 'Manage your tickets and get help from our team.' })}</p>
           </div>
           <Link 
             href="/support/create"
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
           >
             <PlusIcon className="w-5 h-5" />
-            New Ticket
+            {t('dashboard.new_ticket', { defaultValue: 'New Ticket' })}
           </Link>
         </div>
 
@@ -79,8 +81,8 @@ export default function SupportDashboard() {
             <div className="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
                 <InboxIcon className="w-8 h-8 text-gray-400" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">No tickets yet</h3>
-            <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-sm mx-auto">You haven't created any support tickets yet. If you need help with your server or account, feel free to open one.</p>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{t('dashboard.empty_title', { defaultValue: 'No tickets yet' })}</h3>
+            <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-sm mx-auto">{t('dashboard.empty_desc', { defaultValue: "You haven't created any support tickets yet. If you need help with your server or account, feel free to open one." })}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4">
@@ -97,9 +99,10 @@ export default function SupportDashboard() {
                     <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
                       <span className="font-mono">#{ticket.id.slice(0, 8)}</span>
                       <span className="w-1 h-1 bg-gray-300 dark:bg-slate-700 rounded-full"></span>
-                      <span>{ticket.category}</span>
+                      {/* Translate Category */}
+                      <span>{t(`categories.${ticket.category.toLowerCase().replace(' ', '_')}`, { defaultValue: ticket.category })}</span>
                       <span className="w-1 h-1 bg-gray-300 dark:bg-slate-700 rounded-full"></span>
-                      <span>Last updated: {new Date(ticket.updated_at).toLocaleDateString()}</span>
+                      <span>{t('dashboard.last_updated', { defaultValue: 'Last updated:' })} {new Date(ticket.updated_at).toLocaleDateString()}</span>
                     </div>
                   </div>
                   <ChevronRightIcon className="w-5 h-5 text-gray-300 dark:text-slate-700 group-hover:text-indigo-500 transition-colors" />
@@ -115,5 +118,5 @@ export default function SupportDashboard() {
 }
 
 export async function getStaticProps({ locale }) {
-  return { props: { ...(await serverSideTranslations(locale, ['common'])) } };
+  return { props: { ...(await serverSideTranslations(locale, ['common', 'support'])) } };
 }
