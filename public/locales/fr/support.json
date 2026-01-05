@@ -1,0 +1,46 @@
+{
+  "dashboard": {
+    "title": "Support Center",
+    "subtitle": "Manage your tickets and get help from our team.",
+    "new_ticket": "New Ticket",
+    "empty_title": "No tickets yet",
+    "empty_desc": "You haven't created any support tickets yet. If you need help with your server or account, feel free to open one.",
+    "last_updated": "Last updated:"
+  },
+  "status": {
+    "open": "Open",
+    "ongoing": "Ongoing",
+    "customer_reply": "Customer Reply",
+    "closed": "Closed"
+  },
+  "categories": {
+    "general": "General Inquiry",
+    "technical": "Technical Issue",
+    "billing": "Billing",
+    "feature_request": "Feature Request"
+  },
+  "create": {
+    "title": "Create Support Ticket",
+    "category": "Category",
+    "related_server": "Related Server (Optional)",
+    "none": "None",
+    "subject": "Subject",
+    "subject_placeholder": "Brief description of the issue",
+    "message": "Message",
+    "message_placeholder": "Describe your issue in detail...",
+    "submit": "Submit Ticket",
+    "creating": "Creating...",
+    "error": "Failed to create ticket"
+  },
+  "detail": {
+    "loading": "Loading conversation...",
+    "mark_resolved": "Mark as Resolved",
+    "waiting_staff": "Waiting for Staff",
+    "support_team": "Support Team",
+    "user": "User",
+    "closed_msg": "This conversation has been closed.",
+    "type_placeholder": "Type your message here...",
+    "upload_failed": "Failed to upload {{name}}",
+    "confirm_close": "Are you sure you want to close this ticket?"
+  }
+}
