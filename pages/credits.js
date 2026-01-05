@@ -15,7 +15,7 @@ import {
   ServerIcon,
   CreditCardIcon,
   ShieldCheckIcon,
-  InformationCircleIcon
+  CalculatorIcon // Added icon
 } from '@heroicons/react/24/outline';
 import { useTranslation } from "next-i18next"; 
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
@@ -276,12 +276,14 @@ export default function CreditsPage() {
 
   // --- HELPERS (formatDate, parseUsage, fmtSeconds, groupedTransactions, HistoryItem) ---
   const formatDate = (dateString) => new Date(dateString).toLocaleString(router.locale || "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  
   const parseUsage = (description) => {
     if (!description) return {};
     const serverMatch = description.match(/server\s+([a-f0-9-]{36}|[a-f0-9-]{8})/i);
     const secondsMatch = description.match(/(\d+)\s*seconds/i);
     return { serverId: serverMatch ? serverMatch[1] : null, seconds: secondsMatch ? parseInt(secondsMatch[1], 10) : null };
   };
+
   const fmtSeconds = (s) => {
     if (s == null) return null;
     const hrs = Math.floor(s / 3600);
@@ -289,6 +291,7 @@ export default function CreditsPage() {
     if (hrs > 0) return `${hrs}${t('units.h')} ${mins}${t('units.m')}`;
     return `${mins}${t('units.m')} ${s % 60}${t('units.s')}`;
   };
+
   const groupedTransactions = () => {
     const groups = [];
     const sessionMap = new Map();
@@ -316,20 +319,84 @@ export default function CreditsPage() {
   const HistoryItem = ({ item }) => {
     const [isOpen, setIsOpen] = useState(false);
     const isNegative = item.amount < 0;
+
+    // --- MATH CALCULATION FOR DISPLAY ---
+    // If it's a session, we derive the cost/hr from the total.
+    // Formula: Amount = (Seconds / 3600) * Rate
+    // So: Rate = Amount / (Seconds / 3600)
+    let mathDisplay = null;
+    if (item.isSession && item.meta.totalSeconds > 0) {
+        const hours = item.meta.totalSeconds / 3600;
+        const totalCostAbs = Math.abs(item.amount);
+        const hourlyRate = hours > 0 ? (totalCostAbs / hours) : 0;
+        
+        mathDisplay = {
+            seconds: item.meta.totalSeconds,
+            hours: hours.toFixed(6),
+            rate: hourlyRate.toFixed(4), // Likely to be something like 6.0000 or 10.0000
+            total: totalCostAbs.toFixed(4)
+        };
+    }
+
     if (item.isSession) {
       return (
         <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
           <div onClick={() => setIsOpen(!isOpen)} className="flex items-center justify-between p-4 cursor-pointer bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
             <div className="flex items-center gap-4">
               <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><ServerIcon className="w-6 h-6" /></div>
-              <div><h4 className="font-semibold text-gray-900 dark:text-gray-100">{t('history.session_runtime')}<span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">{fmtSeconds(item.meta.totalSeconds)}</span></h4><div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2"><span>{formatDate(item.startDate)}</span><span>&rarr;</span><span>{formatDate(item.endDate)}</span></div></div>
+              <div>
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                    {t('history.session_runtime')}
+                    <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">{fmtSeconds(item.meta.totalSeconds)}</span>
+                </h4>
+                <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2"><span>{formatDate(item.startDate)}</span><span>&rarr;</span><span>{formatDate(item.endDate)}</span></div>
+              </div>
             </div>
-            <div className="flex items-center gap-4"><span className="font-bold text-gray-900 dark:text-gray-100">{item.amount.toFixed(4)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits')}</span></span>{isOpen ? <ChevronUpIcon className="w-5 h-5 text-gray-400" /> : <ChevronDownIcon className="w-5 h-5 text-gray-400" />}</div>
+            <div className="flex items-center gap-4">
+                <span className="font-bold text-gray-900 dark:text-gray-100">{item.amount.toFixed(4)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits')}</span></span>
+                {isOpen ? <ChevronUpIcon className="w-5 h-5 text-gray-400" /> : <ChevronDownIcon className="w-5 h-5 text-gray-400" />}
+            </div>
           </div>
+          
+          {/* --- EXPANDED DETAILS: MATH BREAKDOWN --- */}
           {isOpen && (
-            <div className="bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 px-4 py-3 space-y-2">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('history.detailed_charges')}</p>
-              {item.details.map((tx) => (<div key={tx.id} className="flex justify-between text-sm text-gray-600 dark:text-gray-300 pl-4 border-l-2 border-indigo-200 dark:border-indigo-800"><span>{formatDate(tx.created_at)}</span><span className="font-mono">{tx.amount.toFixed(4)}</span></div>))}
+            <div className="bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 px-6 py-5">
+              <div className="flex items-center gap-2 mb-4">
+                <CalculatorIcon className="w-4 h-4 text-indigo-500" />
+                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">{t('history.detailed_charges', { defaultValue: 'Billing Calculation' })}</p>
+              </div>
+              
+              {mathDisplay ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4 text-sm">
+                     <div className="space-y-3">
+                         <div className="flex justify-between">
+                            <span className="text-gray-500 dark:text-gray-400">Time (Seconds)</span>
+                            <span className="font-mono text-gray-700 dark:text-gray-200">{mathDisplay.seconds} s</span>
+                         </div>
+                         <div className="flex justify-between">
+                            <span className="text-gray-500 dark:text-gray-400">Time (Hours)</span>
+                            <span className="font-mono text-gray-700 dark:text-gray-200">{mathDisplay.hours} h</span>
+                         </div>
+                         <div className="flex justify-between">
+                            <span className="text-gray-500 dark:text-gray-400">Hourly Rate</span>
+                            <span className="font-mono text-gray-700 dark:text-gray-200">{mathDisplay.rate} Credits/hr</span>
+                         </div>
+                     </div>
+                     
+                     <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg p-3 self-start">
+                         <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Formula</p>
+                         <p className="font-mono text-gray-600 dark:text-gray-300 text-xs mb-2">
+                             (Seconds / 3600) × Rate = Cost
+                         </p>
+                         <div className="pt-2 border-t border-gray-100 dark:border-slate-700 flex justify-between items-center font-bold">
+                             <span className="text-indigo-600 dark:text-indigo-400">Total</span>
+                             <span className="text-gray-900 dark:text-white">{mathDisplay.total}</span>
+                         </div>
+                     </div>
+                  </div>
+              ) : (
+                  <p className="text-sm text-gray-500 italic">No detailed math available for this session.</p>
+              )}
             </div>
           )}
         </div>
@@ -374,17 +441,13 @@ export default function CreditsPage() {
 
       <Footer />
 
-      {/* --- BUY MODAL (RESPONSIVE FIX) --- */}
+      {/* --- BUY MODAL --- */}
       {isBuyModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-md transition-all">
           
-          {/* MOBILE: Full screen (h-[100dvh]), scrollable container (overflow-y-auto), flex-col.
-            DESKTOP: Fixed height/width (sm:h-auto), overflow-hidden (on container), flex-row. 
-          */}
           <div className="bg-white dark:bg-slate-900 sm:rounded-[2.5rem] shadow-2xl w-full sm:max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[95vh] overflow-y-auto sm:overflow-hidden border-0 sm:border border-gray-100 dark:border-slate-800 relative animate-in fade-in zoom-in duration-300 flex flex-col md:flex-row">
             
             {/* LEFT SIDE: SELECTION */}
-            {/* On mobile, this flows naturally at the top. On desktop, it's a scrolling pane. */}
             <div className="w-full md:flex-1 p-5 md:p-10 bg-white dark:bg-slate-900 md:overflow-y-auto">
                 <div className="flex justify-between items-start mb-6">
                     <div><h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Add Credits</h2><p className="text-slate-500 dark:text-slate-400 text-sm font-medium mt-1">Select an amount to recharge.</p></div>
@@ -414,7 +477,6 @@ export default function CreditsPage() {
             </div>
 
             {/* RIGHT SIDE: CHECKOUT */}
-            {/* On mobile, this flows naturally at the bottom. On desktop, it's a fixed pane. */}
             <div className="w-full md:w-[400px] bg-slate-50 dark:bg-slate-950/50 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-800 p-5 md:p-8 flex flex-col md:overflow-y-auto">
                 <button onClick={() => setIsBuyModalOpen(false)} className="hidden md:block self-end p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors mb-4"><XMarkIcon className="w-6 h-6" /></button>
 
