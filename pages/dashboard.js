@@ -3,8 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
-import { useTranslation } from 'next-i18next';
-import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { useTranslation } from 'next-i18next'; 
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
 import CreateServerForm from "./CreateServerForm";
 import Link from 'next/link';
 import ServerStatusIndicator from "../components/ServerStatusIndicator";
@@ -21,7 +21,7 @@ import {
   SignalIcon,
   AdjustmentsHorizontalIcon,
   CommandLineIcon,
-  UsersIcon
+  UsersIcon // <--- Added for Shared Badge
 } from '@heroicons/react/24/outline';
 
 // --- Helper for Displaying Software/Version ---
@@ -32,9 +32,11 @@ const getDisplayInfo = (server, t) => {
   let software = t(`software_names.${typeKey}`, { defaultValue: server.type || 'Vanilla' });
   let version = server.version || '';
 
+  // Handle Modpacks
   if (server.type?.startsWith('modpack-')) {
     const providerRaw = server.type.replace('modpack-', '');
     const provider = providerRaw.charAt(0).toUpperCase() + providerRaw.slice(1);
+    
     software = `${t('software.modpack')} (${provider})`;
 
     if (server.version?.includes('::')) {
@@ -51,7 +53,7 @@ const getDisplayInfo = (server, t) => {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { t } = useTranslation('dashboard');
+  const { t } = useTranslation('dashboard'); 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -103,7 +105,7 @@ export default function Dashboard() {
     };
   }, []);
 
-  // Set up real-time subscriptions (Owned Servers Only)
+  // Set up real-time subscriptions
   useEffect(() => {
     if (!user?.id) return;
 
@@ -198,33 +200,43 @@ export default function Dashboard() {
     if (data) setCredits(data.credits || 0);
   };
 
+  // --- UPDATED FETCH LOGIC WITH FIX ---
   const fetchServers = async (userId) => {
     setIsLoadingServers(true);
     
-    // 1. Fetch Owned Servers
-    const { data: owned } = await supabase
-      .from('servers')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    try {
+        // 1. Fetch Owned Servers
+        const { data: owned } = await supabase
+          .from('servers')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
 
-    // 2. Fetch Shared Servers (via permissions)
-    const { data: sharedPerms } = await supabase
-      .from('server_permissions')
-      .select('server:servers(*)')
-      .eq('user_id', userId);
+        // 2. Fetch Shared Servers (via permissions)
+        const { data: sharedPerms } = await supabase
+          .from('server_permissions')
+          .select('server:servers(*)')
+          .eq('user_id', userId);
 
-    const shared = sharedPerms 
-      ? sharedPerms.map(p => ({ ...p.server, isShared: true })) 
-      : [];
+        // --- CRITICAL FIX: Filter out null servers before mapping ---
+        const shared = sharedPerms 
+          ? sharedPerms
+              .filter(p => p.server !== null) // Ignore deleted/inaccessible servers
+              .map(p => ({ ...p.server, isShared: true })) 
+          : [];
 
-    // 3. Merge & Sort
-    const allServers = [...(owned || []), ...shared].sort((a, b) => 
-      new Date(b.created_at) - new Date(a.created_at)
-    );
+        // 3. Merge & Sort
+        const allServers = [...(owned || []), ...shared].sort((a, b) => 
+          new Date(b.created_at) - new Date(a.created_at)
+        );
 
-    setServers(allServers);
-    setIsLoadingServers(false);
+        setServers(allServers);
+    } catch (e) {
+        console.error("Error fetching servers:", e);
+        setError("Failed to load servers.");
+    } finally {
+        setIsLoadingServers(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -289,7 +301,7 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serverId, action: 'delete' }),
       });
-      // Explicitly remove from UI if it was shared (realtime might not catch it)
+      // Explicitly remove from UI if it was shared (realtime might not catch it for deletions)
       setServers(prev => prev.filter(s => s.id !== serverId));
     } catch (err) {
       setError(t('messages.error_delete')); 
@@ -324,6 +336,8 @@ export default function Dashboard() {
     }
   };
 
+  // --- Render Helpers ---
+
   if (loading) return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
@@ -339,6 +353,7 @@ export default function Dashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         
+        {/* Error Toast */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex justify-between items-center shadow-sm">
             <span className="flex items-center gap-2">
@@ -381,6 +396,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Action Bar */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('headers.your_servers')}</h2> 
           <button
@@ -392,7 +408,7 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Server Grid */}
+        {/* Server Grid / Empty State */}
         {isLoadingServers && servers.length === 0 ? (
           <div className="py-20 flex justify-center"><div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent" /></div>
         ) : servers.length === 0 ? (
@@ -407,6 +423,7 @@ export default function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {servers.map((server) => {
+              // --- USE HELPER HERE with 't' ---
               const { software, version } = getDisplayInfo(server, t);
               const isShared = server.isShared === true;
               
@@ -422,14 +439,14 @@ export default function Dashboard() {
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => !server.id.startsWith('temp') && router.push(`/server/${server.id}`)}>
+                            <h3 className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => !server.id.startsWith('temp') && router.push(`/server/${server.id}`)}>
                             {server.name}
-                          </h3>
-                          {isShared && (
-                            <span className="bg-amber-100 text-amber-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                              <UsersIcon className="w-3 h-3" /> Shared
-                            </span>
-                          )}
+                            </h3>
+                            {isShared && (
+                                <span className="bg-amber-100 text-amber-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                                    <UsersIcon className="w-3 h-3" /> Shared
+                                </span>
+                            )}
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 capitalize truncate max-w-[180px]" title={software}>
                             {software} <span className="text-gray-400 dark:text-gray-500">{version}</span>
@@ -491,7 +508,7 @@ export default function Dashboard() {
                     <AdjustmentsHorizontalIcon className="w-5 h-5" />
                   </Link>
 
-                  {/* Hide Delete button for Shared Servers */}
+                  {/* Hide Delete for Shared Servers */}
                   {!isShared && (
                     <button
                       onClick={() => handleDeleteServer(server.id)}
@@ -509,6 +526,7 @@ export default function Dashboard() {
         )}
       </main>
 
+      {/* Create Server Modal */}
       {showModal && (
         <CreateServerForm
           onClose={() => setShowModal(false)}
@@ -522,13 +540,14 @@ export default function Dashboard() {
   );
 }
 
+// --- REQUIRED FOR NEXT-I18NEXT (Server Side Translation Loading) ---
 export async function getStaticProps({ locale }) {
   return {
     props: {
       ...(await serverSideTranslations(locale, [
         'common',
         'dashboard',
-        'create_server'
+        'create_server' // Include create_server namespace for the modal
       ])),
     },
   };
