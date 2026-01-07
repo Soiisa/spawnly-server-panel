@@ -8,6 +8,7 @@ import {
   DeleteObjectCommand 
 } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
+import { verifyServerAccess } from '../../../lib/accessControl'; // <--- NEW IMPORT
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -253,6 +254,7 @@ async function billRemainingTime(supabaseAdmin, server) {
   const hours = elapsedSeconds / 3600;
   const cost = hours * server.cost_per_hour;
 
+  // BILL THE OWNER (server.user_id), regardless of who triggered the action
   await deductCredits(supabaseAdmin, server.user_id, cost, `Final runtime charge for server ${server.id} (${elapsedSeconds} seconds)`, server.current_session_id);
 
   try {
@@ -397,13 +399,29 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Server not found', detail: serverErr?.message || null });
     }
     
-    if (server.user_id !== user.id) {
-      console.warn(`[Security] User ${user.id} attempted to control server ${server.id} owned by ${server.user_id}`);
-      return res.status(403).json({ error: 'Forbidden', detail: 'You do not own this server' });
-    }
+    // --- SHARED OWNERSHIP PERMISSION CHECK START ---
+    const permissionMap = {
+      start: 'control',
+      stop: 'control',
+      restart: 'control',
+      kill: 'control',
+      delete: 'admin' // Effectively only Owner or specifically 'admin' permission
+    };
+    
+    const requiredPerm = permissionMap[action];
 
+    // Use verifyServerAccess helper to check owner OR permissions table
+    const access = await verifyServerAccess(supabaseAdmin, serverId, user.id, requiredPerm);
+    
+    if (!access.allowed) {
+      console.warn(`[Security] User ${user.id} denied ${action} on server ${server.id}`);
+      return res.status(403).json({ error: 'Forbidden', detail: access.error || 'You do not have permission to perform this action' });
+    }
+    // --- SHARED OWNERSHIP PERMISSION CHECK END ---
+
+    // Fetch Owner's profile for billing (WE ALWAYS BILL THE OWNER)
     const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
-    if (profileErr || !profile) return res.status(500).json({ error: 'Failed to fetch user profile' });
+    if (profileErr || !profile) return res.status(500).json({ error: 'Failed to fetch server owner profile' });
 
     if (action === 'start' || action === 'restart') {
       const minCost = (server.cost_per_hour / 60) * 5;

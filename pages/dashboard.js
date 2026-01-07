@@ -3,8 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
-import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
+import { useTranslation } from 'next-i18next';
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import CreateServerForm from "./CreateServerForm";
 import Link from 'next/link';
 import ServerStatusIndicator from "../components/ServerStatusIndicator";
@@ -20,36 +20,27 @@ import {
   CurrencyDollarIcon,
   SignalIcon,
   AdjustmentsHorizontalIcon,
-  CommandLineIcon
+  CommandLineIcon,
+  UsersIcon
 } from '@heroicons/react/24/outline';
 
-// --- NEW: Helper for Displaying Software/Version ---
+// --- Helper for Displaying Software/Version ---
 const getDisplayInfo = (server, t) => {
   if (!server) return { software: t('software.unknown'), version: t('software.unknown') };
 
-  // Try to translate the type, fallback to capitalized raw type if no translation found
   let typeKey = server.type || 'vanilla';
   let software = t(`software_names.${typeKey}`, { defaultValue: server.type || 'Vanilla' });
   let version = server.version || '';
 
-  // Handle Modpacks
   if (server.type?.startsWith('modpack-')) {
     const providerRaw = server.type.replace('modpack-', '');
     const provider = providerRaw.charAt(0).toUpperCase() + providerRaw.slice(1);
-    
-    // Default fallback
     software = `${t('software.modpack')} (${provider})`;
 
-    // Handle Version & Name extraction
     if (server.version?.includes('::')) {
       const parts = server.version.split('::');
-      // parts[0] = URL or ID (hidden)
-      // parts[1] = Game Version (displayed as Version)
-      // parts[2] = Modpack Name (displayed as Software) - *If available*
-      
       if (parts[1]) version = parts[1];
       if (parts[2]) {
-        // Format as "Name (Provider)"
         software = `${parts[2]} (${provider})`; 
       }
     }
@@ -60,7 +51,7 @@ const getDisplayInfo = (server, t) => {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { t } = useTranslation('dashboard'); // <--- INITIALIZED with 'dashboard' namespace
+  const { t } = useTranslation('dashboard');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -112,7 +103,7 @@ export default function Dashboard() {
     };
   }, []);
 
-  // Set up real-time subscriptions
+  // Set up real-time subscriptions (Owned Servers Only)
   useEffect(() => {
     if (!user?.id) return;
 
@@ -209,8 +200,30 @@ export default function Dashboard() {
 
   const fetchServers = async (userId) => {
     setIsLoadingServers(true);
-    const { data } = await supabase.from('servers').select('*').eq('user_id', userId).order('created_at', { ascending: false });
-    if (data) setServers(data);
+    
+    // 1. Fetch Owned Servers
+    const { data: owned } = await supabase
+      .from('servers')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    // 2. Fetch Shared Servers (via permissions)
+    const { data: sharedPerms } = await supabase
+      .from('server_permissions')
+      .select('server:servers(*)')
+      .eq('user_id', userId);
+
+    const shared = sharedPerms 
+      ? sharedPerms.map(p => ({ ...p.server, isShared: true })) 
+      : [];
+
+    // 3. Merge & Sort
+    const allServers = [...(owned || []), ...shared].sort((a, b) => 
+      new Date(b.created_at) - new Date(a.created_at)
+    );
+
+    setServers(allServers);
     setIsLoadingServers(false);
   };
 
@@ -276,6 +289,8 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serverId, action: 'delete' }),
       });
+      // Explicitly remove from UI if it was shared (realtime might not catch it)
+      setServers(prev => prev.filter(s => s.id !== serverId));
     } catch (err) {
       setError(t('messages.error_delete')); 
     }
@@ -309,8 +324,6 @@ export default function Dashboard() {
     }
   };
 
-  // --- Render Helpers ---
-
   if (loading) return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
@@ -326,7 +339,6 @@ export default function Dashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         
-        {/* Error Toast */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex justify-between items-center shadow-sm">
             <span className="flex items-center gap-2">
@@ -369,7 +381,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Action Bar */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('headers.your_servers')}</h2> 
           <button
@@ -381,7 +392,7 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Server Grid / Empty State */}
+        {/* Server Grid */}
         {isLoadingServers && servers.length === 0 ? (
           <div className="py-20 flex justify-center"><div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent" /></div>
         ) : servers.length === 0 ? (
@@ -396,8 +407,8 @@ export default function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {servers.map((server) => {
-              // --- USE HELPER HERE with 't' ---
               const { software, version } = getDisplayInfo(server, t);
+              const isShared = server.isShared === true;
               
               return (
               <div key={server.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col group hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors">
@@ -406,14 +417,20 @@ export default function Dashboard() {
                 <div className="p-6 border-b border-gray-100 dark:border-slate-700">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center text-indigo-600">
+                      <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center text-indigo-600 relative">
                         {server.game === 'minecraft' ? <div className="font-bold">M</div> : <ServerIcon className="w-6 h-6" />}
                       </div>
                       <div>
-                        <h3 className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => !server.id.startsWith('temp') && router.push(`/server/${server.id}`)}>
-                          {server.name}
-                        </h3>
-                        {/* UPDATED: Use clean software/version strings */}
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => !server.id.startsWith('temp') && router.push(`/server/${server.id}`)}>
+                            {server.name}
+                          </h3>
+                          {isShared && (
+                            <span className="bg-amber-100 text-amber-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                              <UsersIcon className="w-3 h-3" /> Shared
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 capitalize truncate max-w-[180px]" title={software}>
                             {software} <span className="text-gray-400 dark:text-gray-500">{version}</span>
                         </p>
@@ -474,14 +491,17 @@ export default function Dashboard() {
                     <AdjustmentsHorizontalIcon className="w-5 h-5" />
                   </Link>
 
-                  <button
-                    onClick={() => handleDeleteServer(server.id)}
-                    disabled={!['Stopped', 'Running'].includes(server.status)}
-                    className="p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-400 hover:text-red-600 hover:border-red-200 dark:hover:border-red-600 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
-                    title={t('tooltips.delete_server')}
-                  >
-                    <TrashIcon className="w-5 h-5" />
-                  </button>
+                  {/* Hide Delete button for Shared Servers */}
+                  {!isShared && (
+                    <button
+                      onClick={() => handleDeleteServer(server.id)}
+                      disabled={!['Stopped', 'Running'].includes(server.status)}
+                      className="p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-400 hover:text-red-600 hover:border-red-200 dark:hover:border-red-600 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                      title={t('tooltips.delete_server')}
+                    >
+                      <TrashIcon className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
               </div>
             )})}
@@ -489,7 +509,6 @@ export default function Dashboard() {
         )}
       </main>
 
-      {/* Create Server Modal */}
       {showModal && (
         <CreateServerForm
           onClose={() => setShowModal(false)}
@@ -503,14 +522,13 @@ export default function Dashboard() {
   );
 }
 
-// --- REQUIRED FOR NEXT-I18NEXT (Server Side Translation Loading) ---
 export async function getStaticProps({ locale }) {
   return {
     props: {
       ...(await serverSideTranslations(locale, [
         'common',
         'dashboard',
-        'create_server' // Include create_server namespace for the modal
+        'create_server'
       ])),
     },
   };

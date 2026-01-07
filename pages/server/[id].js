@@ -23,7 +23,8 @@ import {
   XMarkIcon,
   ArchiveBoxIcon,
   CalendarDaysIcon,
-  TrashIcon
+  TrashIcon,
+  ShieldCheckIcon // Added for Access Tab
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -40,6 +41,7 @@ import PlayersTab from '../../components/PlayersTab';
 import WorldTab from '../../components/WorldTab';
 import BackupsTab from '../../components/BackupsTab';
 import SchedulesTab from '../../components/SchedulesTab';
+import AccessTab from '../../components/AccessTab'; // <--- NEW COMPONENT
 
 // Helper: Convert DB player string to array
 const getOnlinePlayersArray = (server) => {
@@ -71,18 +73,14 @@ const getDisplayInfo = (server, t) => {
   let software = server.type || 'Vanilla';
   let version = server.version || '';
 
-  // Handle Modpacks
   if (server.type?.startsWith('modpack-')) {
     const providerRaw = server.type.replace('modpack-', '');
     const provider = providerRaw.charAt(0).toUpperCase() + providerRaw.slice(1);
     
-    // Default fallback
     software = t ? `${t('software.modpack')} (${provider})` : `Modpack (${provider})`;
 
-    // Handle Version & Name extraction
     if (server.version?.includes('::')) {
       const parts = server.version.split('::');
-      
       if (parts[1]) version = parts[1];
       if (parts[2]) {
         software = `${parts[2]} (${provider})`; 
@@ -113,6 +111,9 @@ export default function ServerDetailPage({ initialServer }) {
   const [newRam, setNewRam] = useState(null);
   const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer));
   
+  // Ownership State
+  const [isOwner, setIsOwner] = useState(false);
+
   // Auto-stop state
   const [autoStopCountdown, setAutoStopCountdown] = useState(null);
   const [savingAutoStop, setSavingAutoStop] = useState(false);
@@ -144,7 +145,6 @@ export default function ServerDetailPage({ initialServer }) {
   useEffect(() => {
     mountedRef.current = true;
 
-    // Request notification permission early
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
@@ -163,9 +163,19 @@ export default function ServerDetailPage({ initialServer }) {
         setUser(userData);
         await fetchUserCredits(userData.id);
 
-        if (id && !server) {
-          await fetchServer(id, userData.id);
+        let currentServer = server;
+        if (id && !currentServer) {
+          const { data } = await supabase.from('servers').select('*').eq('id', id).single();
+          currentServer = data;
+          setServer(data);
+          if (data) setMotdText(data.motd || '');
         }
+
+        // Determine Ownership
+        if (currentServer && userData) {
+            setIsOwner(currentServer.user_id === userData.id);
+        }
+
       } catch (err) {
         console.error('Data fetch error:', err);
         setError(t('errors.load_session'));
@@ -197,7 +207,6 @@ export default function ServerDetailPage({ initialServer }) {
           if (!mountedRef.current) return;
           setServer((prev) => {
             const updated = payload.new;
-            // Prevent overwriting unsaved MOTD changes if the user is typing
             if (!isEditingMotd && updated.motd !== prev.motd) {
               setMotdText(updated.motd);
             }
@@ -212,16 +221,15 @@ export default function ServerDetailPage({ initialServer }) {
     return () => { if (serverChannelRef.current) supabase.removeChannel(serverChannelRef.current); };
   }, [id, user?.id, isEditingMotd]);
 
-  // Heartbeat Polling: Ensures UI stays in sync even if Realtime events are missed
+  // Heartbeat Polling
   useEffect(() => {
     if (!id || !user?.id) return;
 
     const heartbeat = setInterval(() => {
-      // Only poll if window is visible and we aren't already aggressively polling for an action
       if (!document.hidden && !pollRef.current && mountedRef.current) {
-         fetchServer(id, user.id);
+         fetchServer(id);
       }
-    }, 15000); // Check every 15 seconds
+    }, 15000); 
 
     return () => clearInterval(heartbeat);
   }, [id, user?.id]);
@@ -253,13 +261,10 @@ export default function ServerDetailPage({ initialServer }) {
     setOnlinePlayers(getOnlinePlayersArray(server));
   }, [server?.players_online, server?.status]);
 
-  // Countdown Logic - Fixed Visibility
+  // Countdown Logic
   useEffect(() => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
 
-    // FIX: Only check player_count > 0 to hide the timer.
-    // If player_count is 0, we trust last_empty_at.
-    // We ignore the 'players_online' string here as it can be stale or contain whitespace formatting.
     const hasActivePlayers = server?.player_count && server.player_count > 0;
 
     if (server?.status === 'Running' && server?.last_empty_at && server?.auto_stop_timeout > 0 && !hasActivePlayers) {
@@ -269,7 +274,6 @@ export default function ServerDetailPage({ initialServer }) {
         const diff = (lastEmpty + timeoutMs) - Date.now();
 
         if (diff <= 0) {
-            // Time is up, but backend hasn't stopped it yet
             setAutoStopCountdown(t('config.stopping_soon'));
         } else {
           const minutes = Math.floor(diff / 60000);
@@ -330,8 +334,10 @@ export default function ServerDetailPage({ initialServer }) {
   };
 
   const fetchServer = useCallback(
-    debounce(async (serverId, userId) => {
-      const { data } = await supabase.from('servers').select('*').eq('id', serverId).eq('user_id', userId).single();
+    debounce(async (serverId) => {
+      // NOTE: We don't filter by user_id strictly in the query here because RLS or server logic handles it.
+      // But for dashboard consistency we just fetch by ID.
+      const { data } = await supabase.from('servers').select('*').eq('id', serverId).single();
       if (data && mountedRef.current) {
         setServer(prev => (JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
         if (!isEditingMotd) setMotdText(data.motd || '');
@@ -340,17 +346,15 @@ export default function ServerDetailPage({ initialServer }) {
   );
 
   const pollUntilStatus = (expectedStatuses, timeout = 120000) => {
-    // Clear existing poll to avoid duplicates
     if (pollRef.current) clearInterval(pollRef.current);
 
     const startTime = Date.now();
     pollRef.current = setInterval(() => {
-      fetchServer(id, user?.id);
+      fetchServer(id);
       
-      // Stop polling if status matches or timeout reached
       if (expectedStatuses.includes(server?.status) || Date.now() - startTime > timeout) {
         clearInterval(pollRef.current);
-        pollRef.current = null; // Free up the ref for the heartbeat
+        pollRef.current = null; 
         if (Date.now() - startTime > timeout) setError(t('errors.timeout'));
       }
     }, 3000);
@@ -382,7 +386,6 @@ export default function ServerDetailPage({ initialServer }) {
   const handleServerAction = async (action) => {
     if (actionLoading) return;
     
-    // CONFIRMATION FOR KILL
     if (action === 'kill') {
         if (!confirm(t('messages.confirm_kill', { defaultValue: 'Are you sure you want to FORCE KILL this server? This will immediately destroy the VPS without saving data. Only use this if the server is stuck.' }))) {
             return;
@@ -420,10 +423,8 @@ export default function ServerDetailPage({ initialServer }) {
         }
         pollUntilStatus(['Running', 'Stopped']);
       } else {
-        // KILL / STOP / RESTART
         let targetStatus = 'Stopping';
         if (action === 'restart') targetStatus = 'Restarting';
-        // For kill, we expect 'Stopped' eventually.
         const expected = action === 'restart' ? ['Running'] : ['Stopped'];
         
         setServer(p => ({ ...p, status: targetStatus }));
@@ -440,7 +441,7 @@ export default function ServerDetailPage({ initialServer }) {
       }
     } catch (e) {
       setError(t('errors.failed_action', { action, message: e.message }));
-      await fetchServer(server.id, user.id);
+      await fetchServer(server.id);
     } finally {
       setActionLoading(false);
     }
@@ -451,7 +452,6 @@ export default function ServerDetailPage({ initialServer }) {
     if (newRam < 2 || newRam > 32) return setError(t('errors.ram_range'));
     setActionLoading(true);
     try {
-      // 2. Update both RAM and Cost in the database
       const { error } = await supabase
         .from('servers')
         .update({ 
@@ -462,7 +462,6 @@ export default function ServerDetailPage({ initialServer }) {
 
       if (error) throw error;
       
-      // 3. Update local state so the UI reflects the change immediately
       setServer(prev => ({ 
         ...prev, 
         ram: newRam,
@@ -522,8 +521,6 @@ export default function ServerDetailPage({ initialServer }) {
     }
   };
 
-  // --- Render Helpers ---
-
   const { software: displaySoftware, version: displayVersion } = getDisplayInfo(server, t);
 
   if (!user || loading) return (
@@ -543,10 +540,7 @@ export default function ServerDetailPage({ initialServer }) {
   const isUnknown = status === 'Unknown';
   const isBusy = !isRunning && !isStopped && !isUnknown;
   
-  // Define stuck states where we show the KILL button
   const isStuck = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting'].includes(status);
-  
-  // Show Kill button if explicitly stuck
   const canKill = isStuck;
 
   const sType = (server.type || '').toLowerCase();
@@ -570,6 +564,8 @@ export default function ServerDetailPage({ initialServer }) {
     { id: 'world', label: t('tabs.world'), icon: ServerIcon },
     { id: 'files', label: t('tabs.files'), icon: ClipboardDocumentIcon },
     { id: 'backups', label: t('tabs.backups'), icon: ArchiveBoxIcon },
+    // Show Access tab ONLY to Owner
+    ...(isOwner ? [{ id: 'access', label: 'Access', icon: ShieldCheckIcon }] : []), 
   ];
 
   return (
@@ -695,7 +691,6 @@ export default function ServerDetailPage({ initialServer }) {
                 </button>
               )}
 
-              {/* NEW FORCE KILL BUTTON - Specific for Stuck States */}
               {canKill && (
                 <button
                     onClick={() => handleServerAction('kill')}
@@ -931,6 +926,11 @@ export default function ServerDetailPage({ initialServer }) {
               {activeTab === 'backups' && (
                 <BackupsTab server={server} />
               )}
+              
+              {/* RENDER ACCESS TAB ONLY FOR OWNERS */}
+              {activeTab === 'access' && isOwner && (
+                 <AccessTab server={server} />
+              )}
             </div>
 
           </Suspense>
@@ -941,7 +941,6 @@ export default function ServerDetailPage({ initialServer }) {
   );
 }
 
-// --- REQUIRED FOR NEXT-I18NEXT ---
 export async function getServerSideProps(context) {
   const { id } = context.params || {};
   if (!id) return { notFound: true };
@@ -949,7 +948,7 @@ export async function getServerSideProps(context) {
   const translations = await serverSideTranslations(context.locale, [
     'common',
     'server',
-    'dashboard' // Ensure dismissal texts etc are loaded
+    'dashboard'
   ]);
 
   try {
