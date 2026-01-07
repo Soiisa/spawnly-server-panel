@@ -7,24 +7,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { 
-  ClipboardDocumentIcon, 
-  PlayIcon, 
-  StopIcon, 
-  ArrowPathIcon, 
-  CpuChipIcon, 
-  CurrencyDollarIcon, 
-  ClockIcon, 
-  ServerIcon, 
-  SignalIcon, 
-  UserGroupIcon, 
-  PuzzlePieceIcon, 
-  PencilSquareIcon, 
-  CheckIcon, 
-  XMarkIcon,
-  ArchiveBoxIcon,
-  CalendarDaysIcon,
-  TrashIcon,
-  ShieldCheckIcon // Added for Access Tab
+  ClipboardDocumentIcon, PlayIcon, StopIcon, ArrowPathIcon, CpuChipIcon, 
+  CurrencyDollarIcon, ClockIcon, ServerIcon, SignalIcon, UserGroupIcon, 
+  PuzzlePieceIcon, PencilSquareIcon, CheckIcon, XMarkIcon, ArchiveBoxIcon, 
+  CalendarDaysIcon, TrashIcon, ShieldCheckIcon 
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -41,17 +27,13 @@ import PlayersTab from '../../components/PlayersTab';
 import WorldTab from '../../components/WorldTab';
 import BackupsTab from '../../components/BackupsTab';
 import SchedulesTab from '../../components/SchedulesTab';
-import AccessTab from '../../components/AccessTab'; // <--- NEW COMPONENT
+import AccessTab from '../../components/AccessTab';
 
-// Helper: Convert DB player string to array
 const getOnlinePlayersArray = (server) => {
-  if (server?.status !== 'Running' || !server?.players_online) {
-    return [];
-  }
+  if (server?.status !== 'Running' || !server?.players_online) return [];
   return server.players_online.split(', ').filter(Boolean);
 };
 
-// Helper for browser notifications
 const showStatusNotification = (serverName, t) => {
   if (typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') {
@@ -66,31 +48,22 @@ const showStatusNotification = (serverName, t) => {
   }
 };
 
-// Helper for Displaying Software/Version
 const getDisplayInfo = (server, t) => {
   if (!server) return { software: t ? t('software.unknown') : 'Unknown', version: t ? t('software.unknown') : 'Unknown' };
-
   let software = server.type || 'Vanilla';
   let version = server.version || '';
-
   if (server.type?.startsWith('modpack-')) {
     const providerRaw = server.type.replace('modpack-', '');
     const provider = providerRaw.charAt(0).toUpperCase() + providerRaw.slice(1);
-    
     software = t ? `${t('software.modpack')} (${provider})` : `Modpack (${provider})`;
-
     if (server.version?.includes('::')) {
       const parts = server.version.split('::');
       if (parts[1]) version = parts[1];
-      if (parts[2]) {
-        software = `${parts[2]} (${provider})`; 
-      }
+      if (parts[2]) software = `${parts[2]} (${provider})`; 
     }
   }
-
   return { software, version };
 };
-
 
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
@@ -111,15 +84,13 @@ export default function ServerDetailPage({ initialServer }) {
   const [newRam, setNewRam] = useState(null);
   const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer));
   
-  // Ownership State
+  // Ownership & Permissions State
   const [isOwner, setIsOwner] = useState(false);
+  const [myPerms, setMyPerms] = useState({}); 
 
-  // Auto-stop state
   const [autoStopCountdown, setAutoStopCountdown] = useState(null);
   const [savingAutoStop, setSavingAutoStop] = useState(false);
   const [copiedIp, setCopiedIp] = useState(false);
-
-  // MOTD State
   const [isEditingMotd, setIsEditingMotd] = useState(false);
   const [motdText, setMotdText] = useState(initialServer?.motd || '');
   const [savingMotd, setSavingMotd] = useState(false);
@@ -136,15 +107,12 @@ export default function ServerDetailPage({ initialServer }) {
 
   useEffect(() => {
     const qTab = router?.query?.tab;
-    if (qTab && typeof qTab === 'string') {
-      setActiveTab(qTab);
-    }
+    if (qTab && typeof qTab === 'string') setActiveTab(qTab);
   }, [router?.query?.tab]);
 
   // Initial Data Fetch & Permissions
   useEffect(() => {
     mountedRef.current = true;
-
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
@@ -171,10 +139,31 @@ export default function ServerDetailPage({ initialServer }) {
           if (data) setMotdText(data.motd || '');
         }
 
-        // Determine Ownership
+        // --- PERMISSION LOGIC ---
         if (currentServer && userData) {
-            setIsOwner(currentServer.user_id === userData.id);
+            const owner = currentServer.user_id === userData.id;
+            setIsOwner(owner);
+
+            if (owner) {
+                // Owner has all permissions implicitly
+                setMyPerms({
+                    control: true, console: true, files: true, settings: true,
+                    schedules: true, players: true, software: true, mods: true,
+                    world: true, backups: true
+                });
+            } else {
+                // Fetch shared permissions
+                const { data: perm } = await supabase
+                    .from('server_permissions')
+                    .select('permissions')
+                    .eq('server_id', id)
+                    .eq('user_id', userData.id)
+                    .single();
+                
+                setMyPerms(perm?.permissions || {});
+            }
         }
+        // ------------------------
 
       } catch (err) {
         console.error('Data fetch error:', err);
@@ -192,10 +181,8 @@ export default function ServerDetailPage({ initialServer }) {
     };
   }, [id]);
 
-  // Realtime Subscription
   useEffect(() => {
     if (!id || !user?.id) return;
-    
     if (serverChannelRef.current) supabase.removeChannel(serverChannelRef.current);
 
     const serverChannel = supabase
@@ -221,58 +208,54 @@ export default function ServerDetailPage({ initialServer }) {
     return () => { if (serverChannelRef.current) supabase.removeChannel(serverChannelRef.current); };
   }, [id, user?.id, isEditingMotd]);
 
-  // Heartbeat Polling
   useEffect(() => {
     if (!id || !user?.id) return;
-
     const heartbeat = setInterval(() => {
       if (!document.hidden && !pollRef.current && mountedRef.current) {
          fetchServer(id);
       }
     }, 15000); 
-
     return () => clearInterval(heartbeat);
   }, [id, user?.id]);
 
   useEffect(() => {
     if (!server?.id || fileToken || !user) return;
-    const fetchFileToken = async (retries = 3, delay = 1000) => {
-      for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session) return;
-          const response = await fetch(`/api/servers/get-token?serverId=${server.id}`, {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          });
-          const data = await response.json();
-          if (response.ok && data.token && mountedRef.current) {
-            setFileToken(data.token);
-            return;
-          }
-        } catch (err) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
+    // Only fetch file token if user has permissions
+    if (myPerms.files || myPerms.world || myPerms.players) {
+        const fetchFileToken = async (retries = 3, delay = 1000) => {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+            const response = await fetch(`/api/servers/get-token?serverId=${server.id}`, {
+                headers: { Authorization: `Bearer ${session.access_token}` },
+            });
+            const data = await response.json();
+            if (response.ok && data.token && mountedRef.current) {
+                setFileToken(data.token);
+                return;
+            }
+            } catch (err) {
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            }
         }
-      }
-    };
-    fetchFileToken();
-  }, [server?.id, user]);
+        };
+        fetchFileToken();
+    }
+  }, [server?.id, user, myPerms]);
 
   useEffect(() => {
     setOnlinePlayers(getOnlinePlayersArray(server));
   }, [server?.players_online, server?.status]);
 
-  // Countdown Logic
   useEffect(() => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-
     const hasActivePlayers = server?.player_count && server.player_count > 0;
-
     if (server?.status === 'Running' && server?.last_empty_at && server?.auto_stop_timeout > 0 && !hasActivePlayers) {
       const updateCountdown = () => {
         const lastEmpty = new Date(server.last_empty_at).getTime();
         const timeoutMs = (server.auto_stop_timeout || 0) * 60 * 1000;
         const diff = (lastEmpty + timeoutMs) - Date.now();
-
         if (diff <= 0) {
             setAutoStopCountdown(t('config.stopping_soon'));
         } else {
@@ -281,7 +264,6 @@ export default function ServerDetailPage({ initialServer }) {
           setAutoStopCountdown(t('config.stopping_in', { time: `${minutes}m ${seconds}s` }));
         }
       };
-      
       updateCountdown();
       countdownIntervalRef.current = setInterval(updateCountdown, 1000);
     } else {
@@ -290,24 +272,17 @@ export default function ServerDetailPage({ initialServer }) {
     return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
   }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout, server?.player_count, t]);
 
-  // Notifications Logic
   useEffect(() => {
     const prevStatus = prevStatusRef.current;
     const currentStatus = server?.status;
     const serverName = server?.name;
-
     const startingStatuses = ['Starting', 'Provisioning', 'Recreating'];
     const isTransitioning = startingStatuses.includes(prevStatus) && currentStatus === 'Running';
-
     if (isTransitioning) {
       showStatusNotification(serverName, t);
     }
-    
     prevStatusRef.current = currentStatus;
   }, [server?.status, server?.name, t]); 
-
-
-  // --- Logic Helpers ---
 
   const cleanupResources = () => {
     try {
@@ -335,8 +310,6 @@ export default function ServerDetailPage({ initialServer }) {
 
   const fetchServer = useCallback(
     debounce(async (serverId) => {
-      // NOTE: We don't filter by user_id strictly in the query here because RLS or server logic handles it.
-      // But for dashboard consistency we just fetch by ID.
       const { data } = await supabase.from('servers').select('*').eq('id', serverId).single();
       if (data && mountedRef.current) {
         setServer(prev => (JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
@@ -347,11 +320,9 @@ export default function ServerDetailPage({ initialServer }) {
 
   const pollUntilStatus = (expectedStatuses, timeout = 120000) => {
     if (pollRef.current) clearInterval(pollRef.current);
-
     const startTime = Date.now();
     pollRef.current = setInterval(() => {
       fetchServer(id);
-      
       if (expectedStatuses.includes(server?.status) || Date.now() - startTime > timeout) {
         clearInterval(pollRef.current);
         pollRef.current = null; 
@@ -359,8 +330,6 @@ export default function ServerDetailPage({ initialServer }) {
       }
     }, 3000);
   };
-
-  // --- Handlers ---
 
   const handleCopyIp = () => {
     if (!server?.name) return;
@@ -373,6 +342,11 @@ export default function ServerDetailPage({ initialServer }) {
   const handleSoftwareChange = (newConfig) => setServer(prev => ({ ...prev, ...newConfig }));
 
   const handleAutoStopChange = async (e) => {
+    // Basic setting check
+    if (!isOwner && !myPerms.settings) {
+        setError(t('errors.no_permission', { defaultValue: 'No permission' }));
+        return;
+    }
     const val = parseInt(e.target.value, 10);
     setSavingAutoStop(true);
     try {
@@ -384,10 +358,16 @@ export default function ServerDetailPage({ initialServer }) {
   };
 
   const handleServerAction = async (action) => {
+    // Permission Check
+    if (!myPerms.control) {
+        setError("You do not have permission to control this server.");
+        return;
+    }
+
     if (actionLoading) return;
     
     if (action === 'kill') {
-        if (!confirm(t('messages.confirm_kill', { defaultValue: 'Are you sure you want to FORCE KILL this server? This will immediately destroy the VPS without saving data. Only use this if the server is stuck.' }))) {
+        if (!confirm(t('messages.confirm_kill', { defaultValue: 'Are you sure you want to FORCE KILL? This deletes data not saved to disk.' }))) {
             return;
         }
     }
@@ -448,51 +428,36 @@ export default function ServerDetailPage({ initialServer }) {
   };
 
   const handleSaveRam = async () => {
+    if (!isOwner) return setError("Only owner can change RAM billing");
     if (server.status !== 'Stopped') return setError(t('errors.stop_ram'));
     if (newRam < 2 || newRam > 32) return setError(t('errors.ram_range'));
     setActionLoading(true);
     try {
       const { error } = await supabase
         .from('servers')
-        .update({ 
-          ram: newRam,
-          cost_per_hour: newRam 
-        })
-        .eq('id', server.id);
-
+        .update({ ram: newRam, cost_per_hour: newRam }).eq('id', server.id);
       if (error) throw error;
-      
-      setServer(prev => ({ 
-        ...prev, 
-        ram: newRam,
-        cost_per_hour: newRam 
-      }));
-      
+      setServer(prev => ({ ...prev, ram: newRam, cost_per_hour: newRam }));
       setEditingRam(false);
-    } catch (e) { 
-      setError(e.message); 
-    } finally { 
-      setActionLoading(false); 
-    }
+    } catch (e) { setError(e.message); } finally { setActionLoading(false); }
   };
 
   const handleSaveMotd = async () => {
+    if (!isOwner && !myPerms.settings) {
+        setError("Permission denied");
+        return;
+    }
     setSavingMotd(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
 
-      const { error: dbError } = await supabase
-        .from('servers')
-        .update({ motd: motdText })
-        .eq('id', server.id);
-      
+      const { error: dbError } = await supabase.from('servers').update({ motd: motdText }).eq('id', server.id);
       if (dbError) throw dbError;
 
       const propsRes = await fetch(`/api/servers/${server.id}/properties`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
-      
       if (propsRes.ok) {
         let propsText = await propsRes.text();
         if (propsText.includes('motd=')) {
@@ -500,22 +465,16 @@ export default function ServerDetailPage({ initialServer }) {
         } else {
           propsText += `\nmotd=${motdText}`;
         }
-        
         await fetch(`/api/servers/${server.id}/properties`, {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'text/plain',
-            'Authorization': `Bearer ${session.access_token}`
-          },
+          headers: { 'Content-Type': 'text/plain', 'Authorization': `Bearer ${session.access_token}` },
           body: propsText
         });
       }
-
       setServer(prev => ({ ...prev, motd: motdText }));
       setIsEditingMotd(false);
     } catch (e) {
       setError(t('errors.save_motd'));
-      console.error(e);
     } finally {
       setSavingMotd(false);
     }
@@ -539,9 +498,7 @@ export default function ServerDetailPage({ initialServer }) {
   const isStopped = status === 'Stopped';
   const isUnknown = status === 'Unknown';
   const isBusy = !isRunning && !isStopped && !isUnknown;
-  
-  const isStuck = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting'].includes(status);
-  const canKill = isStuck;
+  const canKill = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting'].includes(status);
 
   const sType = (server.type || '').toLowerCase();
   const moddedTypes = ['forge', 'neoforge', 'fabric', 'quilt'];
@@ -553,20 +510,26 @@ export default function ServerDetailPage({ initialServer }) {
   if (pluginTypes.includes(sType)) modLabel = t('tabs.plugins');
   if (hybridTypes.includes(sType)) modLabel = t('tabs.mods_plugins');
 
-  const tabs = [
-    { id: 'overview', label: t('tabs.overview'), icon: SignalIcon },
-    { id: 'schedules', label: t('tabs.schedules'), icon: CalendarDaysIcon }, 
-    { id: 'properties', label: t('tabs.properties'), icon: ServerIcon },
-    { id: 'console', label: t('tabs.console'), icon: ClockIcon },
-    { id: 'players', label: t('tabs.players'), icon: UserGroupIcon },
-    { id: 'software', label: t('tabs.software'), icon: CpuChipIcon },
-    ...(showMods ? [{ id: 'mods', label: modLabel, icon: PuzzlePieceIcon }] : []),
-    { id: 'world', label: t('tabs.world'), icon: ServerIcon },
-    { id: 'files', label: t('tabs.files'), icon: ClipboardDocumentIcon },
-    { id: 'backups', label: t('tabs.backups'), icon: ArchiveBoxIcon },
-    // Show Access tab ONLY to Owner
-    ...(isOwner ? [{ id: 'access', label: 'Access', icon: ShieldCheckIcon }] : []), 
+  // --- Dynamic Tab List ---
+  const allTabs = [
+    { id: 'overview', label: t('tabs.overview'), icon: SignalIcon, perm: null }, // Always show
+    { id: 'schedules', label: t('tabs.schedules'), icon: CalendarDaysIcon, perm: 'schedules' },
+    { id: 'properties', label: t('tabs.properties'), icon: ServerIcon, perm: 'settings' },
+    { id: 'console', label: t('tabs.console'), icon: ClockIcon, perm: 'console' },
+    { id: 'players', label: t('tabs.players'), icon: UserGroupIcon, perm: 'players' },
+    { id: 'software', label: t('tabs.software'), icon: CpuChipIcon, perm: 'software' },
+    ...(showMods ? [{ id: 'mods', label: modLabel, icon: PuzzlePieceIcon, perm: 'mods' }] : []),
+    { id: 'world', label: t('tabs.world'), icon: ServerIcon, perm: 'world' },
+    { id: 'files', label: t('tabs.files'), icon: ClipboardDocumentIcon, perm: 'files' },
+    { id: 'backups', label: t('tabs.backups'), icon: ArchiveBoxIcon, perm: 'backups' },
+    ...(isOwner ? [{ id: 'access', label: 'Access', icon: ShieldCheckIcon, perm: 'owner' }] : []),
   ];
+
+  const tabs = allTabs.filter(tab => {
+    if (tab.perm === null) return true;
+    if (tab.perm === 'owner') return isOwner;
+    return myPerms[tab.perm] === true;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
@@ -600,10 +563,7 @@ export default function ServerDetailPage({ initialServer }) {
               <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-2">
                 <span className="bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded text-gray-700 dark:text-gray-300 font-medium capitalize">{server.game}</span>
                 <span>•</span>
-                <button 
-                  onClick={handleCopyIp}
-                  className="group flex items-center gap-1 hover:text-indigo-600 transition-colors"
-                >
+                <button onClick={handleCopyIp} className="group flex items-center gap-1 hover:text-indigo-600 transition-colors">
                   <span className="font-mono">{server.name}.spawnly.net</span>
                   {copiedIp ? <span className="text-green-600 text-xs font-bold">{t('actions.copied')}</span> : <ClipboardDocumentIcon className="w-4 h-4 opacity-50 group-hover:opacity-100" />}
                 </button>
@@ -620,37 +580,28 @@ export default function ServerDetailPage({ initialServer }) {
                       placeholder={t('properties.labels.motd', { defaultValue: 'Enter Server MOTD...' })}
                       maxLength={64}
                     />
-                    <button 
-                      onClick={handleSaveMotd}
-                      disabled={savingMotd}
-                      className="p-1 bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
-                    >
+                    <button onClick={handleSaveMotd} disabled={savingMotd} className="p-1 bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50">
                       {savingMotd ? <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" /> : <CheckIcon className="w-4 h-4" />}
                     </button>
-                    <button 
-                      onClick={() => { setIsEditingMotd(false); setMotdText(server.motd || ''); }}
-                      className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-                    >
+                    <button onClick={() => { setIsEditingMotd(false); setMotdText(server.motd || ''); }} className="p-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">
                       <XMarkIcon className="w-4 h-4" />
                     </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 group">
                     <span className="italic text-gray-600 dark:text-gray-400">“{motdText || t('messages.default_motd', { defaultValue: 'A Spawnly Server' })}”</span>
-                    <button 
-                      onClick={() => setIsEditingMotd(true)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 dark:text-gray-500 hover:text-indigo-600"
-                      title={t('actions.edit_motd')}
-                    >
-                      <PencilSquareIcon className="w-4 h-4" />
-                    </button>
+                    {(isOwner || myPerms.settings) && (
+                        <button onClick={() => setIsEditingMotd(true)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 dark:text-gray-500 hover:text-indigo-600" title={t('actions.edit_motd')}>
+                        <PencilSquareIcon className="w-4 h-4" />
+                        </button>
+                    )}
                   </div>
                 )}
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {isStopped && (
+              {myPerms.control && isStopped && (
                 <button
                   onClick={() => handleServerAction('start')}
                   disabled={actionLoading}
@@ -661,7 +612,7 @@ export default function ServerDetailPage({ initialServer }) {
                 </button>
               )}
               
-              {(isRunning || isUnknown) && (
+              {myPerms.control && (isRunning || isUnknown) && (
                 <>
                   {isRunning && (
                     <button
@@ -691,7 +642,7 @@ export default function ServerDetailPage({ initialServer }) {
                 </button>
               )}
 
-              {canKill && (
+              {myPerms.control && canKill && (
                 <button
                     onClick={() => handleServerAction('kill')}
                     disabled={actionLoading}
@@ -706,6 +657,7 @@ export default function ServerDetailPage({ initialServer }) {
           </div>
         </div>
 
+        {/* Dynamic Tabs Navigation */}
         <div className="mb-8 overflow-x-auto">
           <div className="flex items-center gap-2 min-w-max border-b border-gray-200 dark:border-slate-700 pb-1">
             {tabs.map((tab) => (
@@ -721,10 +673,7 @@ export default function ServerDetailPage({ initialServer }) {
                 <tab.icon className="w-5 h-5" />
                 {tab.label}
                 {activeTab === tab.id && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 translate-y-1.5 rounded-full"
-                  />
+                  <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 translate-y-1.5 rounded-full" />
                 )}
               </button>
             ))}
@@ -805,8 +754,8 @@ export default function ServerDetailPage({ initialServer }) {
                       <select
                         value={server.auto_stop_timeout ?? 30}
                         onChange={handleAutoStopChange}
-                        disabled={savingAutoStop}
-                        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-gray-50 dark:bg-slate-700"
+                        disabled={savingAutoStop || (!isOwner && !myPerms.settings)}
+                        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-gray-50 dark:bg-slate-700 disabled:opacity-50"
                       >
                         <option value="0">{t('config.auto_stop_never')}</option>
                         <option value="5">{t('config.auto_stop_5m')}</option>
@@ -843,7 +792,7 @@ export default function ServerDetailPage({ initialServer }) {
                     ) : (
                       <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-700 p-3 rounded-xl border border-gray-200 dark:border-slate-600">
                         <span className="font-mono font-bold text-gray-800 dark:text-gray-100">{server.ram} GB</span>
-                        {isStopped && (
+                        {isStopped && isOwner && (
                           <button 
                             onClick={() => { setNewRam(server.ram); setEditingRam(true); }} 
                             className="text-xs text-indigo-600 font-medium hover:text-indigo-800"
@@ -856,78 +805,79 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2">
-                  <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <CurrencyDollarIcon className="w-4 h-4" /> {t('billing.title')}
-                  </h3>
-                  <div className="flex items-center gap-8">
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.hourly_cost')}</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{server.cost_per_hour} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.credits_hr')}</span></p>
+                {isOwner && (
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2">
+                    <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <CurrencyDollarIcon className="w-4 h-4" /> {t('billing.title')}
+                    </h3>
+                    <div className="flex items-center gap-8">
+                        <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.hourly_cost')}</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{server.cost_per_hour} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.credits_hr')}</span></p>
+                        </div>
+                        <div className="h-10 w-px bg-gray-200 dark:bg-slate-700"></div>
+                        <div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.est_runtime')}</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                            {(credits / (server.cost_per_hour || 1)).toFixed(1)} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.hours_left')}</span>
+                        </p>
+                        </div>
                     </div>
-                    <div className="h-10 w-px bg-gray-200 dark:bg-slate-700"></div>
-                    <div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.est_runtime')}</p>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                        {(credits / (server.cost_per_hour || 1)).toFixed(1)} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.hours_left')}</span>
-                      </p>
+                    {credits < server.cost_per_hour && (
+                        <div className="mt-4 bg-red-50 text-red-700 text-sm p-3 rounded-lg flex items-center gap-2">
+                        <span className="font-bold">{t('billing.warning_low')}</span>
+                        </div>
+                    )}
                     </div>
-                  </div>
-                  {credits < server.cost_per_hour && (
-                    <div className="mt-4 bg-red-50 text-red-700 text-sm p-3 rounded-lg flex items-center gap-2">
-                      <span className="font-bold">{t('billing.warning_low')}</span>
-                    </div>
-                  )}
-                </div>
+                )}
 
               </div>
             )}
 
             <div className={activeTab === 'overview' ? 'hidden' : 'block animate-in fade-in duration-300'}>
-              {activeTab === 'properties' && (
+              {activeTab === 'properties' && myPerms.settings && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <ServerPropertiesEditor server={server} />
                 </div>
               )}
 
-              {activeTab === 'schedules' && (
+              {activeTab === 'schedules' && myPerms.schedules && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <SchedulesTab server={server} />
                 </div>
               )}
 
-              {activeTab === 'console' && (
+              {activeTab === 'console' && myPerms.console && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <ConsoleViewer server={server} />
                 </div>
               )}
 
-              {activeTab === 'players' && (
+              {activeTab === 'players' && myPerms.players && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating', { defaultValue: 'Authenticating...' })}</p>}
                 </div>
               )}
 
-              {activeTab === 'software' && <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} />}
-              {activeTab === 'mods' && <ModsPluginsTab server={server} />}
+              {activeTab === 'software' && myPerms.software && <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} />}
+              {activeTab === 'mods' && myPerms.mods && <ModsPluginsTab server={server} />}
 
-              {activeTab === 'world' && (
+              {activeTab === 'world' && myPerms.world && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating', { defaultValue: 'Authenticating...' })}</p>}
                 </div>
               )}
 
-              {activeTab === 'files' && (
+              {activeTab === 'files' && myPerms.files && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating_files', { defaultValue: 'Authenticating file access...' })}</p>}
                 </div>
               )}
 
-              {activeTab === 'backups' && (
+              {activeTab === 'backups' && myPerms.backups && (
                 <BackupsTab server={server} />
               )}
               
-              {/* RENDER ACCESS TAB ONLY FOR OWNERS */}
               {activeTab === 'access' && isOwner && (
                  <AccessTab server={server} />
               )}

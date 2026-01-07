@@ -10,12 +10,23 @@ export default function AccessTab({ server }) {
   
   // Form State
   const [inviteEmail, setInviteEmail] = useState('');
-  const [editingUser, setEditingUser] = useState(null); // If set, we are editing this user
-  const [perms, setPerms] = useState({
+  const [editingUser, setEditingUser] = useState(null); 
+  
+  // Full Permission Set Default State
+  const defaultPerms = {
     control: true,
     console: false,
-    files: false
-  });
+    files: false,
+    settings: false,
+    schedules: false,
+    players: false,
+    software: false,
+    mods: false,
+    world: false,
+    backups: false
+  };
+
+  const [perms, setPerms] = useState(defaultPerms);
 
   useEffect(() => {
     fetchUsers();
@@ -62,13 +73,14 @@ export default function AccessTab({ server }) {
   const startEdit = (u) => {
     setEditingUser(u);
     setInviteEmail(u.email);
-    setPerms(u.permissions || { control: false, console: false, files: false });
+    // Merge existing perms with defaults to ensure all keys exist (even if DB has old format)
+    setPerms({ ...defaultPerms, ...u.permissions });
   };
 
   const resetForm = () => {
     setEditingUser(null);
     setInviteEmail('');
-    setPerms({ control: true, console: false, files: false });
+    setPerms(defaultPerms);
   };
 
   const removeUser = async (permId) => {
@@ -85,6 +97,18 @@ export default function AccessTab({ server }) {
     fetchUsers();
   };
 
+  const PermissionCheckbox = ({ label, pKey }) => (
+    <label className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+        <input 
+            type="checkbox" 
+            checked={perms[pKey]} 
+            onChange={e => setPerms({...perms, [pKey]: e.target.checked})} 
+            className="rounded text-indigo-600 focus:ring-indigo-500 bg-gray-100 dark:bg-slate-800 border-gray-300 dark:border-slate-600" 
+        />
+        <span className="text-sm text-gray-700 dark:text-gray-300 select-none">{label}</span>
+    </label>
+  );
+
   return (
     <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
       <h3 className="text-lg font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-2">
@@ -100,57 +124,62 @@ export default function AccessTab({ server }) {
             placeholder="User Email"
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
-            disabled={!!editingUser} // Cannot change email during edit
-            className="flex-1 rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white disabled:opacity-50"
+            disabled={!!editingUser} 
+            className="flex-1 rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white disabled:opacity-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none p-2"
           />
-          <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-medium">
+          <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-medium transition-colors">
             {editingUser ? 'Update' : 'Invite'}
           </button>
           {editingUser && (
-            <button type="button" onClick={resetForm} className="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-300">
+            <button type="button" onClick={resetForm} className="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-300 transition-colors">
               <XMarkIcon className="w-5 h-5" />
             </button>
           )}
         </div>
         
-        <div className="flex gap-6 text-sm">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={perms.control} onChange={e => setPerms({...perms, control: e.target.checked})} className="rounded text-indigo-600 focus:ring-indigo-500" />
-            <span className="text-gray-700 dark:text-gray-300">Control (Start/Stop)</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={perms.console} onChange={e => setPerms({...perms, console: e.target.checked})} className="rounded text-indigo-600 focus:ring-indigo-500" />
-            <span className="text-gray-700 dark:text-gray-300">Console</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={perms.files} onChange={e => setPerms({...perms, files: e.target.checked})} className="rounded text-indigo-600 focus:ring-indigo-500" />
-            <span className="text-gray-700 dark:text-gray-300">Files</span>
-          </label>
+        <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-3 tracking-wider">Permissions</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <PermissionCheckbox label="Control (Start/Stop)" pKey="control" />
+                <PermissionCheckbox label="Console Access" pKey="console" />
+                <PermissionCheckbox label="File Manager" pKey="files" />
+                <PermissionCheckbox label="Settings (Properties)" pKey="settings" />
+                <PermissionCheckbox label="Schedules" pKey="schedules" />
+                <PermissionCheckbox label="Player Manager" pKey="players" />
+                <PermissionCheckbox label="Change Software" pKey="software" />
+                <PermissionCheckbox label="Mods & Plugins" pKey="mods" />
+                <PermissionCheckbox label="World Manager" pKey="world" />
+                <PermissionCheckbox label="Backups" pKey="backups" />
+            </div>
         </div>
       </form>
 
       {/* Users List */}
       <div className="space-y-3">
-        {users.map((u) => (
-          <div key={u.id} className={`flex items-center justify-between p-3 rounded-lg border ${editingUser?.id === u.id ? 'bg-indigo-50 border-indigo-200' : 'bg-gray-50 dark:bg-slate-700/50 border-gray-100 dark:border-slate-700'}`}>
-            <div>
-              <p className="font-medium text-gray-900 dark:text-white">{u.email}</p>
-              <p className="text-xs text-gray-500 flex gap-2 mt-1">
-                {u.permissions.control && <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Control</span>}
-                {u.permissions.console && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Console</span>}
-                {u.permissions.files && <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">Files</span>}
-              </p>
+        {users.length === 0 && !loading && (
+            <p className="text-center text-gray-500 dark:text-gray-400 py-4">No users have been granted access yet.</p>
+        )}
+        {users.map((u) => {
+           const activeCount = Object.values(u.permissions || {}).filter(Boolean).length;
+           return (
+            <div key={u.id} className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${editingUser?.id === u.id ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-800' : 'bg-gray-50 dark:bg-slate-700/50 border-gray-100 dark:border-slate-700'}`}>
+                <div>
+                <p className="font-medium text-gray-900 dark:text-white">{u.email}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                    {activeCount} active permissions
+                </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => startEdit(u)} className="text-gray-500 hover:text-indigo-600 p-2 rounded hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors" title="Edit Permissions">
+                        <PencilIcon className="w-5 h-5" />
+                    </button>
+                    <button onClick={() => removeUser(u.id)} className="text-red-500 hover:text-red-700 p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Revoke Access">
+                        <TrashIcon className="w-5 h-5" />
+                    </button>
+                </div>
             </div>
-            <div className="flex items-center gap-2">
-                <button onClick={() => startEdit(u)} className="text-gray-500 hover:text-indigo-600 p-2" title="Edit Permissions">
-                    <PencilIcon className="w-5 h-5" />
-                </button>
-                <button onClick={() => removeUser(u.id)} className="text-red-500 hover:text-red-700 p-2" title="Revoke Access">
-                    <TrashIcon className="w-5 h-5" />
-                </button>
-            </div>
-          </div>
-        ))}
+           )
+        })}
       </div>
     </div>
   );
