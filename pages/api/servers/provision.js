@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
+import { verifyServerAccess } from '../../../lib/accessControl'; // <--- NEW IMPORT
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -1161,6 +1162,8 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     return res.status(500).json({ error: 'Server provisioning failed', detail: err.message });
   }
 }
+
+// --- UPDATED HANDLER LOGIC ---
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -1168,21 +1171,28 @@ export default async function handler(req, res) {
   if (!serverId) return res.status(400).json({ error: 'serverId is required' });
 
   let isAuthorized = false;
+  let userId = null;
+
+  // 1. Sleeper Proxy Bypass (System Internal)
   const sleeperHeader = req.headers['x-sleeper-secret'];
   if (SLEEPER_SECRET && sleeperHeader === SLEEPER_SECRET) {
       isAuthorized = true;
   } else {
+      // 2. User Authorization (Owner OR Shared 'control' permission)
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
           const token = authHeader.split(' ')[1];
           const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+          
           if (user && !authError) {
-              const { data: serverCheck } = await supabaseAdmin
-                  .from('servers')
-                  .select('user_id')
-                  .eq('id', serverId)
-                  .single();
-              if (serverCheck && serverCheck.user_id === user.id) isAuthorized = true;
+              userId = user.id;
+              // --- USE verifyServerAccess to check shared permissions ---
+              const access = await verifyServerAccess(supabaseAdmin, serverId, user.id, 'control');
+              if (access.allowed) {
+                  isAuthorized = true;
+              } else {
+                  console.warn(`[Provision] Access denied for user ${user.id} on server ${serverId}`);
+              }
           }
       }
   }
@@ -1198,6 +1208,23 @@ export default async function handler(req, res) {
 
     if (error || !serverRow) return res.status(404).json({ error: 'Server not found' });
     if (!serverRow.subdomain) return res.status(400).json({ error: 'No subdomain specified' });
+
+    // --- CHECK CREDITS OF THE OWNER (Not necessarily the requester) ---
+    // If the server is shared, we bill the OWNER (serverRow.user_id)
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('credits')
+      .eq('id', serverRow.user_id) 
+      .single();
+
+    if (profileError || !profile) {
+        console.error("Failed to fetch owner profile for billing check");
+        return res.status(500).json({ error: 'Owner profile not found' });
+    }
+
+    if ((profile.credits || 0) < 0.1) {
+         return res.status(402).json({ error: 'Owner has insufficient credits to start server' });
+    }
 
     return await provisionServer(serverRow, version, ssh_keys, res);
   } catch (err) {
