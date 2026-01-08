@@ -71,5 +71,15 @@
   },
   "units": {
     "gb": "GB"
+  },
+  "tour": {
+    "welcome_title": "Welcome to Spawnly!",
+    "welcome_content": "Let's take a quick tour to help you get started with your new server panel.",
+    "credits_title": "Your Wallet",
+    "credits_content": "This is your credit balance. You need credits to deploy and run servers.",
+    "stats_title": "Resource Overview",
+    "stats_content": "Here you can monitor your total active servers, memory usage, and hourly costs.",
+    "create_title": "Launch a Server",
+    "create_content": "Click here to deploy your first Minecraft server in seconds!"
   }
 }

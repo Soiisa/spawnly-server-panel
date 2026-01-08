@@ -10,7 +10,46 @@
     "edit_motd": "Edit MOTD",
     "save": "Save",
     "cancel": "Cancel",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "kill": "Kill"
+  },
+  "tour": {
+    "welcome_title": "Server Command Center",
+    "welcome_content": "Welcome to your mission control. This quick tour will show you how to manage, monitor, and configure your server.",
+    "header_title": "Global Navigation",
+    "header_content": "Use this top bar to quickly switch between your Dashboard, Credit Pools, Billing, and Account Settings at any time.",
+    "status_title": "Live Status",
+    "status_content": "This badge shows the real-time state of your server (Running, Stopped, or Working). It updates automatically.",
+    "controls_title": "Power Controls",
+    "controls_content": "Use these buttons to Start, Stop, or Restart your server. Use 'Kill' only if the server is unresponsive.",
+    "address_title": "Connection Info",
+    "address_content": "Click this box to instantly copy the server IP address to your clipboard.",
+    "resources_title": "Live Metrics",
+    "resources_content": "Monitor CPU and RAM usage in real-time. If usage is high, consider upgrading your RAM allocation.",
+    "tabs_title": "Management Tools",
+    "tabs_content": "This navigation bar gives you access to advanced tools. Let's look at the most important ones.",
+    "console_title": "Console Terminal",
+    "console_content": "The direct line to your server. Watch startup logs live, debug errors, and execute admin commands (like /op or /gamemode).",
+    "files_title": "File Manager",
+    "files_content": "Full access to your server files. Upload plugins, edit configuration files directly in the browser, or manage data.",
+    "software_title": "Version Switcher",
+    "software_content": "Switch between Vanilla, Paper, or Forge. You can also browse and install popular Modpacks with a single click.",
+    "world_title": "World Manager",
+    "world_content": "Manage your save files. Upload a custom map .zip, download your current progress, or generate a fresh world seed.",
+    "players_title": "Player Management",
+    "players_content": "Control access to your server. Whitelist friends, manage Operators (OPs), and view or revoke bans.",
+    "schedules_title": "Automation",
+    "schedules_content": "Set it and forget it. Schedule automatic daily restarts, backups, or recurring server messages.",
+    "properties_title": "Server Properties",
+    "properties_content": "Configure core settings (Difficulty, PvP, Max Players) using simple toggles instead of editing files manually.",
+    "mods_title": "Mods & Plugins",
+    "mods_content": "Search and install individual mods or plugins to enhance your gameplay experience.",
+    "backups_title": "Backups",
+    "backups_content": "Create snapshots of your server. If something breaks, you can restore your server to a previous point in time.",
+    "access_title": "Team Access",
+    "access_content": "Share this server with friends. Grant them permission to start the server, view the console, or manage files.",
+    "billing_title": "Billing & Credits",
+    "billing_content": "Track your hourly cost and estimated runtime. If your balance runs low, you can add credits here."
   },
   "tabs": {
     "overview": "Overview",
@@ -56,7 +95,10 @@
     "credits_hr": "credits/hr",
     "est_runtime": "Est. Runtime",
     "hours_left": "hours left",
-    "warning_low": "Warning: Low balance. Server may stop soon."
+    "warning_low": "Warning: Low balance. Server may stop soon.",
+    "source": "Billing Source",
+    "personal_wallet": "Personal Wallet",
+    "pool_explanation": "If the pool runs out of credits, the server will attempt to charge your personal wallet."
   },
   "errors": {
     "load_session": "Failed to load session data.",
@@ -81,7 +123,10 @@
     "initializing": "Initializing",
     "unknown": "Unknown",
     "provisioning": "Provisioning",
-    "disconnected": "Disconnected"
+    "disconnected": "Disconnected",
+    "processing": "Processing",
+    "authenticating": "Authenticating...",
+    "authenticating_files": "Authenticating file access..."
   },
   "console": {
     "title": "Terminal",

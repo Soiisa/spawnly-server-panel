@@ -1,4 +1,3 @@
-// scripts/server-wrapper.js
 require('dotenv').config();
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
@@ -6,27 +5,24 @@ const path = require('path');
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-// DELETED: const fetch = require('node-fetch');  <-- This line caused the crash
 
 // --- Configuration ---
 const PORT = 3006;
 const SERVER_ID = process.env.SERVER_ID;
 const NEXTJS_API_URL = process.env.NEXTJS_API_URL;
-const CRASH_API_URL = process.env.CRASH_API_URL; 
-const RCON_PASSWORD = process.env.RCON_PASSWORD; 
+const RCON_PASSWORD = process.env.RCON_PASSWORD;
 const HEAP_GB = process.env.HEAP_GB || '2';
 const USE_RUN_SH = fs.existsSync(path.join(process.cwd(), 'run.sh'));
 
-// File to communicate state to status-reporter.js
 const STATE_FILE = path.join(process.cwd(), '.server_status');
 
-if (!SERVER_ID || !NEXTJS_API_URL) {
-  console.error('[Wrapper] Missing env: SERVER_ID or NEXTJS_API_URL');
-  process.exit(1);
-}
+// --- State Management ---
+let currentState = 'Starting';
+let isShuttingDown = false;
 
-// --- Helper: Update State File ---
 const updateState = (status) => {
+  if (currentState === status) return;
+  currentState = status;
   try {
     fs.writeFileSync(STATE_FILE, status);
   } catch (e) {
@@ -34,162 +30,133 @@ const updateState = (status) => {
   }
 };
 
-// Initialize State as Starting
-console.log('[Wrapper] Initializing state: Starting');
+console.log('[Wrapper] Initializing...');
 updateState('Starting');
 
-// --- Log Buffer Logic ---
+// --- Log Buffer & Sync ---
 const MAX_LOG_LINES = 500;
-const UPDATE_INTERVAL = 2000;
+const SYNC_INTERVAL = 2000;
 let logBuffer = [];
-
-const appendLog = (data) => {
-  const line = data.toString().trim();
-  if (!line) return;
-  console.log(line); 
-
-  // --- Scan for Boot Completion ---
-  if (line.includes('Thread RCON Listener started')) {
-    console.log('[Wrapper] RCON detected. Setting status to Running.');
-    updateState('Running');
-  }
-
-  logBuffer.push(line);
-  if (logBuffer.length > MAX_LOG_LINES) {
-    logBuffer = logBuffer.slice(-MAX_LOG_LINES);
-  }
-};
+let lastSyncTime = Date.now();
 
 const sendUpdate = async (statusOverride = null) => {
-  if (logBuffer.length === 0 && !statusOverride) return;
-  
   const logsToSend = logBuffer.join('\n');
   logBuffer = []; 
-  
+  lastSyncTime = Date.now();
+
+  if (!logsToSend && !statusOverride && Date.now() - lastSyncTime < 10000) return;
+
   try {
-    const resp = await fetch(NEXTJS_API_URL, {
+    const payload = {
+      serverId: SERVER_ID,
+      console_log: logsToSend,
+      status: statusOverride || currentState,
+    };
+
+    await fetch(NEXTJS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${RCON_PASSWORD}`
       },
-      body: JSON.stringify({
-        serverId: SERVER_ID,
-        console_log: logsToSend,
-        status: statusOverride,
-      }),
+      body: JSON.stringify(payload),
     });
-    
-    if (!resp.ok) {
-        console.error(`[Wrapper] Sync failed (${resp.status}):`, await resp.text());
-    }
   } catch (err) {
-    console.error('[Wrapper] Sync error:', err.message);
+    console.error('[Wrapper] Sync error (network):', err.message);
   }
 };
 
-setInterval(() => sendUpdate(), UPDATE_INTERVAL);
+setInterval(() => sendUpdate(), SYNC_INTERVAL);
 
-// --- CODEX CRASH HANDLER ---
-const handleCrash = (code) => {
-  console.log('[Wrapper] Server crashed. Running Codex analysis...');
-  const logPath = path.join(process.cwd(), 'logs', 'latest.log');
-  
-  if (!fs.existsSync('/opt/tools/analyze.php')) {
-      console.warn('[Wrapper] Codex analyze.php not found. Skipping analysis.');
-      return;
+// --- Minecraft Process ---
+let mcProcess;
+
+const startServer = () => {
+  console.log(`[Wrapper] Launching server...`);
+
+  if (USE_RUN_SH) {
+    try { fs.chmodSync('./run.sh', '755'); } catch (e) {}
+    mcProcess = spawn('./run.sh', [], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
+  } else {
+    const args = [
+      `-Xmx${HEAP_GB}G`,
+      `-Xms1G`,
+      '-XX:+ExitOnOutOfMemoryError',
+      '-XX:+UseG1GC',
+      '-XX:+ParallelRefProcEnabled',
+      '-XX:MaxGCPauseMillis=200',
+      '-XX:+UnlockExperimentalVMOptions',
+      '-XX:+DisableExplicitGC',
+      '-XX:+AlwaysPreTouch',
+      '-XX:G1NewSizePercent=30',
+      '-XX:G1MaxNewSizePercent=40',
+      '-XX:G1HeapRegionSize=8M',
+      '-XX:G1ReservePercent=20',
+      '-XX:G1HeapWastePercent=5',
+      '-XX:G1MixedGCCountTarget=4',
+      '-XX:InitiatingHeapOccupancyPercent=15',
+      '-XX:G1MixedGCLiveThresholdPercent=90',
+      '-XX:G1RSetUpdatingPauseTimePercent=5',
+      '-XX:SurvivorRatio=32',
+      '-XX:+PerfDisableSharedMem',
+      '-XX:MaxTenuringThreshold=1',
+      '-jar', 'server.jar', 'nogui'
+    ];
+    mcProcess = spawn('java', args, { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
   }
 
-  exec(`php /opt/tools/analyze.php "${logPath}"`, async (error, stdout, stderr) => {
-    if (error) {
-      console.error(`[Wrapper] Codex execution failed: ${error.message}`);
-      return;
-    }
+  mcProcess.stdout.on('data', (data) => processLog(data, false));
+  mcProcess.stderr.on('data', (data) => processLog(data, true));
 
-    try {
-      const analysis = JSON.parse(stdout);
-      
-      if (analysis.problems && analysis.problems.length > 0) {
-        console.log(`[Wrapper] Codex found ${analysis.problems.length} problems. Uploading report...`);
-        
-        const rawLogContext = logBuffer.join('\n');
+  mcProcess.on('close', async (code) => {
+    console.log(`[Wrapper] Process exited with code ${code}`);
+    
+    // If exit was clean or we asked for it, stay 'Stopped'. 
+    // If random crash (non-zero code), marked as 'Crashed'.
+    const finalStatus = (code !== 0 && code !== null && !isShuttingDown) ? 'Crashed' : 'Stopped';
 
-        await fetch(CRASH_API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${RCON_PASSWORD}`
-          },
-          body: JSON.stringify({
-            serverId: SERVER_ID,
-            analysis: analysis,
-            log: rawLogContext
-          })
-        });
-        console.log('[Wrapper] Crash report uploaded successfully.');
-      } else {
-        console.log('[Wrapper] Codex found no specific known issues.');
-      }
-    } catch (e) {
-      console.error('[Wrapper] Failed to parse/upload crash report:', e.message);
-    }
+    updateState(finalStatus);
+    await sendUpdate(finalStatus);
+    process.exit(code || 0);
   });
 };
 
-// --- Process Spawning ---
-let mcProcess;
-console.log(`[Wrapper] Starting server... Mode: ${USE_RUN_SH ? 'run.sh' : 'Direct Java'}`);
-
-if (USE_RUN_SH) {
-  try { fs.chmodSync('./run.sh', '755'); } catch (e) {}
-  mcProcess = spawn('./run.sh', [], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
-} else {
-  // Standard Flags (Aikar's)
-  const args = [
-    `-Xmx${HEAP_GB}G`, 
-    `-Xms1G`, 
-    '-XX:+UseG1GC',
-    '-XX:+ExitOnOutOfMemoryError',
-    '-XX:+ParallelRefProcEnabled',
-    '-XX:MaxGCPauseMillis=200',
-    '-XX:+UnlockExperimentalVMOptions',
-    '-XX:+DisableExplicitGC',
-    '-XX:+AlwaysPreTouch',
-    '-XX:G1NewSizePercent=30',
-    '-XX:G1MaxNewSizePercent=40',
-    '-XX:G1HeapRegionSize=8M',
-    '-XX:G1ReservePercent=20',
-    '-XX:G1HeapWastePercent=5',
-    '-XX:G1MixedGCCountTarget=4',
-    '-XX:InitiatingHeapOccupancyPercent=15',
-    '-XX:G1MixedGCLiveThresholdPercent=90',
-    '-XX:G1RSetUpdatingPauseTimePercent=5',
-    '-XX:SurvivorRatio=32',
-    '-XX:+PerfDisableSharedMem',
-    '-XX:MaxTenuringThreshold=1',
-    '-jar', 'server.jar', 'nogui'
-  ];
-  mcProcess = spawn('java', args, { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
-}
-
-mcProcess.stdout.on('data', appendLog);
-mcProcess.stderr.on('data', appendLog);
-
-mcProcess.on('close', async (code) => {
-  console.log(`[Wrapper] Minecraft process exited with code ${code}`);
+const processLog = (data, isError) => {
+  const line = data.toString().trim();
+  if (!line) return;
   
-  if (code !== 0 && code !== null) {
-      handleCrash(code);
-      console.log('[Wrapper] Waiting for crash report upload...');
-      await new Promise(r => setTimeout(r, 3000));
+  console.log(line); 
+  logBuffer.push(line);
+  if (logBuffer.length > MAX_LOG_LINES) logBuffer.shift();
+
+  // --- OOM DETECTION & AGGRESSIVE KILL ---
+  if (line.includes('java.lang.OutOfMemoryError')) {
+    console.error('[Wrapper] CRITICAL: OutOfMemoryError detected. Executing aggressive kill...');
+    
+    // 1. Kill the shell wrapper immediately
+    if (mcProcess) mcProcess.kill('SIGKILL');
+
+    // 2. Kill the Java process specifically (to prevent zombies)
+    // We use 'pkill -9' matching the 'java' process name owned by the current user
+    exec('pkill -9 -u minecraft java', (err) => {
+        if (err) console.error('[Wrapper] pkill failed (might already be dead):', err.message);
+    });
+    
+    return;
+  }
+  // ---------------------------------------
+
+  if (currentState === 'Starting') {
+    if (line.includes('Done (') || line.includes('RCON running on') || line.includes('Thread RCON Listener started') || line.includes('Listening on')) {
+      updateState('Running');
+    }
   }
 
-  const finalStatus = (code !== 0 && code !== null) ? 'Crashed' : 'Stopped';
-  updateState(finalStatus); 
-  await sendUpdate(finalStatus).finally(() => process.exit(code || 0));
-});
+  if (line.includes('Stopping server') || line.includes('Saving chunks')) {
+    updateState('Stopping');
+  }
+};
 
-// --- Command API ---
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
@@ -223,10 +190,23 @@ app.post('/api/command', authenticate, (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`[Wrapper] Command API listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`[Wrapper] API listening on port ${PORT}`));
 
 process.on('SIGTERM', () => {
-  if (mcProcess) mcProcess.kill();
-  updateState('Stopped');
-  sendUpdate('Stopped').finally(() => process.exit(0));
+  isShuttingDown = true;
+  updateState('Stopping');
+  sendUpdate('Stopping');
+  if (mcProcess && !mcProcess.killed) {
+    mcProcess.stdin.write('stop\n');
+    setTimeout(() => {
+      if (mcProcess && !mcProcess.killed) {
+          mcProcess.kill('SIGKILL');
+          exec('pkill -9 -u minecraft java'); // Aggressive cleanup on timeout too
+      }
+    }, 30000);
+  } else {
+    process.exit(0);
+  }
 });
+
+startServer();
