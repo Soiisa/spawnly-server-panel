@@ -1,6 +1,7 @@
 {
   "nav": {
     "dashboard": "Dashboard",
+    "pools": "Credit Pools",
     "billing": "Billing",
     "logout": "Log out",
     "settings": "Settings"
