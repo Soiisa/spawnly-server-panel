@@ -28,6 +28,7 @@ import WorldTab from '../../components/WorldTab';
 import BackupsTab from '../../components/BackupsTab';
 import SchedulesTab from '../../components/SchedulesTab';
 import AccessTab from '../../components/AccessTab';
+import ServerTour from '../../components/ServerTour';
 
 const getOnlinePlayersArray = (server) => {
   if (server?.status !== 'Running' || !server?.players_online) return [];
@@ -140,6 +141,9 @@ export default function ServerDetailPage({ initialServer }) {
   const [newRam, setNewRam] = useState(null);
   const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer));
   
+  // Tour State
+  const [runTour, setRunTour] = useState(false);
+
   // Ownership & Permissions State
   const [isOwner, setIsOwner] = useState(false);
   const [myPerms, setMyPerms] = useState({}); 
@@ -190,10 +194,23 @@ export default function ServerDetailPage({ initialServer }) {
 
         const userData = sessionData.session.user;
         setUser(userData);
-        await fetchUserCredits(userData.id);
+        
+        // Fetch Credits AND Tour Status
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('credits, server_tour_completed')
+            .eq('id', userData.id)
+            .single();
+
+        if (profile) {
+            setCredits(profile.credits || 0);
+            if (!profile.server_tour_completed) {
+                setRunTour(true);
+            }
+        }
+        setCreditsLoading(false);
 
         let currentServer = server;
-        // Re-fetch server to ensure we have pool data even if not in initial props
         if (id) {
           const { data } = await supabase.from('servers').select('*, pool:credit_pools(*)').eq('id', id).single();
           if (data) {
@@ -209,19 +226,16 @@ export default function ServerDetailPage({ initialServer }) {
             setIsOwner(owner);
 
             if (owner) {
-                // Owner has all permissions implicitly
                 setMyPerms({
                     control: true, console: true, files: true, settings: true,
                     schedules: true, players: true, software: true, mods: true,
                     world: true, backups: true
                 });
                 
-                // Fetch pools if owner (for the selection dropdown)
                 const { data: userPools } = await supabase.from('credit_pools').select('*').eq('owner_id', userData.id);
                 if (userPools) setPools(userPools);
 
             } else {
-                // Fetch shared permissions
                 const { data: perm } = await supabase
                     .from('server_permissions')
                     .select('permissions')
@@ -232,7 +246,6 @@ export default function ServerDetailPage({ initialServer }) {
                 setMyPerms(perm?.permissions || {});
             }
         }
-        // ------------------------
 
       } catch (err) {
         console.error('Data fetch error:', err);
@@ -261,10 +274,8 @@ export default function ServerDetailPage({ initialServer }) {
         { event: 'UPDATE', schema: 'public', table: 'servers', filter: `id=eq.${id}` },
         async (payload) => {
           if (!mountedRef.current) return;
-          // If pool_id changed, we might need to re-fetch to get the pool object
           const updated = payload.new;
           
-          // Optimistic update
           setServer((prev) => {
              const merged = { ...prev, ...updated };
              if (!isEditingMotd && updated.motd !== prev.motd) {
@@ -301,7 +312,6 @@ export default function ServerDetailPage({ initialServer }) {
 
   useEffect(() => {
     if (!server?.id || fileToken || !user) return;
-    // Only fetch file token if user has permissions
     if (myPerms.files || myPerms.world || myPerms.players) {
         const fetchFileToken = async (retries = 3, delay = 1000) => {
         for (let attempt = 1; attempt <= retries; attempt++) {
@@ -391,7 +401,6 @@ export default function ServerDetailPage({ initialServer }) {
 
   const fetchServer = useCallback(
     debounce(async (serverId) => {
-      // Fetch server WITH pool details
       const { data } = await supabase.from('servers').select('*, pool:credit_pools(*)').eq('id', serverId).single();
       if (data && mountedRef.current) {
         setServer(prev => (JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
@@ -424,7 +433,6 @@ export default function ServerDetailPage({ initialServer }) {
   const handleSoftwareChange = (newConfig) => setServer(prev => ({ ...prev, ...newConfig }));
 
   const handleAutoStopChange = async (e) => {
-    // Basic setting check
     if (!isOwner && !myPerms.settings) {
         setError(t('errors.no_permission', { defaultValue: 'No permission' }));
         return;
@@ -447,7 +455,6 @@ export default function ServerDetailPage({ initialServer }) {
         const { error } = await supabase.from('servers').update({ pool_id: val }).eq('id', server.id);
         if (error) throw error;
         
-        // Optimistically update
         let newPoolData = null;
         if (val) {
             const { data } = await supabase.from('credit_pools').select('*').eq('id', val).single();
@@ -471,11 +478,9 @@ export default function ServerDetailPage({ initialServer }) {
         });
         if (error) throw error;
         
-        // Refresh data
         await fetchUserCredits(user.id);
-        await fetchServer(server.id); // Will refresh pool balance
+        await fetchServer(server.id); 
         setShowContributeModal(false);
-        // Show success msg (optional)
         alert("Contribution successful!");
       } catch (e) {
           alert("Contribution failed: " + e.message);
@@ -483,7 +488,6 @@ export default function ServerDetailPage({ initialServer }) {
   };
 
   const handleServerAction = async (action) => {
-    // Permission Check
     if (!myPerms.control) {
         setError("You do not have permission to control this server.");
         return;
@@ -660,6 +664,8 @@ export default function ServerDetailPage({ initialServer }) {
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={creditsLoading} onLogout={() => { supabase.auth.signOut(); router.push('/login'); }} />
 
+      <ServerTour run={runTour} userId={user?.id} onFinish={() => setRunTour(false)} />
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         <AnimatePresence>
           {error && (
@@ -680,9 +686,12 @@ export default function ServerDetailPage({ initialServer }) {
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             
             <div className="flex-1">
+              {/* --- ADDED: tour-status-indicator --- */}
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{server.name}</h1>
-                <ServerStatusIndicator server={server} />
+                <div className="tour-status-indicator">
+                    <ServerStatusIndicator server={server} />
+                </div>
               </div>
               
               <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-2">
@@ -725,7 +734,7 @@ export default function ServerDetailPage({ initialServer }) {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 tour-server-controls">
               {myPerms.control && isStopped && (
                 <button
                   onClick={() => handleServerAction('start')}
@@ -783,13 +792,14 @@ export default function ServerDetailPage({ initialServer }) {
         </div>
 
         {/* Dynamic Tabs Navigation */}
-        <div className="mb-8 overflow-x-auto">
+        <div className="mb-8 overflow-x-auto tour-server-tabs">
           <div className="flex items-center gap-2 min-w-max border-b border-gray-200 dark:border-slate-700 pb-1">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${
+                // --- ADDED: Dynamic class for tour steps ---
+                className={`tour-tab-${tab.id} relative px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${
                   activeTab === tab.id 
                     ? 'text-indigo-600 bg-indigo-50' 
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800'
@@ -817,7 +827,7 @@ export default function ServerDetailPage({ initialServer }) {
                     </h3>
                     <div 
                       onClick={handleCopyIp}
-                      className="group cursor-pointer bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 rounded-xl p-4 text-center transition-all"
+                      className="group cursor-pointer bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 rounded-xl p-4 text-center transition-all tour-server-address"
                     >
                       <p className="text-sm text-gray-500 dark:text-gray-300 mb-1">{t('connection.address')}</p>
                       <p className="text-xl font-mono font-bold text-gray-900 dark:text-gray-100 break-all">{server.name}.spawnly.net</p>
@@ -840,7 +850,7 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2 flex flex-col">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2 flex flex-col tour-server-resources">
                   <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
                     <CpuChipIcon className="w-4 h-4" /> {t('resources.title')}
                   </h3>
@@ -930,9 +940,9 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 </div>
 
-                {/* --- MODIFIED: Billing Card (Visible to Owner & Sub-users if Pool Linked) --- */}
+                {/* --- ADDED: tour-billing-card --- */}
                 {(isOwner || server.pool_id) && (
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2">
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2 tour-billing-card">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider flex items-center gap-2">
                             <CurrencyDollarIcon className="w-4 h-4" /> {t('billing.title')}

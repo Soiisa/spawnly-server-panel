@@ -10,6 +10,7 @@ import Link from 'next/link';
 import ServerStatusIndicator from "../components/ServerStatusIndicator";
 import Header from "../components/ServersHeader";
 import Footer from "../components/ServersFooter";
+import DashboardTour from "../components/DashboardTour"; // <--- ADDED IMPORT
 import { 
   PlusIcon, 
   ServerIcon, 
@@ -21,7 +22,7 @@ import {
   SignalIcon,
   AdjustmentsHorizontalIcon,
   CommandLineIcon,
-  UsersIcon // <--- Added for Shared Badge
+  UsersIcon 
 } from '@heroicons/react/24/outline';
 
 // --- Helper for Displaying Software/Version ---
@@ -61,6 +62,9 @@ export default function Dashboard() {
   const [credits, setCredits] = useState(0);
   const [isLoadingServers, setIsLoadingServers] = useState(true);
   const [error, setError] = useState(null);
+  
+  // --- NEW STATE FOR TOUR ---
+  const [runTour, setRunTour] = useState(false);
 
   // Polling and mounted refs
   const pollingRef = useRef(false);
@@ -81,7 +85,22 @@ export default function Dashboard() {
         router.push("/login");
       } else {
         setUser(data.session.user);
-        await fetchUserCredits(data.session.user.id);
+        
+        // --- CHANGED: Fetch credits AND tutorial status ---
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('credits, tutorial_completed')
+            .eq('id', data.session.user.id)
+            .single();
+
+        if (profile) {
+            setCredits(profile.credits || 0);
+            // Check if tutorial is needed
+            if (!profile.tutorial_completed) {
+                setRunTour(true);
+            }
+        }
+
         fetchServers(data.session.user.id);
       }
       setLoading(false);
@@ -200,7 +219,6 @@ export default function Dashboard() {
     if (data) setCredits(data.credits || 0);
   };
 
-  // --- UPDATED FETCH LOGIC WITH FIX ---
   const fetchServers = async (userId) => {
     setIsLoadingServers(true);
     
@@ -218,10 +236,9 @@ export default function Dashboard() {
           .select('server:servers(*)')
           .eq('user_id', userId);
 
-        // --- CRITICAL FIX: Filter out null servers before mapping ---
         const shared = sharedPerms 
           ? sharedPerms
-              .filter(p => p.server !== null) // Ignore deleted/inaccessible servers
+              .filter(p => p.server !== null) 
               .map(p => ({ ...p.server, isShared: true })) 
           : [];
 
@@ -351,6 +368,13 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={isLoadingServers} onLogout={handleLogout} />
 
+      {/* --- ADD TOUR COMPONENT HERE --- */}
+      <DashboardTour 
+         run={runTour} 
+         userId={user?.id} 
+         onFinish={() => setRunTour(false)} 
+      />
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         
         {/* Error Toast */}
@@ -365,7 +389,7 @@ export default function Dashboard() {
         )}
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 tour-stats">
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><ServerIcon className="w-6 h-6" /></div>
             <div>
@@ -401,7 +425,7 @@ export default function Dashboard() {
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('headers.your_servers')}</h2> 
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium shadow-sm transition-all hover:-translate-y-0.5"
+            className="tour-create-server flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium shadow-sm transition-all hover:-translate-y-0.5"
           >
             <PlusIcon className="w-5 h-5" />
             {t('headers.new_server')} 
@@ -547,7 +571,7 @@ export async function getStaticProps({ locale }) {
       ...(await serverSideTranslations(locale, [
         'common',
         'dashboard',
-        'create_server' // Include create_server namespace for the modal
+        'create_server' 
       ])),
     },
   };

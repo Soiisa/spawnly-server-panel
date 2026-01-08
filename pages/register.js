@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import { EnvelopeIcon, LockClosedIcon } from "@heroicons/react/24/outline";
-import { useTranslation, Trans } from "next-i18next"; // <--- IMPORTED Trans
-import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
+import { EnvelopeIcon, LockClosedIcon, UserIcon } from "@heroicons/react/24/outline"; // <--- Added UserIcon
+import { useTranslation, Trans } from "next-i18next"; 
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
 
 export default function Register() {
-  const { t } = useTranslation('auth'); // <--- INITIALIZED
+  const { t } = useTranslation('auth'); 
+  const [username, setUsername] = useState(""); // <--- Added State
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -22,9 +23,15 @@ export default function Register() {
     setBusy(true);
     setMessage("");
 
+    // <--- Updated signUp to include username metadata
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          username: username 
+        }
+      }
     });
 
     setBusy(false);
@@ -32,7 +39,7 @@ export default function Register() {
     if (error) {
       setMessage(error.message);
     } else {
-      setMessage(t('success_check_email')); // <--- TRANSLATED
+      setMessage(t('success_check_email')); 
       setTimeout(() => router.push("/login"), 3000);
     }
   };
@@ -55,10 +62,10 @@ export default function Register() {
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-              {t('create_account')} {/* <--- TRANSLATED */}
+              {t('create_account')} 
             </h2>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              {t('register_desc')} {/* <--- TRANSLATED */}
+              {t('register_desc')} 
             </p>
           </div>
 
@@ -97,7 +104,7 @@ export default function Register() {
                     fill="#EA4335"
                   />
                 </svg>
-                {t('google_sign_up')} {/* <--- TRANSLATED */}
+                {t('google_sign_up')} 
               </button>
 
               <div className="relative">
@@ -106,14 +113,40 @@ export default function Register() {
                 </div>
                 <div className="relative flex justify-center text-sm">
                   <span className="px-2 bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400">
-                    {t('or_email_register')} {/* <--- TRANSLATED */}
+                    {t('or_email_register')} 
                   </span>
                 </div>
               </div>
 
+              {/* --- NEW USERNAME INPUT START --- */}
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {t('username_label')} 
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <UserIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                  </div>
+                  <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    autoComplete="username"
+                    required
+                    minLength={3}
+                    maxLength={20}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-teal-500 focus:border-teal-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
+                    placeholder={t('placeholders.username')}
+                  />
+                </div>
+              </div>
+              {/* --- NEW USERNAME INPUT END --- */}
+
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {t('email_label')} {/* <--- TRANSLATED */}
+                  {t('email_label')} 
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -135,7 +168,7 @@ export default function Register() {
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {t('password_label')} {/* <--- TRANSLATED */}
+                  {t('password_label')} 
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -156,7 +189,6 @@ export default function Register() {
                 </div>
               </div>
 
-              {/* Legal Disclaimer with Trans component for links */}
               <p className="text-xs text-center text-gray-500 dark:text-gray-400 px-4">
                 <Trans
                   i18nKey="terms_agreement"
@@ -175,7 +207,7 @@ export default function Register() {
                 disabled={busy}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-teal-500 hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all disabled:opacity-50"
               >
-                {busy ? t('creating_account') : t('create_account_btn')} {/* <--- TRANSLATED */}
+                {busy ? t('creating_account') : t('create_account_btn')} 
               </button>
             </form>
 
@@ -186,7 +218,7 @@ export default function Register() {
                 </div>
                 <div className="relative flex justify-center text-sm">
                   <span className="px-2 bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400">
-                    {t('existing_user')} {/* <--- TRANSLATED */}
+                    {t('existing_user')} 
                   </span>
                 </div>
               </div>
@@ -196,7 +228,7 @@ export default function Register() {
                   href="/login"
                   className="w-full flex justify-center py-3 px-4 border border-gray-300 dark:border-slate-600 rounded-lg shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none transition-all"
                 >
-                  {t('sign_in_link')} {/* <--- TRANSLATED */}
+                  {t('sign_in_link')} 
                 </Link>
               </div>
             </div>

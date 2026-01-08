@@ -12,7 +12,8 @@ import {
   GlobeAltIcon, 
   MoonIcon, 
   SunIcon, 
-  ShieldCheckIcon 
+  ShieldCheckIcon,
+  UserCircleIcon // <--- ADDED
 } from '@heroicons/react/24/outline';
 
 export default function Settings() {
@@ -22,6 +23,11 @@ export default function Settings() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [credits, setCredits] = useState(0);
+  
+  // --- NEW STATES ---
+  const [username, setUsername] = useState('');
+  const [newUsername, setNewUsername] = useState('');
+  const [msg, setMsg] = useState('');
 
   // 1. Auth & Data Fetching
   useEffect(() => {
@@ -31,28 +37,64 @@ export default function Settings() {
         router.push("/login");
       } else {
         setUser(data.session.user);
-        // Optional: Fetch credits if you want to show them in the header
+        
+        // --- CHANGED: Select username AND credits ---
         const { data: profile } = await supabase
           .from('profiles')
-          .select('credits')
+          .select('credits, username')
           .eq('id', data.session.user.id)
           .single();
-        if (profile) setCredits(profile.credits);
+          
+        if (profile) {
+            setCredits(profile.credits);
+            setUsername(profile.username || '');
+            setNewUsername(profile.username || '');
+        }
       }
       setLoading(false);
     };
     fetchSession();
   }, [router]);
 
-  // 2. Language Switching Logic
+  // --- NEW: Update Username Handler ---
+  const handleUpdateUsername = async () => {
+    if(!newUsername || newUsername.length < 3) return setMsg(t('settings.username_error'));
+    setMsg(t('settings.updating'));
+    
+    try {
+      // 1. Update Profile in DB
+      const { error } = await supabase
+        .from('profiles')
+        .update({ username: newUsername })
+        .eq('id', user.id);
+
+      if(error) throw error;
+
+      // 2. Update Auth Metadata (so header updates without relogin)
+      const { error: authError } = await supabase.auth.updateUser({
+        data: { username: newUsername }
+      });
+      
+      if(authError) throw authError;
+
+      setUsername(newUsername);
+      setMsg(t('settings.success'));
+      
+      // Refresh page to propagate changes if needed
+      router.reload();
+
+    } catch (e) {
+      setMsg(t('settings.error_generic') + ': ' + e.message);
+    }
+  };
+
   const handleLanguageChange = (e) => {
     const newLocale = e.target.value;
     const { pathname, asPath, query } = router;
-    // Push the same route with the new locale
     router.push({ pathname, query }, asPath, { locale: newLocale });
   };
 
-  if (loading) return null; // Or a loading spinner
+  if (loading) return null;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100 pb-20">
@@ -62,6 +104,40 @@ export default function Settings() {
           <h1 className="text-3xl font-bold mb-8">{t('settings.title', 'User Settings')}</h1>
           
           <div className="grid gap-6">
+
+            {/* --- NEW: Profile Settings --- */}
+            <div className="bg-white dark:bg-slate-800 shadow-sm rounded-2xl p-6 border border-gray-200 dark:border-slate-700">
+                <div className="flex items-center gap-4 mb-6">
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-xl">
+                        <UserCircleIcon className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold">{t('settings.profile', 'Profile')}</h2>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">{t('settings.profile_desc', 'Manage your public profile')}</p>
+                    </div>
+                </div>
+
+                <div className="max-w-xs">
+                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+                        {t('settings.username', 'Username')}
+                    </label>
+                    <div className="flex gap-2">
+                        <input 
+                            type="text" 
+                            value={newUsername}
+                            onChange={(e) => setNewUsername(e.target.value)}
+                            className="block w-full rounded-lg border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5"
+                        />
+                        <button 
+                            onClick={handleUpdateUsername}
+                            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                        >
+                            {t('settings.save', 'Save')}
+                        </button>
+                    </div>
+                    {msg && <p className={`text-xs mt-2 ${msg.includes('Success') ? 'text-green-500' : 'text-indigo-500'}`}>{msg}</p>}
+                </div>
+            </div>
             
             {/* Language Settings */}
             <div className="bg-white dark:bg-slate-800 shadow-sm rounded-2xl p-6 border border-gray-200 dark:border-slate-700">

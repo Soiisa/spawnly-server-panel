@@ -10,7 +10,7 @@ import {
   MoonIcon,
   Cog6ToothIcon,
   ChatBubbleLeftRightIcon,
-  BanknotesIcon // <--- ADDED
+  BanknotesIcon 
 } from '@heroicons/react/24/outline';
 import CreditBalance from "./CreditBalance";
 import { useDarkMode } from '../pages/_app';
@@ -24,14 +24,15 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
 
   const navLinks = [
     { name: t('nav.dashboard'), href: '/dashboard', icon: ServerIcon },
-    { name: t('nav.pools', 'Pools'), href: '/pools', icon: BanknotesIcon }, // <--- ADDED
+    { name: t('nav.pools', 'Pools'), href: '/pools', icon: BanknotesIcon },
     { name: t('nav.billing'), href: '/credits', icon: CreditCardIcon },
     { name: 'Support', href: '/support', icon: ChatBubbleLeftRightIcon },
     { name: t('nav.settings', 'Settings'), href: '/settings', icon: Cog6ToothIcon },
   ];
 
   return (
-    <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 sticky top-0 z-30">
+    // --- ADDED CLASS: tour-main-header ---
+    <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 sticky top-0 z-30 tour-main-header">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           
