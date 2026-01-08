@@ -1,16 +1,12 @@
 // pages/api/servers/[serverId]/console.js
 import { createClient } from '@supabase/supabase-js';
+import { verifyServerAccess } from '../../../../lib/accessControl';
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 export default async function handler(req, res) {
-  const { serverId } = req.query;
-  const { since } = req.query;
+  const { serverId, since } = req.query;
 
-  // --- SECURITY FIX: Authentication ---
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -18,38 +14,35 @@ export default async function handler(req, res) {
   const token = authHeader.split(' ')[1];
   const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
-  if (authError || !user) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (authError || !user) return res.status(401).json({ error: 'Unauthorized' });
 
-  // Get server info
-  const { data: server, error } = await supabaseAdmin
-    .from('servers')
-    .select('ipv4, rcon_password, status, user_id, subdomain')
-    .eq('id', serverId)
-    .single();
-
-  if (error || !server) {
-    return res.status(404).json({ error: 'Server not found' });
-  }
-
-  // Check Ownership
-  if (server.user_id !== user.id) {
+  // --- NEW ACCESS CHECK (Requires 'console' permission) ---
+  const access = await verifyServerAccess(supabaseAdmin, serverId, user.id, 'console');
+  
+  if (!access.allowed) {
     return res.status(403).json({ error: 'Forbidden' });
   }
+  
+  // Use the server object returned by verification (it includes basic info)
+  // We need to fetch full details like rcon/subdomain if verifyServerAccess didn't return them
+  // verifyServerAccess returns { server: { user_id, name } } usually.
+  // So we re-fetch to be safe or optimize verifyServerAccess later. 
+  // For now, let's fetch what we need securely.
+  
+  const { data: server } = await supabaseAdmin
+    .from('servers')
+    .select('ipv4, rcon_password, status, subdomain')
+    .eq('id', serverId)
+    .single();
 
   if (server.status !== 'Running') {
     return res.status(400).json({ error: 'Server is not running' });
   }
 
   try {
-    // Fetch logs from game server via the file API console endpoint (port 3005)
-    // or the wrapper (port 3006). Based on previous files, 3005 (file-api) is used.
-    
-    // We use the subdomain for consistent routing through the proxy system if needed
-    // or fall back to IPv4 if subdomain DNS hasn't propagated.
     const host = server.subdomain ? `${server.subdomain}.spawnly.net` : server.ipv4;
     
+    // Using File API port (3005) as per previous context, or wrapper if configured
     const response = await fetch(`http://${host}:3005/api/console?since=${since || ''}`, {
       headers: {
         'Authorization': `Bearer ${server.rcon_password}`
@@ -57,15 +50,12 @@ export default async function handler(req, res) {
       timeout: 5000
     });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch console: ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error(`Failed to fetch console: ${response.statusText}`);
 
     const logs = await response.text();
     res.setHeader('Content-Type', 'text/plain');
     res.status(200).send(logs);
   } catch (error) {
-    console.error('Console fetch error:', error);
     res.status(500).json({ error: error.message });
   }
 }
