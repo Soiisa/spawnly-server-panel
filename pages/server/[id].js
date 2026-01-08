@@ -10,7 +10,7 @@ import {
   ClipboardDocumentIcon, PlayIcon, StopIcon, ArrowPathIcon, CpuChipIcon, 
   CurrencyDollarIcon, ClockIcon, ServerIcon, SignalIcon, UserGroupIcon, 
   PuzzlePieceIcon, PencilSquareIcon, CheckIcon, XMarkIcon, ArchiveBoxIcon, 
-  CalendarDaysIcon, TrashIcon, ShieldCheckIcon 
+  CalendarDaysIcon, TrashIcon, ShieldCheckIcon, BanknotesIcon, PlusIcon
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -65,6 +65,62 @@ const getDisplayInfo = (server, t) => {
   return { software, version };
 };
 
+// --- Contribution Modal Component ---
+const ContributeModal = ({ isOpen, onClose, pool, userCredits, onContribute }) => {
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async () => {
+    if (!amount || isNaN(amount) || amount <= 0) return;
+    setLoading(true);
+    await onContribute(Number(amount));
+    setLoading(false);
+    setAmount('');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-slate-700">
+        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Contribute to Server</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Add credits to <span className="font-semibold text-indigo-600">{pool?.name || 'Pool'}</span> to keep this server running.
+        </p>
+        
+        <div className="bg-gray-50 dark:bg-slate-700 p-3 rounded-lg mb-4 flex justify-between items-center">
+            <span className="text-xs text-gray-500 dark:text-gray-300">Your Wallet</span>
+            <span className="font-bold text-slate-900 dark:text-white">{userCredits.toFixed(2)}</span>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amount</label>
+            <input 
+              type="number" 
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg dark:bg-slate-900 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              placeholder="100"
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={onClose} className="flex-1 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">Cancel</button>
+            <button 
+              onClick={handleSubmit} 
+              disabled={loading || !amount}
+              className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-md disabled:opacity-50 flex justify-center items-center gap-2"
+            >
+              {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <BanknotesIcon className="w-4 h-4" />}
+              Donate
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
   const { id } = router.query;
@@ -94,6 +150,11 @@ export default function ServerDetailPage({ initialServer }) {
   const [isEditingMotd, setIsEditingMotd] = useState(false);
   const [motdText, setMotdText] = useState(initialServer?.motd || '');
   const [savingMotd, setSavingMotd] = useState(false);
+
+  // Pool State
+  const [pools, setPools] = useState([]);
+  const [savingPool, setSavingPool] = useState(false);
+  const [showContributeModal, setShowContributeModal] = useState(false);
 
   // Refs
   const profileChannelRef = useRef(null);
@@ -132,11 +193,14 @@ export default function ServerDetailPage({ initialServer }) {
         await fetchUserCredits(userData.id);
 
         let currentServer = server;
-        if (id && !currentServer) {
-          const { data } = await supabase.from('servers').select('*').eq('id', id).single();
-          currentServer = data;
-          setServer(data);
-          if (data) setMotdText(data.motd || '');
+        // Re-fetch server to ensure we have pool data even if not in initial props
+        if (id) {
+          const { data } = await supabase.from('servers').select('*, pool:credit_pools(*)').eq('id', id).single();
+          if (data) {
+              currentServer = data;
+              setServer(data);
+              if (data) setMotdText(data.motd || '');
+          }
         }
 
         // --- PERMISSION LOGIC ---
@@ -151,6 +215,11 @@ export default function ServerDetailPage({ initialServer }) {
                     schedules: true, players: true, software: true, mods: true,
                     world: true, backups: true
                 });
+                
+                // Fetch pools if owner (for the selection dropdown)
+                const { data: userPools } = await supabase.from('credit_pools').select('*').eq('owner_id', userData.id);
+                if (userPools) setPools(userPools);
+
             } else {
                 // Fetch shared permissions
                 const { data: perm } = await supabase
@@ -190,15 +259,27 @@ export default function ServerDetailPage({ initialServer }) {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'servers', filter: `id=eq.${id}` },
-        (payload) => {
+        async (payload) => {
           if (!mountedRef.current) return;
+          // If pool_id changed, we might need to re-fetch to get the pool object
+          const updated = payload.new;
+          
+          // Optimistic update
           setServer((prev) => {
-            const updated = payload.new;
-            if (!isEditingMotd && updated.motd !== prev.motd) {
-              setMotdText(updated.motd);
-            }
-            return updated;
+             const merged = { ...prev, ...updated };
+             if (!isEditingMotd && updated.motd !== prev.motd) {
+                setMotdText(updated.motd);
+             }
+             return merged;
           });
+          
+          if (updated.pool_id) {
+             const { data: poolData } = await supabase.from('credit_pools').select('*').eq('id', updated.pool_id).single();
+             setServer(prev => ({ ...prev, pool: poolData }));
+          } else {
+             setServer(prev => ({ ...prev, pool: null }));
+          }
+          
           setError(null);
         }
       )
@@ -310,7 +391,8 @@ export default function ServerDetailPage({ initialServer }) {
 
   const fetchServer = useCallback(
     debounce(async (serverId) => {
-      const { data } = await supabase.from('servers').select('*').eq('id', serverId).single();
+      // Fetch server WITH pool details
+      const { data } = await supabase.from('servers').select('*, pool:credit_pools(*)').eq('id', serverId).single();
       if (data && mountedRef.current) {
         setServer(prev => (JSON.stringify(prev) === JSON.stringify(data) ? prev : data));
         if (!isEditingMotd) setMotdText(data.motd || '');
@@ -355,6 +437,49 @@ export default function ServerDetailPage({ initialServer }) {
       setServer(prev => ({ ...prev, auto_stop_timeout: val }));
     } catch (e) { setError(t('errors.update_auto_stop')); }
     finally { setSavingAutoStop(false); }
+  };
+
+  const handlePoolChange = async (e) => {
+    if (!isOwner) return;
+    const val = e.target.value === 'personal' ? null : e.target.value;
+    setSavingPool(true);
+    try {
+        const { error } = await supabase.from('servers').update({ pool_id: val }).eq('id', server.id);
+        if (error) throw error;
+        
+        // Optimistically update
+        let newPoolData = null;
+        if (val) {
+            const { data } = await supabase.from('credit_pools').select('*').eq('id', val).single();
+            newPoolData = data;
+        }
+        setServer(prev => ({ ...prev, pool_id: val, pool: newPoolData }));
+
+    } catch (err) {
+        setError("Failed to update billing source");
+    } finally {
+        setSavingPool(false);
+    }
+  };
+
+  const handleContribute = async (amount) => {
+      if (!server.pool_id) return;
+      try {
+        const { error } = await supabase.rpc('transfer_credits_to_pool', {
+            p_pool_id: server.pool_id,
+            p_amount: amount
+        });
+        if (error) throw error;
+        
+        // Refresh data
+        await fetchUserCredits(user.id);
+        await fetchServer(server.id); // Will refresh pool balance
+        setShowContributeModal(false);
+        // Show success msg (optional)
+        alert("Contribution successful!");
+      } catch (e) {
+          alert("Contribution failed: " + e.message);
+      }
   };
 
   const handleServerAction = async (action) => {
@@ -805,11 +930,61 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 </div>
 
-                {isOwner && (
+                {/* --- MODIFIED: Billing Card (Visible to Owner & Sub-users if Pool Linked) --- */}
+                {(isOwner || server.pool_id) && (
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2">
-                    <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <CurrencyDollarIcon className="w-4 h-4" /> {t('billing.title')}
-                    </h3>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider flex items-center gap-2">
+                            <CurrencyDollarIcon className="w-4 h-4" /> {t('billing.title')}
+                        </h3>
+                        {/* Show Contribute Button for ANYONE if a pool is active */}
+                        {server.pool_id && (
+                            <button 
+                                onClick={() => setShowContributeModal(true)}
+                                className="text-xs flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 px-3 py-1.5 rounded-lg font-medium transition-colors border border-indigo-200 dark:border-indigo-800"
+                            >
+                                <PlusIcon className="w-3 h-3" /> Contribute
+                            </button>
+                        )}
+                    </div>
+                    
+                    {/* Billing Source Selector (Owner Only) */}
+                    {isOwner && (
+                        <div className="mb-4 p-3 bg-gray-50 dark:bg-slate-700 rounded-lg border border-gray-100 dark:border-slate-600">
+                            <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase block mb-1">
+                                {t('billing.source', { defaultValue: 'Billing Source' })}
+                            </label>
+                            <select 
+                                value={server.pool_id || 'personal'} 
+                                onChange={handlePoolChange}
+                                disabled={savingPool}
+                                className="w-full bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600 rounded-md text-sm py-1.5 focus:ring-indigo-500 dark:text-white"
+                            >
+                                <option value="personal">{t('billing.personal_wallet', { defaultValue: 'Personal Wallet (Fallback)' })}</option>
+                                {pools.map(pool => (
+                                    <option key={pool.id} value={pool.id}>{pool.name} ({Number(pool.balance).toFixed(2)} cr)</option>
+                                ))}
+                            </select>
+                            <p className="text-[10px] text-gray-400 mt-1">
+                                {t('billing.pool_explanation', { defaultValue: 'If the pool runs out of credits, the server will attempt to charge your personal wallet.' })}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Display Active Pool Info (If not owner but pool is active) */}
+                    {!isOwner && server.pool && (
+                        <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-100 dark:border-indigo-800 flex justify-between items-center">
+                            <div>
+                                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase block">Active Pool</span>
+                                <span className="text-sm font-semibold dark:text-gray-200">{server.pool.name}</span>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-xs text-gray-500 block">Balance</span>
+                                <span className="font-mono font-bold text-slate-800 dark:text-white">{Number(server.pool.balance).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex items-center gap-8">
                         <div>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.hourly_cost')}</p>
@@ -819,11 +994,19 @@ export default function ServerDetailPage({ initialServer }) {
                         <div>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.est_runtime')}</p>
                         <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                            {(credits / (server.cost_per_hour || 1)).toFixed(1)} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.hours_left')}</span>
+                             {/* Calculate based on selected source */}
+                             {(() => {
+                                // If pool exists use that balance, otherwise use user credits (if owner)
+                                const sourceBalance = server.pool 
+                                    ? server.pool.balance 
+                                    : (isOwner ? credits : 0);
+                                return (sourceBalance / (server.cost_per_hour || 1)).toFixed(1);
+                            })()} 
+                            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.hours_left')}</span>
                         </p>
                         </div>
                     </div>
-                    {credits < server.cost_per_hour && (
+                    {credits < server.cost_per_hour && !server.pool_id && isOwner && (
                         <div className="mt-4 bg-red-50 text-red-700 text-sm p-3 rounded-lg flex items-center gap-2">
                         <span className="font-bold">{t('billing.warning_low')}</span>
                         </div>
@@ -885,6 +1068,16 @@ export default function ServerDetailPage({ initialServer }) {
 
           </Suspense>
         </div>
+
+        {/* Contribution Modal */}
+        <ContributeModal 
+            isOpen={showContributeModal}
+            onClose={() => setShowContributeModal(false)}
+            pool={server.pool}
+            userCredits={credits}
+            onContribute={handleContribute}
+        />
+
       </main>
       <Footer />
     </div>
@@ -909,7 +1102,8 @@ export async function getServerSideProps(context) {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return { props: { ...translations, initialServer: null } };
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { data, error } = await supabaseAdmin.from('servers').select('*').eq('id', id).single();
+    // Modified to fetch linked pool details
+    const { data, error } = await supabaseAdmin.from('servers').select('*, pool:credit_pools(*)').eq('id', id).single();
 
     if (error || !data) return { notFound: true };
 

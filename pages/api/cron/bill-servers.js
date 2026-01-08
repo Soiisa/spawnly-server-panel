@@ -23,7 +23,7 @@ const hetznerShutdown = async (hetznerId) => {
     }
 };
 
-// MODIFIED: Now supports Session-Based Aggregation
+// Logic 1: Deduct from User Profile (Fallback)
 async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds) { 
   // 1. Update User Balance (Always Incremental)
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
@@ -54,7 +54,6 @@ async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId,
       const newAmount = currentAmount - amount; // Add more negative debt
 
       // Parse current seconds from description to keep the total accurate
-      // Format: "Runtime charge for server <ID> (<NUM> seconds)"
       const timeMatch = existingTx.description.match(/\((\d+)\s*seconds\)/);
       let totalSeconds = billableSeconds;
       if (timeMatch && timeMatch[1]) {
@@ -66,7 +65,6 @@ async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId,
       await supabaseAdmin.from('credit_transactions').update({
         amount: newAmount,
         description: newDescription,
-        // We do NOT update created_at, so it serves as the "Session Start" time
       }).eq('id', existingTx.id);
 
   } else {
@@ -80,6 +78,62 @@ async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId,
         session_id: sessionId
       });
   }
+}
+
+// Logic 2: Deduct from Credit Pool (Priority)
+async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessionId, billableSeconds) {
+    // 1. Check Pool Balance
+    const { data: pool, error } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', poolId).single();
+    if (error || pool.balance < amount) {
+        throw new Error('Insufficient pool credits');
+    }
+
+    // 2. Deduct from Pool
+    const newBalance = pool.balance - amount;
+    await supabaseAdmin.from('credit_pools').update({ balance: newBalance }).eq('id', poolId);
+
+    // 3. Update Pool Transaction History (Aggregated)
+    let existingTx = null;
+
+    if (sessionId) {
+        const { data } = await supabaseAdmin
+            .from('pool_transactions')
+            .select('*')
+            .eq('session_id', sessionId)
+            .eq('pool_id', poolId)
+            .eq('type', 'usage')
+            .single();
+        existingTx = data;
+    }
+
+    if (existingTx) {
+         // UPDATE existing row
+         const currentAmount = existingTx.amount; 
+         const newAmount = currentAmount - amount; 
+
+         const timeMatch = existingTx.description.match(/\((\d+)\s*seconds\)/);
+         let totalSeconds = billableSeconds;
+         if (timeMatch && timeMatch[1]) {
+             totalSeconds += parseInt(timeMatch[1], 10);
+         }
+
+         const newDescription = `Runtime charge for server ${serverId} (${totalSeconds} seconds)`;
+         
+         await supabaseAdmin.from('pool_transactions').update({
+             amount: newAmount,
+             description: newDescription
+         }).eq('id', existingTx.id);
+    } else {
+        // INSERT new row
+        await supabaseAdmin.from('pool_transactions').insert({
+            pool_id: poolId,
+            server_id: serverId,
+            amount: -amount,
+            type: 'usage',
+            description: `Runtime charge for server ${serverId} (${billableSeconds} seconds)`,
+            session_id: sessionId
+        });
+    }
 }
 
 export default async function handler(req, res) {
@@ -133,40 +187,56 @@ export default async function handler(req, res) {
       // Round cost to 4 decimals
       const cost = Number((hours * server.cost_per_hour).toFixed(4));
 
-      // Check credits
-      const { data: profile } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
-      if (!profile) {
-        console.error(`No profile found for user ${server.user_id}; skipping server ${server.id}`);
-        continue;
+      let billSuccess = false;
+
+      // ----------------------------------------------------
+      // PRIORITY 1: Pool Billing
+      // ----------------------------------------------------
+      if (server.pool_id) {
+          try {
+              await deductPoolCredits(supabaseAdmin, server.pool_id, cost, server.id, server.current_session_id, billableSeconds);
+              billSuccess = true;
+          } catch (poolErr) {
+              console.warn(`Pool ${server.pool_id} billing failed (insufficient funds?); falling back to user wallet. Error:`, poolErr.message);
+              // Fallthrough to Logic 2
+          }
       }
 
-      if (profile.credits < cost) {
-        // Auto-stop due to insufficient funds
+      // ----------------------------------------------------
+      // PRIORITY 2: Owner Wallet Billing (Fallback)
+      // ----------------------------------------------------
+      if (!billSuccess) {
+          try {
+            await deductCredits(supabaseAdmin, server.user_id, cost, server.id, server.current_session_id, billableSeconds);
+            billSuccess = true;
+          } catch (deductErr) {
+            console.error(`Failed to deduct credits for user ${server.user_id} server ${server.id}:`, deductErr && deductErr.message);
+            // Fallthrough to Stop Logic
+          }
+      }
+
+      // ----------------------------------------------------
+      // FAILURE: Stop Server
+      // ----------------------------------------------------
+      if (!billSuccess) {
         try {
           await hetznerShutdown(server.hetzner_id);
           await supabaseAdmin.from('servers').update({ status: 'Stopping' }).eq('id', server.id);
-          console.log(`Auto-stopped server ${server.id} due to low credits`);
+          console.log(`Auto-stopped server ${server.id} due to low credits (Pool & User)`);
         } catch (autoStopErr) {
           console.error(`Failed to auto-stop server ${server.id}:`, autoStopErr.message);
         }
         continue;
       }
 
-      // Deduct Credits
-      try {
-        // Updated Call: Pass metadata separately for aggregation logic
-        await deductCredits(supabaseAdmin, server.user_id, cost, server.id, server.current_session_id, billableSeconds);
-        processedCount++;
-      } catch (deductErr) {
-        console.error(`Failed to deduct credits for user ${server.user_id} server ${server.id}:`, deductErr && deductErr.message);
-        continue;
+      // Update server billing timestamps if successful
+      if (billSuccess) {
+          processedCount++;
+          await supabaseAdmin.from('servers').update({
+            last_billed_at: now.toISOString(),
+            runtime_accumulated_seconds: remainingAccumulated
+          }).eq('id', server.id);
       }
-
-      // Update server billing timestamps
-      await supabaseAdmin.from('servers').update({
-        last_billed_at: now.toISOString(),
-        runtime_accumulated_seconds: remainingAccumulated
-      }).eq('id', server.id);
       
     } catch(err) {
       console.error(`Unexpected error processing server ${server && server.id}:`, err && err.message);

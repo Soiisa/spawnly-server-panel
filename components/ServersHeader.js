@@ -9,7 +9,8 @@ import {
   SunIcon,
   MoonIcon,
   Cog6ToothIcon,
-  ChatBubbleLeftRightIcon // <--- IMPORTED
+  ChatBubbleLeftRightIcon,
+  BanknotesIcon // <--- ADDED
 } from '@heroicons/react/24/outline';
 import CreditBalance from "./CreditBalance";
 import { useDarkMode } from '../pages/_app';
@@ -23,8 +24,9 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
 
   const navLinks = [
     { name: t('nav.dashboard'), href: '/dashboard', icon: ServerIcon },
+    { name: t('nav.pools', 'Pools'), href: '/pools', icon: BanknotesIcon }, // <--- ADDED
     { name: t('nav.billing'), href: '/credits', icon: CreditCardIcon },
-    { name: 'Support', href: '/support', icon: ChatBubbleLeftRightIcon }, // <--- ADDED
+    { name: 'Support', href: '/support', icon: ChatBubbleLeftRightIcon },
     { name: t('nav.settings', 'Settings'), href: '/settings', icon: Cog6ToothIcon },
   ];
 
