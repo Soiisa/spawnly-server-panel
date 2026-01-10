@@ -534,6 +534,15 @@ export default async function handler(req, res) {
       if (action === 'delete') {
         console.log(`[API:action] Cleaning up dependent records for server ${serverId}...`);
         
+        // [AUDIT LOG] Record deletion before the record is potentially lost
+        await supabaseAdmin.from('server_audit_logs').insert({
+            server_id: serverId,
+            user_id: user.id,
+            action_type: 'server_delete',
+            details: 'Server deleted permanently',
+            created_at: new Date().toISOString()
+        });
+        
         // --- 1. Manually cleanup related tables to satisfy foreign keys ---
         // (pool_transactions, server_permissions, allocations, etc.)
         try {
@@ -589,6 +598,15 @@ export default async function handler(req, res) {
           console.error('[API:action] Failed to update Supabase after stop:', updateErr.message);
           return res.status(502).json({ error: 'Failed to update Supabase after shutdown', detail: updateErr.message });
         }
+
+        // [AUDIT LOG] Stop/Kill
+        await supabaseAdmin.from('server_audit_logs').insert({
+            server_id: serverId,
+            user_id: user.id,
+            action_type: `server_${action}`,
+            details: `Action ${action} executed successfully`,
+            created_at: new Date().toISOString()
+        });
       }
 
       console.log(`[API:action] Action ${action} completed successfully for server ${serverId}`);
@@ -621,6 +639,15 @@ export default async function handler(req, res) {
              started_at: null // --- CLEAN UP STARTED_AT ---
            }).eq('id', serverId);
            
+           // [AUDIT LOG] Force Kill Unprovisioned
+           await supabaseAdmin.from('server_audit_logs').insert({
+                server_id: serverId,
+                user_id: user.id,
+                action_type: 'server_kill',
+                details: 'Force killed unprovisioned/stuck server',
+                created_at: new Date().toISOString()
+           });
+
            return res.status(200).json({ ok: true, message: 'Force killed unprovisioned server.' });
       }
 
@@ -693,6 +720,15 @@ export default async function handler(req, res) {
       console.error('[API:action] Failed to update final server status in Supabase:', finalStatusErr.message);
       return res.status(500).json({ error: 'Failed to update final server status', detail: finalStatusErr.message });
     }
+
+    // [AUDIT LOG] Start/Restart
+    await supabaseAdmin.from('server_audit_logs').insert({
+        server_id: serverId,
+        user_id: user.id,
+        action_type: `server_${action}`,
+        details: `Server ${action} initiated. Status: ${finalStatus}`,
+        created_at: new Date().toISOString()
+    });
 
     console.log(`[API:action] Action ${action} completed successfully for server ${serverId}`);
     return res.status(200).json({ ok: true, hetznerAction: hetRes, status: finalStatus });
