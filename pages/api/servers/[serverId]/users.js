@@ -51,6 +51,16 @@ export default async function handler(req, res) {
       }, { onConflict: 'server_id, user_id' });
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // [AUDIT LOG]
+    await supabaseAdmin.from('server_audit_logs').insert({
+      server_id: serverId,
+      user_id: user.id,
+      action_type: 'user_invite',
+      details: `Invited user ${email}`,
+      created_at: new Date().toISOString()
+    });
+
     return res.json({ success: true });
   }
 
@@ -65,6 +75,16 @@ export default async function handler(req, res) {
       .eq('server_id', serverId); // Safety check
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // [AUDIT LOG]
+    await supabaseAdmin.from('server_audit_logs').insert({
+      server_id: serverId,
+      user_id: user.id,
+      action_type: 'user_update',
+      details: `Updated permissions for permission_id ${permissionId}`,
+      created_at: new Date().toISOString()
+    });
+
     return res.json({ success: true });
   }
 
@@ -73,6 +93,16 @@ export default async function handler(req, res) {
     const { permissionId } = req.body;
     const { error } = await supabaseAdmin.from('server_permissions').delete().eq('id', permissionId);
     if (error) return res.status(500).json({ error: error.message });
+
+    // [AUDIT LOG]
+    await supabaseAdmin.from('server_audit_logs').insert({
+      server_id: serverId,
+      user_id: user.id,
+      action_type: 'user_remove',
+      details: `Revoked access for permission_id ${permissionId}`,
+      created_at: new Date().toISOString()
+    });
+
     return res.json({ success: true });
   }
 }

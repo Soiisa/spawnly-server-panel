@@ -245,6 +245,20 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to update server record', detail: updateError.message });
     }
 
+    // [AUDIT LOG START]
+    try {
+        await supabaseAdmin.from('server_audit_logs').insert({
+            server_id: serverId,
+            user_id: user.id,
+            action_type: 'server_recreate',
+            details: `Recreating server with ${software} ${version}`,
+            created_at: new Date().toISOString()
+        });
+    } catch (logErr) {
+        console.error("Failed to log server recreation:", logErr);
+    }
+    // [AUDIT LOG END]
+
     console.log(`Server ${serverId} recreation prepared successfully`);
     return res.status(200).json({ 
       success: true, 

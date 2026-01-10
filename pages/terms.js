@@ -2,8 +2,7 @@
 import Head from "next/head";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import Link from "next/link";
-import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 export default function TermsOfService() {
   const lastUpdated = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -13,9 +12,7 @@ export default function TermsOfService() {
       <Head>
         <title>Terms of Service | Spawnly</title>
       </Head>
-
       <Navbar />
-
       <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
           
@@ -25,124 +22,108 @@ export default function TermsOfService() {
           <div className="prose prose-slate dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 space-y-6">
             
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">1. Acceptance of Terms</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">1. Agreement to Terms</h2>
               <p>
-                By creating an account and using Spawnly ("the Service"), you agree to be bound by these Terms of Service. 
-                If you do not agree to these terms, you must strictly stop using our services and delete your account.
+                These Terms of Service ("Terms") constitute a legally binding agreement made between you, whether personally or on behalf of an entity ("you") and <strong>Spawnly</strong> ("we," "us," or "our"), concerning your access to and use of the Spawnly website and hosting services.
+                By registering for an account, you agree that you have read, understood, and agreed to be bound by all of these Terms.
               </p>
             </section>
 
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">2. Service Description & Hosting</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">2. Service Provision & Infrastructure</h2>
               <p>
-                Spawnly provides on-demand Minecraft server hosting. 
-                You acknowledge that our infrastructure is provisioned via third-party providers, primarily <strong>Hetzner Online GmbH</strong>. 
-                By using our services, you also agree to comply with Hetzner's Acceptable Use Policy.
+                Spawnly provides managed hosting services for Minecraft. You acknowledge and agree that:
               </p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>We utilize third-party infrastructure providers, primarily <strong>Hetzner Online GmbH</strong> (Compute) and <strong>Amazon Web Services</strong> (Storage).</li>
+                <li>Your use of the service is subject to the acceptable use policies of our upstream providers.</li>
+                <li>We reserve the right to modify, suspend, or discontinue the Service (or any part thereof) with or without notice for maintenance, security updates, or other operational reasons.</li>
+              </ul>
             </section>
 
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">3. Billing & Credits</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">3. Billing, Credits, and Payments</h2>
               <ul className="list-disc pl-5 space-y-2">
                 <li>
-                  <strong>Credit System:</strong> Services are paid for using pre-purchased "Credits." 
-                  One (1) Credit is approximately equal to €0.01 in purchasing power, though this exchange rate may vary based on active promotions or bulk discounts.
+                  <strong>Credit System:</strong> Services are purchased via a proprietary "Credit" system. Credits are a digital license to use our platform and have no monetary value outside of the Spawnly ecosystem.
                 </li>
                 <li>
-                  <strong>Pay-As-You-Go:</strong> Credits are deducted from your account balance every minute your server status is <strong>"Running."</strong>
+                  <strong>Pay-As-You-Go:</strong> Usage is calculated and deducted from your balance in real-time (per minute) while server instances are in a "Running" state.
                 </li>
                 <li>
-                  <strong>Stopped Servers:</strong> We do not charge credits while your server is in a <strong>"Stopped"</strong> state, although we reserve the right to charge a small fee for storage of large files if they are kept inactive for extended periods (currently free).
+                  <strong>Negative Balance:</strong> We allow a grace period of 1 hour for negative balances. If your balance remains negative, your services will be suspended immediately.
                 </li>
                 <li>
-                  <strong>Refunds:</strong> Credits are non-refundable once purchased, except where required by law.
+                  <strong>Inactive Storage Fees:</strong> We reserve the right to charge a storage fee (deducted from Credits) for stopped servers that consume significant disk space for over 30 days.
                 </li>
               </ul>
             </section>
 
-            {/* Dark Mode adjusted Warning Box */}
             <section className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-100 dark:border-red-900/30">
-              <h2 className="text-xl font-bold text-red-800 dark:text-red-300 mb-3">4. Automatic Termination (Kill Switch)</h2>
+              <h2 className="text-xl font-bold text-red-800 dark:text-red-300 mb-3">4. Termination & Data Deletion</h2>
               <p className="text-red-700 dark:text-red-200 font-medium">
-                It is your responsibility to maintain a positive Credit balance.
-              </p>
-              <p className="text-red-700 dark:text-red-200 mt-2">
-                If your Credit balance drops below zero or becomes insufficient to cover the current hour of usage:
+                We prioritize system health and resource availability.
               </p>
               <ul className="list-disc pl-5 mt-2 space-y-1 text-red-700 dark:text-red-200">
-                <li>Your server will be <strong>automatically stopped</strong> immediately without prior notice.</li>
-                <li>If the balance remains unpaid for an extended period (e.g., 30 days), we reserve the right to <strong>permanently delete</strong> your server files and data to free up storage space.</li>
+                <li>
+                  <strong>Insufficient Funds:</strong> If your Credit balance is insufficient to cover active usage, your server will be automatically stopped.
+                </li>
+                <li>
+                  <strong>Data Abandonment:</strong> If an account remains inactive (no login or active server) with a zero or negative balance for more than <strong>30 days</strong>, we reserve the right to permanently delete all associated server files, backups, and configurations to reclaim storage space. This action is irreversible.
+                </li>
+                <li>
+                  <strong>Suspension for Cause:</strong> We may terminate your access immediately, without prior notice or liability, for any breach of these Terms, specifically the Acceptable Use Policy.
+                </li>
               </ul>
             </section>
 
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">5. Acceptable Use Policy (AUP)</h2>
-              <p>You may strictly NOT use our servers for:</p>
-              <ul className="list-disc pl-5 space-y-2">
-                <li>Cryptocurrency mining or any other compute-intensive non-gaming tasks.</li>
-                <li>Launching DDoS attacks, port scanning, or network intrusion activities.</li>
-                <li>Hosting illegal content, malware, or phishing sites.</li>
-                <li>Bypassing Mojang's EULA (e.g., selling "pay-to-win" items in violation of Minecraft's commercial usage guidelines).</li>
-              </ul>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">5. User Content & Licensing</h2>
+              <p>
+                You retain full ownership of the world files, configurations, and data you upload ("User Content"). 
+                By uploading User Content, you grant Spawnly a non-exclusive, worldwide, royalty-free license to host, copy, back up, and display said content solely as necessary to provide the Service to you.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">6. Limitation of Liability</h2>
+              <p className="uppercase font-semibold text-sm mb-2 text-gray-500">Read this section carefully.</p>
+              <p>
+                To the fullest extent permitted by applicable law, in no event will Spawnly, its affiliates, directors, or employees be liable to you for any lost profits, lost data, costs of procurement of substitute goods, or any indirect, consequential, exemplary, incidental, or punitive damages.
+              </p>
               <p className="mt-2">
-                Violation of these rules will result in immediate account suspension without refund.
+                Our liability for any claim arising out of these Terms or the Service is limited to the amount paid by you to Spawnly during the one (1) month period prior to the cause of action. 
+                <strong>We are not responsible for data loss caused by corruption, hardware failure (Hetzner/AWS), or failed backups. You are responsible for maintaining your own local backups.</strong>
               </p>
             </section>
 
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">6. Uptime & Liability</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">7. Indemnification</h2>
               <p>
-                While we aim for 99.9% platform uptime, we do not guarantee uninterrupted service. 
-                We are not liable for data loss, revenue loss, or "downtime" caused by:
-              </p>
-              <ul className="list-disc pl-5 space-y-2">
-                <li>Third-party provider outages (e.g., Hetzner, AWS, Supabase).</li>
-                <li>User error (e.g., installing corrupted mods or plugins).</li>
-                <li>Force Majeure events.</li>
-              </ul>
-              <p className="mt-2">
-                THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTY OF ANY KIND.
+                You agree to defend, indemnify, and hold us harmless from and against any loss, damage, liability, claim, or demand, including reasonable attorneys’ fees and expenses, made by any third party due to or arising out of: (1) your User Content; (2) your violation of these Terms; or (3) your violation of any rights of a third party, including intellectual property rights (e.g., hosting pirated content).
               </p>
             </section>
 
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">7. User Content & Backups</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">8. Governing Law & Dispute Resolution</h2>
               <p>
-                You retain ownership of the world files and data you upload. 
-                However, you grant us a license to host, copy, and modify these files solely for the purpose of running your server.
-                We provide backup tools, but <strong>you are ultimately responsible</strong> for maintaining local copies of your data. We are not liable for corrupted or lost world saves.
+                These Terms are governed by the laws of Portugal. Any legal action of whatever nature brought by either you or us shall be commenced or prosecuted in the courts of Portugal, and you hereby consent to active jurisdiction.
               </p>
-            </section>
-
-            <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">8. Governing Law</h2>
-              <p>
-                These Terms shall be governed by the laws of Portugal and the European Union. 
-                Any disputes arising from these terms shall be resolved in the courts of [Your City], Portugal.
-              </p>
-            </section>
-
-            <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">9. Contact</h2>
-              <p>
-                For legal inquiries, please contact us at <a href="mailto:support@spawnly.net" className="text-teal-600 dark:text-teal-400 hover:underline">support@spawnly.net</a>.
+              <p className="mt-2 text-sm text-gray-500">
+                <strong>European ODR:</strong> If you reside in the EU, the European Commission provides an online dispute resolution platform: <a href="https://ec.europa.eu/consumers/odr" className="underline">https://ec.europa.eu/consumers/odr</a>.
               </p>
             </section>
 
           </div>
         </div>
       </main>
-
       <Footer />
     </div>
   );
 }
 
-// --- REQUIRED FOR NAVBAR/FOOTER TRANSLATIONS ---
 export async function getStaticProps({ locale }) {
   return {
-    props: {
-      ...(await serverSideTranslations(locale, ['common'])),
-    },
+    props: { ...(await serverSideTranslations(locale, ['common'])) },
   };
 }

@@ -131,6 +131,15 @@ export default async function handler(req, res) {
       ContentType: 'application/java-archive',
     }).promise();
 
+    // [AUDIT LOG]
+    await supabaseAdmin.from('server_audit_logs').insert({
+      server_id: serverId,
+      user_id: user.id,
+      action_type: 'install_mod',
+      details: JSON.stringify({ folder, filename, url: downloadUrl }),
+      created_at: new Date().toISOString()
+    });
+
     console.log(`[Install-Mod] Success: ${key}`);
     return res.status(200).json({ success: true });
   } catch (err) {

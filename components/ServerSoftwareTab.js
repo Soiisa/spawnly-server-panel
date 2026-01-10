@@ -692,6 +692,23 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
       const { error: err } = await supabase.from('servers').update(payload).eq('id', server.id);
       if (err) throw err;
 
+      // [AUDIT LOG START]
+      try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+              await supabase.from('server_audit_logs').insert({
+                  server_id: server.id,
+                  user_id: user.id,
+                  action_type: 'software_change',
+                  details: `Changed software to ${payload.type} (Version: ${payload.version})`,
+                  created_at: new Date().toISOString()
+              });
+          }
+      } catch (logErr) {
+          console.error("Failed to log software change:", logErr);
+      }
+      // [AUDIT LOG END]
+
       if (onSoftwareChange) onSoftwareChange(payload);
       
       setSuccess(payload.needs_recreation 

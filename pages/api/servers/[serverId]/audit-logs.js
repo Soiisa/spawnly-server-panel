@@ -26,18 +26,36 @@ export default async function handler(req, res) {
 
   // GET: Fetch Logs
   if (req.method === 'GET') {
+    // 1. Fetch raw logs without the join
     const { data: logs, error } = await supabaseAdmin
       .from('server_audit_logs')
-      .select(`
-        *,
-        users:user_id ( email )
-      `)
+      .select('*')
       .eq('server_id', serverId)
       .order('created_at', { ascending: false })
       .limit(100);
 
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({ logs });
+    if (error) {
+        console.error('Error fetching audit logs:', error);
+        return res.status(500).json({ error: error.message });
+    }
+
+    // 2. Extract unique User IDs to minimize API calls
+    const userIds = [...new Set(logs.map(l => l.user_id).filter(Boolean))];
+    const userMap = {};
+
+    // 3. Fetch emails for each unique user
+    await Promise.all(userIds.map(async (uid) => {
+         const { data: u } = await supabaseAdmin.auth.admin.getUserById(uid);
+         userMap[uid] = u?.user?.email || 'Unknown';
+    }));
+
+    // 4. Attach email to logs (mocking the join structure for frontend)
+    const enrichedLogs = logs.map(log => ({
+        ...log,
+        users: { email: userMap[log.user_id] || 'Unknown' }
+    }));
+
+    return res.json({ logs: enrichedLogs });
   }
 
   // POST: Create Log (For client-side actions like Software Change)

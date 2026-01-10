@@ -60,6 +60,20 @@ export default async function handler(req, res) {
       return res.status(wrapperRes.status).json({ error: data.error || 'Wrapper rejected command' });
     }
 
+    // [AUDIT LOG START]
+    try {
+        await supabaseAdmin.from('server_audit_logs').insert({
+            server_id: serverId,
+            user_id: user.id,
+            action_type: 'rcon_command',
+            details: `Executed: ${command}`,
+            created_at: new Date().toISOString()
+        });
+    } catch (logErr) {
+        console.error("Failed to log RCON command:", logErr);
+    }
+    // [AUDIT LOG END]
+
     return res.status(200).json({ response: 'Command sent' });
 
   } catch (err) {

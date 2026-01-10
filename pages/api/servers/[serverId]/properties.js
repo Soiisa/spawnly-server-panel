@@ -95,6 +95,15 @@ export default async function handler(req, res) {
         ContentType: 'text/plain',
       }).promise();
 
+      // [AUDIT LOG]
+      await supabaseAdmin.from('server_audit_logs').insert({
+        server_id: serverId,
+        user_id: user.id,
+        action_type: 'update_properties',
+        details: 'Updated server.properties file',
+        created_at: new Date().toISOString()
+      });
+
       return res.status(200).json({ success: true });
     } catch (error) {
       return res.status(500).json({ error: error.message });

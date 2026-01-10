@@ -2,7 +2,7 @@
 import Head from "next/head";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 export default function Imprint() {
   return (
@@ -10,9 +10,7 @@ export default function Imprint() {
       <Head>
         <title>Imprint (Legal Notice) | Spawnly</title>
       </Head>
-
       <Navbar />
-
       <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
           
@@ -24,48 +22,58 @@ export default function Imprint() {
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Service Provider</h2>
               <p>
                 <strong>Spawnly</strong><br />
-                [YOUR LEGAL COMPANY NAME, e.g., Spawnly Unipessoal Lda.]<br />
-                [YOUR STREET ADDRESS]<br />
-                [YOUR POSTAL CODE] [YOUR CITY]<br />
+                [YOUR LEGAL ENTITY NAME, e.g., Spawnly Unipessoal Lda.]<br />
+                [STREET ADDRESS]<br />
+                [POSTAL CODE] [CITY]<br />
                 Portugal
               </p>
             </section>
 
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Contact Information</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Contact</h2>
               <p>
                 <strong>Email:</strong> <a href="mailto:support@spawnly.net" className="text-indigo-600 dark:text-indigo-400 hover:underline">support@spawnly.net</a><br />
-                <strong>Phone:</strong> [OPTIONAL: +351 ...]
+                <strong>Web:</strong> https://spawnly.net
               </p>
             </section>
 
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Legal Details</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Legal Information</h2>
               <p>
-                <strong>Managing Director:</strong> [YOUR NAME]<br />
+                <strong>Managing Director / CEO:</strong> [YOUR NAME]<br />
                 <strong>VAT ID (NIF):</strong> [YOUR PORTUGUESE NIF]<br />
-                <strong>Dispute Resolution:</strong> The European Commission provides a platform for online dispute resolution (OS): <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">https://ec.europa.eu/consumers/odr</a>. We are not obligated to participate in dispute settlement proceedings before a consumer arbitration board.
+                <strong>Registered at:</strong> [Registry Court/Conservatória if applicable]
               </p>
             </section>
 
-            <section className="text-sm text-gray-500 border-t pt-4 border-gray-200 dark:border-slate-700 mt-8">
-              <p>Information according to § 5 TMG (German Telemedia Act) / Portuguese Decree-Law no. 7/2004.</p>
+            <section>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">EU Dispute Resolution</h2>
+              <p>
+                The European Commission provides a platform for Online Dispute Resolution (ODR): <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">https://ec.europa.eu/consumers/odr</a>.<br/>
+                We are neither willing nor obligated to participate in dispute settlement proceedings before a consumer arbitration board.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Liability Disclaimer</h2>
+              <p>
+                <strong>Content Liability:</strong> As a service provider, we are responsible for our own content on these pages in accordance with general laws. However, we are not obligated to monitor transmitted or stored third-party information or to investigate circumstances that indicate illegal activity.
+              </p>
+              <p className="mt-2">
+                <strong>Link Liability:</strong> Our offer contains links to external third-party websites. We have no influence on the contents of those websites, therefore we cannot assume any liability for such external content. The respective provider or operator of the pages is always responsible for the content of the linked pages.
+              </p>
             </section>
 
           </div>
         </div>
       </main>
-
       <Footer />
     </div>
   );
 }
 
-// --- REQUIRED FOR NAVBAR/FOOTER TRANSLATIONS ---
 export async function getStaticProps({ locale }) {
   return {
-    props: {
-      ...(await serverSideTranslations(locale, ['common'])),
-    },
+    props: { ...(await serverSideTranslations(locale, ['common'])) },
   };
 }

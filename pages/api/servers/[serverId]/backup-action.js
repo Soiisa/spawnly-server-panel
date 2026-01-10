@@ -84,6 +84,15 @@ export default async function handler(req, res) {
 
     if (updateError) return res.status(500).json({ error: 'Database error queuing restore' });
 
+    // [AUDIT LOG]
+    await supabaseAdmin.from('server_audit_logs').insert({
+      server_id: serverId,
+      user_id: user.id,
+      action_type: 'backup_restore',
+      details: `Queued restore for backup: ${s3Key}`,
+      created_at: new Date().toISOString()
+    });
+
     return res.status(200).json({ 
       success: true, 
       message: 'Restore queued. The backup will be applied when you next START the server.' 
@@ -114,6 +123,15 @@ export default async function handler(req, res) {
             // Update last_backup_at & Enforce Retention
             await supabaseAdmin.from('servers').update({ last_backup_at: new Date().toISOString() }).eq('id', serverId);
             await enforceRetention(serverId);
+
+            // [AUDIT LOG]
+            await supabaseAdmin.from('server_audit_logs').insert({
+              server_id: serverId,
+              user_id: user.id,
+              action_type: 'backup_create',
+              details: `Created backup (Live): ${data.filename || 'unknown'}`,
+              created_at: new Date().toISOString()
+            });
             
             return res.status(200).json(data);
         } catch (err) {
@@ -172,6 +190,15 @@ export default async function handler(req, res) {
             // Update last_backup_at & Enforce Retention
             await supabaseAdmin.from('servers').update({ last_backup_at: new Date().toISOString() }).eq('id', serverId);
             await enforceRetention(serverId);
+
+            // [AUDIT LOG]
+            await supabaseAdmin.from('server_audit_logs').insert({
+              server_id: serverId,
+              user_id: user.id,
+              action_type: 'backup_create',
+              details: `Created backup (S3): ${filename}`,
+              created_at: new Date().toISOString()
+            });
 
             return res.status(200).json({ success: true, filename, s3Path: `s3://${Bucket}/${targetKey}` });
         } catch (err) {

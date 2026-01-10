@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import md5 from 'md5';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../lib/supabaseClient'; // Imported for DB sync
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
+import { supabase } from '../lib/supabaseClient';
+import { useTranslation } from 'next-i18next';
 import {
   UserGroupIcon,
   ShieldCheckIcon,
@@ -21,7 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function PlayersTab({ server, token }) {
-  const { t } = useTranslation('server'); // <--- INITIALIZED
+  const { t } = useTranslation('server');
   // --- State ---
   const [activeSubTab, setActiveSubTab] = useState('whitelist');
   const [whitelist, setWhitelist] = useState([]);
@@ -218,7 +218,24 @@ export default function PlayersTab({ server, token }) {
         }
       }
 
-      // *** NEW: SYNC WHITELIST TO SUPABASE ***
+      // [AUDIT LOG START]
+      try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+              await supabase.from('server_audit_logs').insert({
+                  server_id: server.id,
+                  user_id: user.id,
+                  action_type: 'player_manage',
+                  details: `Added ${target} to ${activeSubTab}`,
+                  created_at: new Date().toISOString()
+              });
+          }
+      } catch (logErr) {
+          console.error("Failed to log player action:", logErr);
+      }
+      // [AUDIT LOG END]
+
+      // Sync whitelist to Supabase
       if (activeSubTab === 'whitelist') {
         const { error: dbError } = await supabase
           .from('server_whitelist')
@@ -267,7 +284,24 @@ export default function PlayersTab({ server, token }) {
         }
       }
 
-      // *** NEW: SYNC REMOVAL TO SUPABASE ***
+      // [AUDIT LOG START]
+      try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+              await supabase.from('server_audit_logs').insert({
+                  server_id: server.id,
+                  user_id: user.id,
+                  action_type: 'player_manage',
+                  details: `Removed ${identifier} from ${activeSubTab}`,
+                  created_at: new Date().toISOString()
+              });
+          }
+      } catch (logErr) {
+          console.error("Failed to log player action:", logErr);
+      }
+      // [AUDIT LOG END]
+
+      // Sync removal to Supabase
       if (activeSubTab === 'whitelist') {
         const { error: dbError } = await supabase
           .from('server_whitelist')
@@ -311,7 +345,6 @@ export default function PlayersTab({ server, token }) {
 
   // --- Render Helpers ---
   const renderEmptyState = () => (
-    // UPDATED: Added dark mode classes
     <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
       <UserGroupIcon className="w-12 h-12 mb-3 opacity-50" />
       <p>{t('players.empty_list')}</p>
@@ -325,10 +358,8 @@ export default function PlayersTab({ server, token }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* Online Players Card */}
-        {/* UPDATED: Added dark mode classes */}
         <div className="md:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 flex flex-col">
           <div className="flex justify-between items-center mb-4">
-            {/* UPDATED: Added dark mode class for text */}
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               <SignalIcon className="w-5 h-5 text-green-500" />
               {t('players.online_title')}
@@ -346,16 +377,13 @@ export default function PlayersTab({ server, token }) {
             </button>
           </div>
           
-          {/* UPDATED: Added dark mode classes */}
           <div className="flex-1 bg-gray-50 dark:bg-slate-700 rounded-xl p-4 border border-gray-100 dark:border-slate-600 min-h-[120px]">
             {onlineList.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {onlineList.map((player, i) => (
                   <div key={i} 
-                    // UPDATED: Added dark mode classes
                     className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-600 shadow-sm">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    {/* UPDATED: Added dark mode class for text */}
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{player}</span>
                   </div>
                 ))}
@@ -370,7 +398,6 @@ export default function PlayersTab({ server, token }) {
         </div>
 
         {/* Quick Actions / Summary */}
-        {/* UPDATED: Added dark mode classes */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 flex flex-col justify-center gap-4">
           <div className="flex items-center justify-between p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-100 dark:border-indigo-600">
             <div className="flex items-center gap-3">
@@ -397,11 +424,9 @@ export default function PlayersTab({ server, token }) {
       </div>
 
       {/* 2. Management Tabs */}
-      {/* UPDATED: Added dark mode classes */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden min-h-[500px] flex flex-col">
         
         {/* Navigation */}
-        {/* UPDATED: Added dark mode class for border */}
         <div className="flex border-b border-gray-200 dark:border-slate-700 overflow-x-auto">
           {TABS.map((tab) => (
             <button
@@ -409,7 +434,6 @@ export default function PlayersTab({ server, token }) {
               onClick={() => { setActiveSubTab(tab.id); setIsAdding(false); setSearchQuery(''); }}
               className={`flex-1 flex items-center justify-center gap-2 py-4 px-6 text-sm font-medium transition-colors border-b-2 whitespace-nowrap
                 ${activeSubTab === tab.id 
-                  // UPDATED: Added dark mode classes for active and inactive tabs
                   ? `border-indigo-500 text-indigo-600 bg-gray-50 dark:bg-slate-700` 
                   : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700/50'
                 }`}
@@ -421,17 +445,14 @@ export default function PlayersTab({ server, token }) {
         </div>
 
         {/* Toolbar */}
-        {/* UPDATED: Added dark mode classes for toolbar background and border */}
         <div className="p-4 border-b border-gray-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between gap-4 items-center bg-gray-50 dark:bg-slate-700">
           <div className="relative w-full sm:w-64">
-            {/* UPDATED: Added dark mode class for icon */}
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
             <input 
               type="text" 
               placeholder={t('players.search_placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              // UPDATED: Added dark mode classes for input
               className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
@@ -439,7 +460,6 @@ export default function PlayersTab({ server, token }) {
             onClick={() => setIsAdding(!isAdding)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm
               ${isAdding 
-                // UPDATED: Added dark mode classes for cancel button
                 ? 'bg-gray-200 dark:bg-slate-600 text-gray-700 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-slate-500' 
                 : 'bg-indigo-600 text-white hover:bg-indigo-700'
               }`}
@@ -455,20 +475,17 @@ export default function PlayersTab({ server, token }) {
               initial={{ height: 0, opacity: 0 }} 
               animate={{ height: 'auto', opacity: 1 }} 
               exit={{ height: 0, opacity: 0 }}
-              // UPDATED: Added dark mode classes
               className="border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-700 overflow-hidden"
             >
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
                 {/* Dynamic Inputs based on active tab */}
                 {activeSubTab !== 'banned-ips' && (
                   <div className="col-span-1">
-                    {/* UPDATED: Added dark mode class for label text */}
                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.player_name')}</label>
                     <input 
                       type="text" 
                       value={newPlayerName} 
                       onChange={(e) => setNewPlayerName(e.target.value)}
-                      // UPDATED: Added dark mode classes for input
                       className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       placeholder="e.g. Steve"
                     />
@@ -477,13 +494,11 @@ export default function PlayersTab({ server, token }) {
                 
                 {activeSubTab === 'banned-ips' && (
                   <div className="col-span-1">
-                    {/* UPDATED: Added dark mode class for label text */}
                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.ip_address')}</label>
                     <input 
                       type="text" 
                       value={newPlayerIp} 
                       onChange={(e) => setNewPlayerIp(e.target.value)}
-                      // UPDATED: Added dark mode classes for input
                       className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       placeholder="e.g. 192.168.1.1"
                     />
@@ -493,12 +508,10 @@ export default function PlayersTab({ server, token }) {
                 {activeSubTab === 'ops' && (
                   <>
                     <div>
-                      {/* UPDATED: Added dark mode class for label text */}
                       <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.op_level')}</label>
                       <select 
                         value={newOpLevel} 
                         onChange={(e) => setNewOpLevel(Number(e.target.value))}
-                        // UPDATED: Added dark mode classes for select
                         className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       >
                         <option value="1">{t('players.levels.l1')}</option>
@@ -515,7 +528,6 @@ export default function PlayersTab({ server, token }) {
                         onChange={(e) => setNewOpBypasses(e.target.checked)}
                         className="h-4 w-4 text-indigo-600 border-gray-300 dark:border-slate-600 dark:bg-slate-800 rounded focus:ring-indigo-500"
                       />
-                      {/* UPDATED: Added dark mode class for label text */}
                       <label htmlFor="bypass" className="ml-2 text-sm text-gray-700 dark:text-gray-300">{t('players.form.bypass_limit')}</label>
                     </div>
                   </>
@@ -524,24 +536,20 @@ export default function PlayersTab({ server, token }) {
                 {(activeSubTab === 'banned-players' || activeSubTab === 'banned-ips') && (
                   <>
                     <div className="col-span-1 md:col-span-2">
-                      {/* UPDATED: Added dark mode class for label text */}
                       <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.reason')}</label>
                       <input 
                         type="text" 
                         value={newPlayerReason} 
                         onChange={(e) => setNewPlayerReason(e.target.value)}
-                        // UPDATED: Added dark mode classes for input
                         className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                         placeholder="Reason for ban"
                       />
                     </div>
                     <div>
-                      {/* UPDATED: Added dark mode class for label text */}
                       <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">{t('players.form.expires')}</label>
                       <select 
                         value={newPlayerExpires === 'forever' ? 'forever' : 'date'} 
                         onChange={(e) => setNewPlayerExpires(e.target.value === 'forever' ? 'forever' : new Date().toISOString().split('T')[0])}
-                        // UPDATED: Added dark mode classes for select
                         className="w-full border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       >
                         <option value="forever">{t('players.form.forever')}</option>
@@ -552,7 +560,6 @@ export default function PlayersTab({ server, token }) {
                           type="date" 
                           value={newPlayerExpires} 
                           onChange={(e) => setNewPlayerExpires(e.target.value)}
-                          // UPDATED: Added dark mode classes for date input
                           className="mt-2 w-full border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 rounded-lg shadow-sm focus:ring-indigo-500 sm:text-sm"
                         />
                       )}
@@ -591,11 +598,9 @@ export default function PlayersTab({ server, token }) {
         {/* Main List */}
         <div className="flex-1 overflow-y-auto p-0">
           {displayedList.length === 0 ? renderEmptyState() : (
-            // UPDATED: Added dark mode class for list separator
             <div className="divide-y divide-gray-100 dark:divide-slate-700">
               {displayedList.map((item, idx) => (
                 <div key={idx} 
-                  // UPDATED: Added dark mode class for list item hover
                   className="p-4 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   
                   {/* Item Details */}
@@ -604,7 +609,6 @@ export default function PlayersTab({ server, token }) {
                       <IdentificationIcon className={`w-6 h-6 ${TABS.find(t => t.id === activeSubTab)?.color}`} />
                     </div>
                     <div>
-                      {/* UPDATED: Added dark mode class for text */}
                       <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100">{item.name || item.ip}</h4>
                       
                       {activeSubTab !== 'banned-ips' && item.uuid && (
@@ -615,7 +619,6 @@ export default function PlayersTab({ server, token }) {
                       <div className="flex flex-wrap gap-2 mt-2">
                         {item.level && <span className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300 px-2 py-0.5 rounded">Level {item.level}</span>}
                         {item.bypassesPlayerLimit && <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300 px-2 py-0.5 rounded">Bypass Limit</span>}
-                        {/* UPDATED: Added dark mode classes for generic badge */}
                         {item.source && <span className="text-xs bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-gray-300 px-2 py-0.5 rounded">Source: {item.source}</span>}
                         {item.created && <span className="text-xs bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-gray-300 px-2 py-0.5 rounded">Banned: {item.created.split(' ')[0]}</span>}
                       </div>
@@ -635,7 +638,6 @@ export default function PlayersTab({ server, token }) {
                           <ClockIcon className="w-3 h-3" />
                           <span>Expires</span>
                         </div>
-                        {/* UPDATED: Added dark mode class for text */}
                         <span className="font-medium text-gray-700 dark:text-gray-300">{item.expires === 'forever' ? 'Never' : item.expires.split(' ')[0]}</span>
                       </div>
                     )}

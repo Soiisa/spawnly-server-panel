@@ -167,6 +167,15 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to insert server into Supabase', detail: error.message });
     }
 
+    // [AUDIT LOG]
+    await supabaseAdmin.from('server_audit_logs').insert({
+      server_id: data.id,
+      user_id: authenticatedUserId,
+      action_type: 'server_create',
+      details: `Created server "${name}" (${software} ${version})`,
+      created_at: new Date().toISOString()
+    });
+
     // Initialize S3 Files if game is Minecraft
     if (game === 'minecraft') {
       const s3Prefix = `servers/${data.id}/`;
