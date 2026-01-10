@@ -6,10 +6,10 @@ import { useTranslation } from 'next-i18next';
 import { 
   ServerIcon, 
   CreditCardIcon, 
-  SunIcon,
-  MoonIcon,
-  Cog6ToothIcon,
-  ChatBubbleLeftRightIcon,
+  SunIcon, 
+  MoonIcon, 
+  Cog6ToothIcon, 
+  ChatBubbleLeftRightIcon, 
   BanknotesIcon 
 } from '@heroicons/react/24/outline';
 import CreditBalance from "./CreditBalance";
@@ -26,14 +26,18 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
     { name: t('nav.dashboard'), href: '/dashboard', icon: ServerIcon },
     { name: t('nav.pools', 'Pools'), href: '/pools', icon: BanknotesIcon },
     { name: t('nav.billing'), href: '/credits', icon: CreditCardIcon },
-    { name: 'Support', href: '/support', icon: ChatBubbleLeftRightIcon },
+    { name: t('nav.support'), href: '/support', icon: ChatBubbleLeftRightIcon },
     { name: t('nav.settings', 'Settings'), href: '/settings', icon: Cog6ToothIcon },
   ];
 
+  // --- CHANGED: Logic to determine display name ---
+  // Try user_metadata.username first, fallback to email prefix
+  const displayName = user?.user_metadata?.username || user?.email?.split('@')[0] || '';
+  const displayInitial = displayName ? displayName.charAt(0).toUpperCase() : '?';
+
   return (
-    // --- ADDED CLASS: tour-main-header ---
     <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 sticky top-0 z-30 tour-main-header">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           
           {/* Left Side: Logo & Nav */}
@@ -83,8 +87,9 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
             <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 hidden sm:block"></div>
             <div className="flex items-center gap-3 pl-2">
               <div className="hidden sm:flex flex-col items-end">
+                {/* CHANGED: Use displayName instead of email split */}
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-none">
-                  {user?.email?.split('@')[0]}
+                  {displayName}
                 </span>
                 <button 
                   onClick={onLogout}
@@ -93,8 +98,9 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
                   {t('nav.logout')}
                 </button>
               </div>
+              {/* CHANGED: Use displayInitial */}
               <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-white dark:ring-slate-800 shadow-sm">
-                {user?.email?.charAt(0).toUpperCase()}
+                {displayInitial}
               </div>
             </div>
           </div>

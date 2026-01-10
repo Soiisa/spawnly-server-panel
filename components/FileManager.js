@@ -41,7 +41,8 @@ const getFileIcon = (fileName, isDirectory) => {
   }
 };
 
-export default function FileManager({ server, token, setActiveTab }) {
+// --- CHANGED: Added isAdmin prop ---
+export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const { t } = useTranslation('server');
   
   // --- State ---
@@ -90,14 +91,18 @@ export default function FileManager({ server, token, setActiveTab }) {
 
   useEffect(() => {
     const applyFilter = (list) => {
-      if (!filterEnabled) return list || [];
+      // If not admin, always enforce filter
+      if (!filterEnabled && !isAdmin) return list || []; 
+      
+      if (!filterEnabled && isAdmin) return list || [];
+
       return (list || []).filter(file => {
         const name = file.name.toLowerCase().replace(/\/+$/, '');
         return !maskedItems.includes(name) && !maskedItems.some(masked => name.startsWith(masked + '/'));
       });
     };
     setFiles(applyFilter(allFiles));
-  }, [filterEnabled, allFiles]);
+  }, [filterEnabled, allFiles, isAdmin]);
 
   useEffect(() => { if (createModal.open && nameInputRef.current) setTimeout(() => nameInputRef.current.focus(), 100); }, [createModal.open]);
   useEffect(() => { 
@@ -426,7 +431,10 @@ export default function FileManager({ server, token, setActiveTab }) {
           </div>
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-gray-100 dark:bg-slate-700 rounded-lg p-1 mr-2"><button onClick={() => openCreateModal('file')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-600 rounded-md"><PlusIcon className="w-5 h-5" /></button><div className="w-px h-4 bg-gray-300 dark:bg-slate-600 mx-1"></div><button onClick={() => openCreateModal('folder')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-600 rounded-md"><FolderPlusIcon className="w-5 h-5" /></button></div>
-            <button onClick={() => setFilterEnabled(!filterEnabled)} className={`p-2 rounded-lg border ${filterEnabled ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-gray-200 text-gray-500'}`}><FunnelIcon className="w-5 h-5" /></button>
+            {/* --- CHANGED: Only show filter toggle if Admin --- */}
+            {isAdmin && (
+              <button onClick={() => setFilterEnabled(!filterEnabled)} className={`p-2 rounded-lg border ${filterEnabled ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-gray-200 text-gray-500'}`}><FunnelIcon className="w-5 h-5" /></button>
+            )}
             <button onClick={() => fetchFiles(currentPath)} disabled={loading} className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"><ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} /></button>
             <div className="relative group"><button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm"><ArrowUpTrayIcon className="w-4 h-4" />{t('files.upload')}</button><input type="file" ref={fileInputRef} className="hidden" onChange={handleUploadClick} /></div>
           </div>

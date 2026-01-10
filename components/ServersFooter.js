@@ -7,7 +7,8 @@ export default function Footer() {
 
   return (
     <footer className="fixed bottom-0 left-0 w-full z-50 border-t border-gray-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm py-4 transition-colors duration-300 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+      {/* CHANGED: max-w-7xl -> w-full */}
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
         
         {/* Copyright */}
         <p className="text-sm text-gray-500 dark:text-gray-400">

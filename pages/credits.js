@@ -327,9 +327,24 @@ export default function CreditsPage() {
             <div className="flex items-center gap-4"><span className="font-bold text-gray-900 dark:text-gray-100">{item.amount.toFixed(4)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits')}</span></span>{isOpen ? <ChevronUpIcon className="w-5 h-5 text-gray-400" /> : <ChevronDownIcon className="w-5 h-5 text-gray-400" />}</div>
           </div>
           {isOpen && (
-            <div className="bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 px-4 py-3 space-y-2">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{t('history.detailed_charges')}</p>
-              {item.details.map((tx) => (<div key={tx.id} className="flex justify-between text-sm text-gray-600 dark:text-gray-300 pl-4 border-l-2 border-indigo-200 dark:border-indigo-800"><span>{formatDate(tx.created_at)}</span><span className="font-mono">{tx.amount.toFixed(4)}</span></div>))}
+            <div className="bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 p-4">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Usage Calculation</p>
+                <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-6 text-sm font-mono bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm">
+                    <div className="flex flex-col items-center sm:items-start">
+                        <span className="text-[10px] uppercase text-gray-400 font-sans font-bold tracking-wider mb-1">Time</span>
+                        <span className="text-gray-700 dark:text-gray-200">{(item.meta.totalSeconds / 3600).toFixed(4)} <span className="text-gray-400 text-xs">hrs</span></span>
+                    </div>
+                    <div className="hidden sm:block text-gray-300 dark:text-slate-600">✕</div>
+                    <div className="flex flex-col items-center sm:items-start">
+                        <span className="text-[10px] uppercase text-gray-400 font-sans font-bold tracking-wider mb-1">Rate</span>
+                        <span className="text-gray-700 dark:text-gray-200">{item.meta.totalSeconds > 0 ? Math.abs(item.amount / (item.meta.totalSeconds / 3600)).toFixed(2) : '0.00'} <span className="text-gray-400 text-xs">cr/hr</span></span>
+                    </div>
+                    <div className="hidden sm:block text-gray-300 dark:text-slate-600">=</div>
+                    <div className="flex flex-col items-center sm:items-start">
+                        <span className="text-[10px] uppercase text-gray-400 font-sans font-bold tracking-wider mb-1">Total</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{Math.abs(item.amount).toFixed(4)} <span className="text-indigo-400/70 text-xs">cr</span></span>
+                    </div>
+                </div>
             </div>
           )}
         </div>

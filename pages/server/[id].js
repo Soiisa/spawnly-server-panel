@@ -146,6 +146,7 @@ export default function ServerDetailPage({ initialServer }) {
 
   // Ownership & Permissions State
   const [isOwner, setIsOwner] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); // <--- ADDED: Admin State
   const [myPerms, setMyPerms] = useState({}); 
 
   const [autoStopCountdown, setAutoStopCountdown] = useState(null);
@@ -195,15 +196,17 @@ export default function ServerDetailPage({ initialServer }) {
         const userData = sessionData.session.user;
         setUser(userData);
         
-        // Fetch Credits AND Tour Status
+        // Fetch Credits AND Tour Status AND Admin Status
+        // --- CHANGED: Added is_admin to select ---
         const { data: profile } = await supabase
             .from('profiles')
-            .select('credits, server_tour_completed')
+            .select('credits, server_tour_completed, is_admin')
             .eq('id', userData.id)
             .single();
 
         if (profile) {
             setCredits(profile.credits || 0);
+            setIsAdmin(!!profile.is_admin); // <--- Set Admin State
             if (!profile.server_tour_completed) {
                 setRunTour(true);
             }
@@ -666,7 +669,7 @@ export default function ServerDetailPage({ initialServer }) {
 
       <ServerTour run={runTour} userId={user?.id} onFinish={() => setRunTour(false)} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
+      <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         <AnimatePresence>
           {error && (
             <motion.div 
@@ -1030,7 +1033,8 @@ export default function ServerDetailPage({ initialServer }) {
             <div className={activeTab === 'overview' ? 'hidden' : 'block animate-in fade-in duration-300'}>
               {activeTab === 'properties' && myPerms.settings && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  <ServerPropertiesEditor server={server} />
+                  {/* --- CHANGED: Passed isAdmin prop --- */}
+                  <ServerPropertiesEditor server={server} isAdmin={isAdmin} />
                 </div>
               )}
 
@@ -1063,7 +1067,8 @@ export default function ServerDetailPage({ initialServer }) {
 
               {activeTab === 'files' && myPerms.files && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating_files', { defaultValue: 'Authenticating file access...' })}</p>}
+                  {/* --- CHANGED: Passed isAdmin prop --- */}
+                  {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} isAdmin={isAdmin} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating_files', { defaultValue: 'Authenticating file access...' })}</p>}
                 </div>
               )}
 

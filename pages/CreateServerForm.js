@@ -2,18 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient"; 
-import { useTranslation } from "next-i18next"; // <--- IMPORTED
+import { useTranslation } from "next-i18next"; 
 
 export default function CreateServerForm({ onClose, onCreate, credits }) {
-  const { t } = useTranslation('create_server'); // <--- INITIALIZED
+  const { t } = useTranslation('create_server'); 
   const [name, setName] = useState("");
-  const [game, setGame] = useState("minecraft");
-  const [software, setSoftware] = useState("vanilla");
+  // Fixed defaults to Minecraft Vanilla
+  const [game] = useState("minecraft");
+  const [software] = useState("vanilla");
   const [ram, setRam] = useState(8); 
   const [loading, setLoading] = useState(false);
-  const [softwareOptions, setSoftwareOptions] = useState([]);
   const [existingNames, setExistingNames] = useState(new Set());
   const [nameError, setNameError] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [userId, setUserId] = useState(null);
 
   // Example pricing per GB per hour
@@ -21,38 +22,6 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
   const costPerHour = Number((ram * pricePerGB).toFixed(2)); 
   const creditsNum = Number(credits); 
   const canCreate = creditsNum >= costPerHour && !nameError && name.trim();
-
-  // Updated software options with Translations for Names AND Descriptions
-  const gameSoftwareOptions = {
-    minecraft: [
-      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
-      { id: "paper", name: t('software_names.paper'), description: t('software_desc.paper') },
-      { id: "purpur", name: t('software_names.purpur'), description: t('software_desc.purpur') },
-      { id: "folia", name: t('software_names.folia'), description: t('software_desc.folia') },
-      { id: "spigot", name: t('software_names.spigot'), description: t('software_desc.spigot') },
-      { id: "forge", name: t('software_names.forge'), description: t('software_desc.forge') },
-      { id: "neoforge", name: t('software_names.neoforge'), description: t('software_desc.neoforge') },
-      { id: "fabric", name: t('software_names.fabric'), description: t('software_desc.fabric') },
-      { id: "quilt", name: t('software_names.quilt'), description: t('software_desc.quilt') },
-      { id: "velocity", name: t('software_names.velocity'), description: t('software_desc.velocity') },
-      { id: "waterfall", name: t('software_names.waterfall'), description: t('software_desc.waterfall') },
-    ],
-    valheim: [
-      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
-      { id: "plus", name: t('software_names.plus'), description: t('software_desc.enhanced') },
-    ],
-    rust: [
-      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
-      { id: "oxide", name: t('software_names.oxide'), description: t('software_desc.modding') },
-    ],
-    terraria: [
-      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
-      { id: "tmodloader", name: t('software_names.tmodloader'), description: t('software_desc.modding') },
-    ],
-    ark: [
-      { id: "vanilla", name: t('software_names.vanilla'), description: t('software_desc.vanilla') },
-    ],
-  };
 
   useEffect(() => {
     const fetchUserAndServers = async () => {
@@ -68,15 +37,6 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
     };
     fetchUserAndServers();
   }, []);
-
-  useEffect(() => {
-    // Set default software when game changes
-    setSoftwareOptions(gameSoftwareOptions[game] || []);
-    if (gameSoftwareOptions[game]?.length > 0) {
-      setSoftware(gameSoftwareOptions[game][0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, t]); // Added 't' as dependency to refresh options on language change
 
   const validateName = (value) => {
     const trimmed = value.trim();
@@ -177,51 +137,6 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
               {t('hints.name_rules')}
             </p>
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="block">
-              <label htmlFor="game" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {t('labels.game')}
-              </label>
-              <select
-                id="game"
-                value={game}
-                onChange={(e) => setGame(e.target.value)}
-                className="block w-full rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                {Object.keys(gameSoftwareOptions).map(key => (
-                  <option key={key} value={key}>{t(`games.${key}`)}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="block">
-              <label htmlFor="software" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {t('labels.software')}
-              </label>
-              <select
-                id="software"
-                value={software}
-                onChange={(e) => setSoftware(e.target.value)}
-                className="block w-full rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500"
-                disabled={softwareOptions.length === 0}
-              >
-                {softwareOptions.map(option => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          
-          {softwareOptions.length > 0 && (
-            <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-lg">
-              <p className="text-sm text-indigo-800 dark:text-indigo-200">
-                {softwareOptions.find(opt => opt.id === software)?.description}
-              </p>
-            </div>
-          )}
 
           <div className="block">
             <div className="flex justify-between items-center mb-2">

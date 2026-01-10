@@ -375,7 +375,8 @@ export default function Dashboard() {
          onFinish={() => setRunTour(false)} 
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
+      {/* CHANGED: max-w-7xl -> w-full to make it occupy full width */}
+      <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         
         {/* Error Toast */}
         {error && (
