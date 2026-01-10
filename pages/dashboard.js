@@ -10,7 +10,7 @@ import Link from 'next/link';
 import ServerStatusIndicator from "../components/ServerStatusIndicator";
 import Header from "../components/ServersHeader";
 import Footer from "../components/ServersFooter";
-import DashboardTour from "../components/DashboardTour"; // <--- ADDED IMPORT
+import DashboardTour from "../components/DashboardTour"; 
 import { 
   PlusIcon, 
   ServerIcon, 
@@ -313,9 +313,16 @@ export default function Dashboard() {
   const handleDeleteServer = async (serverId) => {
     if (!confirm(t('messages.confirm_delete'))) return; 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+      const token = session.access_token;
+
       await fetch('/api/servers/action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({ serverId, action: 'delete' }),
       });
       // Explicitly remove from UI if it was shared (realtime might not catch it for deletions)
@@ -327,12 +334,19 @@ export default function Dashboard() {
 
   const handleStartServer = async (server) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+      const token = session.access_token;
+
       const endpoint = !server.hetzner_id ? '/api/servers/provision' : '/api/servers/action';
       const body = !server.hetzner_id ? { serverId: server.id } : { serverId: server.id, action: 'start' };
       
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -343,9 +357,16 @@ export default function Dashboard() {
 
   const handleStopServer = async (serverId) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session");
+      const token = session.access_token;
+
       await fetch('/api/servers/action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ serverId, action: 'stop' }),
       });
     } catch (err) {

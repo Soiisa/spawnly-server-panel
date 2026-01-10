@@ -8,7 +8,11 @@ import {
   DeleteObjectCommand 
 } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
-import { verifyServerAccess } from '../../../lib/accessControl'; // <--- NEW IMPORT
+import { verifyServerAccess } from '../../../lib/accessControl';
+import { promisify } from 'util';
+import { exec } from 'child_process';
+
+const execAsync = promisify(exec);
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -184,32 +188,58 @@ const hetznerDeleteServer = async (hetznerId) => {
   return true;
 };
 
+// --- Standard S3 Delete (Fallback) ---
 const deleteS3ServerFolder = async (serverId) => {
-  console.log(`[deleteS3ServerFolder] Deleting S3 folder for server: ${serverId}`);
+  console.log(`[deleteS3ServerFolder] Standard deleting S3 folder for server: ${serverId}`);
   try {
-    const listCommand = new ListObjectsV2Command({
-      Bucket: S3_BUCKET,
-      Prefix: `servers/${serverId}/`,
-    });
-    const listResponse = await s3Client.send(listCommand);
+    let continuationToken = null;
+    do {
+        const listCommand = new ListObjectsV2Command({
+            Bucket: S3_BUCKET,
+            Prefix: `servers/${serverId}/`,
+            ContinuationToken: continuationToken
+        });
+        const listResponse = await s3Client.send(listCommand);
 
-    if (listResponse.Contents?.length > 0) {
-      const deleteCommand = new DeleteObjectsCommand({
-        Bucket: S3_BUCKET,
-        Delete: {
-          Objects: listResponse.Contents.map((obj) => ({ Key: obj.Key })),
-          Quiet: true,
-        },
-      });
-      await s3Client.send(deleteCommand);
-      console.log(`[deleteS3ServerFolder] Successfully deleted ${listResponse.Contents.length} objects from S3 for server: ${serverId}`);
-    } else {
-      console.log(`[deleteS3ServerFolder] No objects found in S3 for server: ${serverId}`);
-    }
+        if (listResponse.Contents?.length > 0) {
+            const deleteCommand = new DeleteObjectsCommand({
+                Bucket: S3_BUCKET,
+                Delete: {
+                    Objects: listResponse.Contents.map((obj) => ({ Key: obj.Key })),
+                    Quiet: true,
+                },
+            });
+            await s3Client.send(deleteCommand);
+            console.log(`[deleteS3ServerFolder] Deleted batch of ${listResponse.Contents.length} objects`);
+        }
+        continuationToken = listResponse.NextContinuationToken;
+    } while (continuationToken);
+    
+    console.log(`[deleteS3ServerFolder] Successfully deleted all objects for server: ${serverId}`);
     return true;
   } catch (err) {
     console.error(`[deleteS3ServerFolder] Failed to delete S3 folder servers/${serverId}:`, err);
-    throw new Error(`S3 folder deletion failed: ${err.message}`);
+    // Don't throw, just log, so DB deletion persists
+    return false;
+  }
+};
+
+// --- Fast S3 Delete using s5cmd (Primary) ---
+const deleteS3ServerFolderFast = async (serverId) => {
+  console.log(`[deleteS3ServerFolderFast] Fast deleting S3 folder for server: ${serverId} using s5cmd`);
+  const bucketUrl = `s3://${S3_BUCKET}/servers/${serverId}/*`;
+  
+  try {
+    const cmd = `s5cmd --endpoint-url ${S3_ENDPOINT} rm "${bucketUrl}"`;
+    const { stdout, stderr } = await execAsync(cmd);
+    
+    if (stdout) console.log('[s5cmd]', stdout);
+    
+    console.log(`[deleteS3ServerFolderFast] Successfully triggered deletion for ${bucketUrl}`);
+    return true;
+  } catch (err) {
+    console.warn(`[deleteS3ServerFolderFast] s5cmd failed (likely missing). Falling back to standard delete.`);
+    return await deleteS3ServerFolder(serverId);
   }
 };
 
@@ -502,21 +532,40 @@ export default async function handler(req, res) {
       }
 
       if (action === 'delete') {
+        console.log(`[API:action] Cleaning up dependent records for server ${serverId}...`);
+        
+        // --- 1. Manually cleanup related tables to satisfy foreign keys ---
+        // (pool_transactions, server_permissions, allocations, etc.)
         try {
-          await deleteS3ServerFolder(server.id);
-        } catch (s3Err) {
-          console.error('[API:action] Failed to delete S3 folder:', s3Err.message);
-          return res.status(502).json({ error: 'Failed to delete server data from S3', detail: s3Err.message });
+            await supabaseAdmin.from('pool_transactions').delete().eq('server_id', serverId);
+            await supabaseAdmin.from('server_permissions').delete().eq('server_id', serverId);
+            await supabaseAdmin.from('allocations').delete().eq('server_id', serverId);
+            await supabaseAdmin.from('server_console').delete().eq('server_id', serverId);
+            await supabaseAdmin.from('installed_software').delete().eq('server_id', serverId);
+        } catch (cleanupErr) {
+            console.error('[API:action] Warning: Pre-delete cleanup failed (some records might remain):', cleanupErr.message);
         }
 
+        // --- 2. Delete from Supabase ---
+        console.log(`[API:action] Deleting server ${serverId} from Supabase...`);
         const { error: delErr } = await supabaseAdmin
           .from('servers')
           .delete()
           .eq('id', serverId);
+        
         if (delErr) {
           console.error('[API:action] Supabase delete error:', delErr);
           return res.status(500).json({ error: 'Failed to delete server from Supabase', detail: delErr.message });
         }
+
+        // --- 3. Delete S3 Folder (Fast w/ Fallback) ---
+        // We do this LAST so that if it fails, the server is at least gone from the dashboard.
+        try {
+          await deleteS3ServerFolderFast(server.id);
+        } catch (s3Err) {
+          console.error('[API:action] Failed to delete S3 folder (non-fatal):', s3Err.message);
+        }
+
       } else {
         // STOP or KILL -> Set status to 'Stopped'
         console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped'`);
