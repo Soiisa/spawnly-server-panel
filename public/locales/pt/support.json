@@ -1,46 +1,46 @@
 {
   "dashboard": {
-    "title": "Support Center",
-    "subtitle": "Manage your tickets and get help from our team.",
-    "new_ticket": "New Ticket",
-    "empty_title": "No tickets yet",
-    "empty_desc": "You haven't created any support tickets yet. If you need help with your server or account, feel free to open one.",
-    "last_updated": "Last updated:"
+    "title": "Centro de Suporte",
+    "subtitle": "Gerencie os seus tickets e obtenha ajuda da nossa equipa.",
+    "new_ticket": "Novo Ticket",
+    "empty_title": "Ainda sem tickets",
+    "empty_desc": "Ainda não criou nenhum ticket de suporte. Se precisar de ajuda com o seu servidor ou conta, sinta-se à vontade para abrir um.",
+    "last_updated": "Última atualização:"
   },
   "status": {
-    "open": "Open",
-    "ongoing": "Ongoing",
-    "customer_reply": "Customer Reply",
-    "closed": "Closed"
+    "open": "Aberto",
+    "ongoing": "Em Curso",
+    "customer_reply": "Resposta do Cliente",
+    "closed": "Fechado"
   },
   "categories": {
-    "general": "General Inquiry",
-    "technical": "Technical Issue",
-    "billing": "Billing",
-    "feature_request": "Feature Request"
+    "general": "Questão Geral",
+    "technical": "Problema Técnico",
+    "billing": "Faturação",
+    "feature_request": "Pedido de Funcionalidade"
   },
   "create": {
-    "title": "Create Support Ticket",
-    "category": "Category",
-    "related_server": "Related Server (Optional)",
-    "none": "None",
-    "subject": "Subject",
-    "subject_placeholder": "Brief description of the issue",
-    "message": "Message",
-    "message_placeholder": "Describe your issue in detail...",
-    "submit": "Submit Ticket",
-    "creating": "Creating...",
-    "error": "Failed to create ticket"
+    "title": "Criar Ticket de Suporte",
+    "category": "Categoria",
+    "related_server": "Servidor Relacionado (Opcional)",
+    "none": "Nenhum",
+    "subject": "Assunto",
+    "subject_placeholder": "Breve descrição do problema",
+    "message": "Mensagem",
+    "message_placeholder": "Descreva o seu problema em detalhe...",
+    "submit": "Submeter Ticket",
+    "creating": "A criar...",
+    "error": "Falha ao criar ticket"
   },
   "detail": {
-    "loading": "Loading conversation...",
-    "mark_resolved": "Mark as Resolved",
-    "waiting_staff": "Waiting for Staff",
-    "support_team": "Support Team",
-    "user": "User",
-    "closed_msg": "This conversation has been closed.",
-    "type_placeholder": "Type your message here...",
-    "upload_failed": "Failed to upload {{name}}",
-    "confirm_close": "Are you sure you want to close this ticket?"
+    "loading": "A carregar conversa...",
+    "mark_resolved": "Marcar como Resolvido",
+    "waiting_staff": "A Aguardar Staff",
+    "support_team": "Equipa de Suporte",
+    "user": "Utilizador",
+    "closed_msg": "Esta conversa foi fechada.",
+    "type_placeholder": "Escreva a sua mensagem aqui...",
+    "upload_failed": "Falha ao carregar {{name}}",
+    "confirm_close": "Tem a certeza que deseja fechar este ticket?"
   }
 }

@@ -2,55 +2,55 @@
   "hero": {
     "announcement": "🚀 Agora com suporte para Modpacks e Plugins",
     "read_more": "Começar",
-    "title_prefix": "Premium",
-    "title_highlight": "Alojamento de Servidores de Jogos",
-    "subtitle": "Lance servidores de jogos de alto desempenho instantaneamente. Experimente faturação horária simples, hardware empresarial e flexibilidade ilimitada.",
+    "title_prefix": "Alojamento",
+    "title_highlight": "Premium de Servidores",
+    "subtitle": "Lance servidores de jogo de alto desempenho instantaneamente. Experimente faturação à hora simples, hardware empresarial e flexibilidade ilimitada.",
     "get_started": "Começar",
     "view_pricing": "Ver Preços"
   },
   "features": {
     "label": "Funcionalidades",
     "heading": "Tudo o que precisa para escalar",
-    "subheading": "Tudo o que precisa para executar um servidor de jogo de alto desempenho, integrado diretamente num painel moderno.",
+    "subheading": "Tudo o que precisa para correr um servidor de alto desempenho, integrado num painel moderno.",
     "instant": {
       "title": "Implementação Instantânea",
-      "description": "O seu servidor fica online segundos após a criação. Sem filas de espera, sem provisionamento manual."
+      "description": "O servidor fica online segundos após a criação. Sem filas de espera, sem provisionamento manual."
     },
     "billing": {
-      "title": "Faturação Horária",
-      "description": "Pague apenas pelo que utiliza. Pause o seu servidor para parar a faturação enquanto mantém os seus ficheiros seguros."
+      "title": "Faturação à Hora",
+      "description": "Pague apenas pelo que usa. Pause o servidor para parar a cobrança enquanto mantém os ficheiros seguros."
     },
     "storage": {
       "title": "Armazenamento NVMe",
-      "description": "Tempos de carregamento e geração de chunks ultra-rápidos com unidades NVMe de nível empresarial."
+      "description": "Tempos de carregamento e geração de chunks ultra-rápidos com discos NVMe de nível empresarial."
     },
     "autostop": {
       "title": "Paragem Automática Inteligente",
-      "description": "Nunca pague por um servidor vazio. O nosso sistema para automaticamente o seu servidor quando nenhum jogador está online."
+      "description": "Nunca pague por um servidor vazio. O sistema para o servidor automaticamente quando não há jogadores online."
     },
     "files": {
       "title": "Acesso Total aos Ficheiros",
-      "description": "Gerencie os ficheiros do seu servidor diretamente do navegador com o nosso gestor de ficheiros e editor avançado."
+      "description": "Gerencie os ficheiros do servidor diretamente no browser com o nosso gestor e editor avançado."
     },
     "console": {
-      "title": "Consola ao Vivo",
-      "description": "Monitorize os registos do seu servidor em tempo real e execute comandos instantaneamente a partir do painel."
+      "title": "Consola em Tempo Real",
+      "description": "Monitorize os logs do servidor em tempo real e execute comandos instantaneamente a partir do painel."
     }
   },
   "steps": {
     "heading": "Lance em segundos",
-    "subheading": "Começar com o Spawnly é fácil e baseado em créditos.",
+    "subheading": "Começar na Spawnly é fácil e baseado em créditos.",
     "1": {
       "title": "Criar Conta",
       "desc": "Registe uma conta gratuita para aceder ao painel."
     },
     "2": {
       "title": "Carregar Créditos",
-      "desc": "Adicione fundos com segurança. Os créditos nunca expiram."
+      "desc": "Adicione fundos de forma segura. Os créditos nunca expiram."
     },
     "3": {
       "title": "Criar Servidor",
-      "desc": "Escolha o seu software e RAM. Jogue instantaneamente."
+      "desc": "Escolha o software e a RAM. Jogue instantaneamente."
     }
   },
   "credits_system": {
@@ -59,30 +59,30 @@
     "recommended": "RECOMENDADO",
     "examples": {
       "weekend": {
-        "title": "O Guerreiro de Fim de Semana",
-        "description": "Só joga aos fins de semana? Desligue o seu servidor durante a semana e poupe mais de 70% comparado com o alojamento mensal.",
+        "title": "Guerreiro de Fim de Semana",
+        "description": "Só joga aos fins de semana? Desligue o servidor durante a semana e poupe mais de 70% comparado com alojamento mensal.",
         "saving": "Poupe ~70% / mês"
       },
       "casual": {
         "title": "Grupos Casuais",
-        "description": "Organiza uma noite de jogos uma vez por semana? Pode manter um servidor de alto desempenho por cêntimos ao mês.",
+        "description": "Organiza uma noite de jogos uma vez por semana? Pode ter um servidor de alto desempenho por cêntimos ao mês.",
         "saving": "Poupe ~90% / mês"
       },
       "dev": {
-        "title": "Programadores e Testes",
+        "title": "Developers e Testes",
         "description": "Precisa de testar um modpack ou configuração de plugin? Crie um servidor potente por 10 minutos, depois elimine-o. Custo: $0.005.",
-        "saving": "Pague por minuto"
+        "saving": "Pague ao minuto"
       }
     }
   },
   "stats": {
-    "uptime": "Tempo de Atividade da Plataforma",
+    "uptime": "Uptime da Plataforma",
     "storage": "Armazenamento NVMe",
     "protection": "Proteção DDoS"
   },
   "cta": {
-    "title": "Pronto para iniciar a sua jornada?",
-    "subtitle": "Junte-se a milhares de outros jogadores que alojam no Spawnly hoje.",
-    "button": "Criar O Meu Servidor Agora"
+    "title": "Pronto para começar a jornada?",
+    "subtitle": "Junte-se a milhares de outros jogadores na Spawnly hoje.",
+    "button": "Criar o Meu Servidor Agora"
   }
 }

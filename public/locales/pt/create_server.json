@@ -6,7 +6,7 @@
     "software": "Software",
     "ram": "Alocação de RAM",
     "cost_est": "Custo Estimado",
-    "your_credits": "Os Seus Créditos"
+    "your_credits": "Os seus Créditos"
   },
   "placeholders": {
     "name": "o-meu-servidor-incrivel"
@@ -20,7 +20,7 @@
   "buttons": {
     "cancel": "Cancelar",
     "create": "Criar Servidor",
-    "creating": "A Criar...",
+    "creating": "A criar...",
     "fix_errors": "Corrigir Erros no Nome",
     "insufficient": "Créditos Insuficientes"
   },
@@ -31,7 +31,7 @@
     "invalid_chars": "O nome só pode conter letras, números e hífenes",
     "exists": "Já existe um servidor com este nome",
     "credits": "Não tem créditos suficientes para este servidor",
-    "valid_name": "Por favor, insira um nome de servidor válido"
+    "valid_name": "Por favor, introduza um nome de servidor válido"
   },
   "games": {
     "minecraft": "Minecraft",
@@ -57,15 +57,15 @@
     "tmodloader": "tModLoader"
   },
   "software_desc": {
-    "vanilla": "Software de servidor oficial",
-    "paper": "Fork do Spigot de alto desempenho",
+    "vanilla": "Software oficial do servidor",
+    "paper": "Fork de alto desempenho do Spigot",
     "purpur": "Fork do Paper com mais funcionalidades",
     "folia": "Servidor experimental multithreaded",
-    "spigot": "Servidor padrão com plugins",
-    "forge": "Carregador de mods clássico",
-    "neoforge": "Carregador de mods moderno",
-    "fabric": "Carregador de mods leve",
-    "quilt": "Carregador de mods impulsionado pela comunidade",
+    "spigot": "Servidor padrão de plugins",
+    "forge": "Mod loader clássico",
+    "neoforge": "Mod loader moderno",
+    "fabric": "Mod loader leve",
+    "quilt": "Mod loader conduzido pela comunidade",
     "velocity": "Servidor proxy",
     "waterfall": "Servidor proxy legado",
     "modding": "Plataforma de mods",

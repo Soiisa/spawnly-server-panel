@@ -7,3 +7,35 @@ body {
   /* ADDED: Base and dark mode background classes */
   @apply bg-gray-50 dark:bg-slate-900 transition-colors duration-300;
 }
+
+/* --- Global Scrollbar Styling --- */
+
+/* Base dimensions for scrollbars (width for vertical, height for horizontal) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* Track background - transparent to blend in */
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --- Light Mode Scrollbar (Default) --- */
+::-webkit-scrollbar-thumb {
+  /* Uses a border and bg-clip-content to create a 'floating' pill effect */
+  @apply bg-gray-300 rounded-full border-2 border-transparent bg-clip-content;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+/* --- Dark Mode Scrollbar --- */
+.dark ::-webkit-scrollbar-thumb {
+  @apply bg-slate-700;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-600;
+}

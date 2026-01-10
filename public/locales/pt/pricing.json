@@ -18,18 +18,18 @@
     "standard": "Ótimo para modpacks padrão (100+ mods) ou servidores Vanilla com 20+ jogadores.",
     "heavy": "Ideal para modpacks pesados (200+ mods) ou comunidades maiores (40+ jogadores).",
     "very_heavy": "Desempenho poderoso para modpacks muito pesados (300+ mods) ou 60+ jogadores.",
-    "massive": "Potência de nível empresarial para redes massivas, 100+ jogadores ou os modpacks mais exigentes."
+    "massive": "Poder de nível empresarial para redes massivas, 100+ jogadores, ou os modpacks mais exigentes."
   },
   "features": {
     "ddos": "Proteção DDoS Incluída",
-    "slots": "Slots de Jogadores Ilimitados",
+    "slots": "Slots de Jogador Ilimitados",
     "files": "Acesso aos Ficheiros",
     "mods": "Suporte a Mods e Plugins",
     "setup": "Configuração Instantânea",
-    "uptime": "99.9% de Tempo de Atividade"
+    "uptime": "99.9% de Uptime da Plataforma"
   },
   "faq": {
     "title": "Como funciona a faturação?",
-    "answer": "A Spawnly utiliza um sistema baseado em créditos. Você compra créditos (1 Crédito ≈ €0.01), e nós descontamo-los do seu saldo a cada minuto que o seu servidor estiver <1>A Executar</1>. Se <3>Parar</3> o seu servidor, a faturação pausa imediatamente, mas os seus ficheiros são mantidos em segurança gratuitamente."
+    "answer": "A Spawnly utiliza um sistema baseado em créditos. Compra créditos (1 Crédito ≈ €0.01) e nós descontamo-los do seu saldo a cada minuto que o seu servidor estiver <1>A Correr</1>. Se <3>Parar</3> o servidor, a faturação para imediatamente, mas os seus ficheiros são mantidos seguros gratuitamente."
   }
 }

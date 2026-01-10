@@ -1,9 +1,11 @@
 {
   "nav": {
     "dashboard": "Painel",
+    "pools": "Pools de Crédito",
     "billing": "Faturação",
     "logout": "Terminar sessão",
-    "settings": "Definições"
+    "settings": "Definições",
+    "support": "Suporte"
   },
   "theme": {
     "switch_light": "Mudar para Modo Claro",
@@ -20,25 +22,40 @@
   },
   "footer": {
     "rights": "Todos os direitos reservados.",
-    "imprint": "Informações Legais",
+    "imprint": "Ficha Técnica",
     "terms": "Termos",
     "privacy": "Privacidade",
-    "aup": "AUP",
+    "aup": "PUA",
     "refunds": "Reembolsos",
     "support": "Suporte"
   },
   "cookie": {
-    "text": "Utilizamos cookies para garantir que obtém a melhor experiência no Spawnly. Ao continuar, concorda com a nossa <1>Política de Privacidade</1> e <3>Termos de Serviço</3>.",
+    "text": "Utilizamos cookies para garantir a melhor experiência na Spawnly. Ao continuar, concorda com a nossa <1>Política de Privacidade</1> e <3>Termos de Serviço</3>.",
     "accept": "Aceitar e Continuar"
   },
   "settings": {
     "title": "Definições de Utilizador",
+    "profile": "Perfil",
+    "profile_desc": "Gerir o seu perfil público",
+    "username": "Nome de utilizador",
+    "save": "Guardar",
+    "success": "Sucesso! Nome de utilizador atualizado.",
+    "username_error": "O nome de utilizador deve ter pelo menos 3 caracteres.",
+    "updating": "A atualizar...",
+    "error_generic": "Erro",
     "language": "Idioma",
     "language_desc": "Selecione o seu idioma preferido",
     "appearance": "Aparência",
     "appearance_desc": "Alternar modo escuro",
     "security": "Segurança",
-    "security_desc": "Gerencie a sua palavra-passe e segurança da conta",
+    "security_desc": "Gerir a sua palavra-passe e segurança da conta",
     "change_password": "Alterar Palavra-passe"
+  },
+  "support": {
+    "contact": "Contactar Suporte",
+    "tooltip": "Suporte e Ajuda"
+  },
+  "actions": {
+    "cancel": "Cancelar"
   }
 }

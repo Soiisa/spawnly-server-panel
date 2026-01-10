@@ -4,7 +4,8 @@
     "pools": "Credit Pools",
     "billing": "Billing",
     "logout": "Log out",
-    "settings": "Settings"
+    "settings": "Settings",
+    "support": "Support"
   },
   "theme": {
     "switch_light": "Switch to Light Mode",

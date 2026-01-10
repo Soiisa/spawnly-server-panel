@@ -6,11 +6,11 @@
   "buttons": {
     "google_signup": "Registar com Google",
     "create_account": "Criar Conta",
-    "creating_account": "A Criar Conta...",
+    "creating_account": "A criar conta...",
     "sign_in": "Iniciar sessão"
   },
   "divider": {
-    "email": "Ou registe-se com email",
+    "email": "Ou registar com email",
     "existing_account": "Já tem uma conta?"
   },
   "fields": {
@@ -30,6 +30,6 @@
     "privacy": "Política de Privacidade"
   },
   "messages": {
-    "success": "Sucesso! Por favor, verifique o seu email para confirmar a conta."
+    "success": "Sucesso! Verifique o seu email para confirmar a conta."
   }
 }

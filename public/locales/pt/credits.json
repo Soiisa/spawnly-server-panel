@@ -1,12 +1,12 @@
 {
   "title": "Faturação e Créditos",
-  "subtitle": "Gerencie o seu saldo e veja o histórico de utilização",
+  "subtitle": "Gerencie o seu saldo e veja o histórico de uso",
   "buy_credits": "Comprar Créditos",
   "card": {
     "title": "Saldo Atual",
-    "value_approx": "~€{{value}} de valor",
-    "info_title": "Faturação em Tempo Real",
-    "info_desc": "Os servidores são cobrados por minuto de tempo de execução. Os créditos são deduzidos automaticamente enquanto o seu servidor estiver a correr."
+    "value_approx": "~€{{value}} valor",
+    "info_title": "Faturação em tempo real",
+    "info_desc": "Os servidores são faturados por minuto de execução. Os créditos são deduzidos automaticamente enquanto o servidor estiver a correr."
   },
   "history": {
     "title": "Histórico de Transações",
@@ -23,6 +23,32 @@
     "s": "s"
   },
   "tooltips": {
-    "payment_soon": "Integração de pagamentos em breve"
+    "payment_soon": "Integração de pagamento em breve"
+  },
+  "modal": {
+    "title": "Adicionar Créditos",
+    "subtitle": "Selecione uma quantia para recarregar.",
+    "current_offer": "Oferta Atual",
+    "bonus_active": "{{percent}}% BÓNUS ATIVO",
+    "credits_received": "Créditos Recebidos",
+    "bonus_breakdown": "{{base}} + {{bonus}} Bónus",
+    "drag_adjust": "Arraste para Ajustar",
+    "quick_select": "Seleção Rápida"
+  },
+  "checkout": {
+    "summary_title": "Resumo do Pedido",
+    "amount": "Quantia",
+    "bonus_applied": "Bónus Aplicado",
+    "total": "Total",
+    "or_card": "Ou pagar com cartão",
+    "pay_button": "Pagar €{{amount}}",
+    "continue_btn": "Continuar para Pagamento",
+    "refund_waiver": "Reconheço que ao comprar acesso imediato a créditos digitais, renuncio ao meu direito de retratação de 14 dias.",
+    "payment_details": "Detalhes de Pagamento",
+    "change_amount": "Alterar Quantia",
+    "secure_msg": "Pagamento Seguro via Stripe"
+  },
+  "errors": {
+    "payment_init_failed": "Falha ao inicializar processador de pagamentos"
   }
 }

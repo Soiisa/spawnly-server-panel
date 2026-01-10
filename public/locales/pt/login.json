@@ -5,11 +5,11 @@
   },
   "buttons": {
     "google_sign_in": "Entrar com Google",
-    "sign_in": "Iniciar sessão",
-    "logging_in": "A iniciar sessão...",
+    "sign_in": "Entrar",
+    "logging_in": "A entrar...",
     "create_account": "Criar uma conta"
   },
-  "divider": "Ou continue com email",
+  "divider": "Ou continuar com email",
   "fields": {
     "email": {
       "label": "Endereço de email",
@@ -22,6 +22,6 @@
     }
   },
   "footer": {
-    "new_user": "Novo no Spawnly?"
+    "new_user": "Novo na Spawnly?"
   }
 }

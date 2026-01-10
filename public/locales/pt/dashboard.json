@@ -7,7 +7,7 @@
   "stats": {
     "total_servers": "Total de Servidores",
     "active_now": "Ativos Agora",
-    "total_ram": "Total de RAM",
+    "total_ram": "RAM Total",
     "hourly_cost": "Custo Horário"
   },
   "server_card": {
@@ -24,7 +24,7 @@
   "status": {
     "stopped": "Parado",
     "starting": "A Iniciar",
-    "running": "A Executar",
+    "running": "A Correr",
     "stopping": "A Parar",
     "restarting": "A Reiniciar",
     "provisioning": "A Provisionar",
@@ -41,7 +41,7 @@
     "error_delete": "Falha ao eliminar servidor",
     "error_start": "Falha ao iniciar servidor",
     "error_stop": "Falha ao parar servidor",
-    "confirm_delete": "Tem a certeza de que deseja eliminar este servidor? Esta ação não pode ser desfeita.",
+    "confirm_delete": "Tem a certeza que deseja eliminar este servidor? Esta ação não pode ser desfeita.",
     "dismiss": "Dispensar"
   },
   "software": {
@@ -71,5 +71,15 @@
   },
   "units": {
     "gb": "GB"
+  },
+  "tour": {
+    "welcome_title": "Bem-vindo à Spawnly!",
+    "welcome_content": "Vamos fazer uma visita rápida para ajudar a começar com o seu novo painel de servidor.",
+    "credits_title": "A Sua Carteira",
+    "credits_content": "Este é o seu saldo de créditos. Precisa de créditos para criar e correr servidores.",
+    "stats_title": "Visão Geral de Recursos",
+    "stats_content": "Aqui pode monitorizar o total de servidores ativos, uso de memória e custos horários.",
+    "create_title": "Lançar um Servidor",
+    "create_content": "Clique aqui para lançar o seu primeiro servidor Minecraft em segundos!"
   }
 }
