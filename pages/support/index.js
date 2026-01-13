@@ -6,11 +6,11 @@ import ServersHeader from '../../components/ServersHeader';
 import ServersFooter from '../../components/ServersFooter';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
-import { PlusIcon, InboxIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, InboxIcon, ChevronRightIcon, LanguageIcon } from '@heroicons/react/24/outline'; // Added LanguageIcon
 
 export default function SupportDashboard() {
   const router = useRouter();
-  const { t } = useTranslation('support'); // Changed to use 'support' namespace
+  const { t } = useTranslation('support'); 
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -43,7 +43,6 @@ export default function SupportDashboard() {
         'Customer Reply': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800',
         'Closed': 'bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-gray-400 border-gray-200 dark:border-slate-700'
         };
-        // Attempt to translate status, fallback to original string
         const translatedStatus = t(`status.${status.toLowerCase().replace(' ', '_')}`, { defaultValue: status });
         
         return (
@@ -58,7 +57,7 @@ export default function SupportDashboard() {
       <ServersHeader user={user} credits={credits} />
       
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-12">
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">{t('dashboard.title', { defaultValue: 'Support Center' })}</h1>
             <p className="text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.subtitle', { defaultValue: 'Manage your tickets and get help from our team.' })}</p>
@@ -70,6 +69,12 @@ export default function SupportDashboard() {
             <PlusIcon className="w-5 h-5" />
             {t('dashboard.new_ticket', { defaultValue: 'New Ticket' })}
           </Link>
+        </div>
+
+        {/* --- LANGUAGE DISCLAIMER --- */}
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-3 rounded-lg mb-8 max-w-fit">
+           <LanguageIcon className="w-4 h-4" />
+           <span>Please write your tickets in <strong>English</strong> or <strong>Portuguese</strong> to ensure a response.</span>
         </div>
 
         {loading ? (
@@ -99,7 +104,6 @@ export default function SupportDashboard() {
                     <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
                       <span className="font-mono">#{ticket.id.slice(0, 8)}</span>
                       <span className="w-1 h-1 bg-gray-300 dark:bg-slate-700 rounded-full"></span>
-                      {/* Translate Category */}
                       <span>{t(`categories.${ticket.category.toLowerCase().replace(' ', '_')}`, { defaultValue: ticket.category })}</span>
                       <span className="w-1 h-1 bg-gray-300 dark:bg-slate-700 rounded-full"></span>
                       <span>{t('dashboard.last_updated', { defaultValue: 'Last updated:' })} {new Date(ticket.updated_at).toLocaleDateString()}</span>

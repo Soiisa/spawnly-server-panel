@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import UserServerModal from '../../components/admin/UserServerModal'; // Imported Modal
 import { 
   ArrowLeftIcon, 
   MagnifyingGlassIcon, 
@@ -30,7 +31,18 @@ export default function AdminSupport() {
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
   
+  // User Servers Modal State
+  const [viewingServersFor, setViewingServersFor] = useState(null);
+  const [adminToken, setAdminToken] = useState(null);
+
   const router = useRouter();
+
+  // Fetch Session Token on Mount (for Modal)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) setAdminToken(session.access_token);
+    });
+  }, []);
 
   const fetchTickets = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -311,6 +323,16 @@ export default function AdminSupport() {
                             <h2 className="font-bold text-slate-100 leading-tight">{selectedTicket.subject}</h2>
                             <div className="flex items-center gap-2 text-xs text-slate-400">
                                 <span>{selectedTicket.user_email}</span>
+                                
+                                {/* VIEW SERVERS BUTTON */}
+                                <button
+                                    onClick={() => setViewingServersFor({ id: selectedTicket.user_id, email: selectedTicket.user_email })}
+                                    className="text-indigo-400 hover:text-indigo-300 ml-2 font-medium transition-colors bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/30 hover:bg-indigo-500/20"
+                                    title="View User's Servers"
+                                >
+                                    View Servers
+                                </button>
+                                
                                 <span className="w-1 h-1 bg-slate-600 rounded-full"></span>
                                 <span className="font-mono text-slate-500">#{selectedTicket.id.slice(0,8)}</span>
                             </div>
@@ -442,6 +464,16 @@ export default function AdminSupport() {
             </div>
         )}
       </div>
+
+      {/* Render User Server Modal */}
+      {viewingServersFor && adminToken && (
+         <UserServerModal 
+             userId={viewingServersFor.id}
+             userEmail={viewingServersFor.email}
+             adminToken={adminToken}
+             onClose={() => setViewingServersFor(null)}
+         />
+      )}
     </div>
   );
 }

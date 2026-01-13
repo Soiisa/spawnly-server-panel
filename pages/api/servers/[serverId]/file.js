@@ -12,13 +12,8 @@ const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 const AWS_REGION = process.env.AWS_REGION || 'eu-central-1';
 const S3_ENDPOINT = process.env.S3_ENDPOINT;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-if (!S3_BUCKET || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
-  throw new Error('Missing S3 configuration environment variables');
-}
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error('Missing Supabase environment variables');
+if (!S3_BUCKET || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) throw new Error('Missing S3 configuration environment variables');
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -34,49 +29,42 @@ export default async function handler(req, res) {
   const { serverId } = req.query;
   const s3Prefix = `servers/${serverId}/`;
 
-  // --- MODIFICATION START: Added owner_id ---
-  // Authenticate using server row
+  // --- MODIFICATION: Select user_id ---
   const { data: server, error } = await supabaseAdmin
     .from('servers')
-    .select('rcon_password, ipv4, status, subdomain, owner_id')
+    .select('rcon_password, ipv4, status, subdomain, user_id')
     .eq('id', serverId)
     .single();
-  // --- MODIFICATION END ---
 
-  if (error || !server) {
-    return res.status(404).json({ error: 'Server not found' });
-  }
+  if (error || !server) return res.status(404).json({ error: 'Server not found' });
 
-  // --- MODIFICATION START: Dual Authentication ---
+  // --- MODIFICATION: Dual Authentication ---
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
 
   const token = authHeader.substring(7);
   let isAuthorized = false;
 
-  // 1. RCON Check
   if (token === server.rcon_password) {
     isAuthorized = true;
   } else {
-    // 2. Session Check
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    
     if (user && !authError) {
-      if (server.owner_id === user.id) {
+      if (server.user_id === user.id) {
         isAuthorized = true;
       } else {
-        const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
-        if (profile?.role === 'admin') {
-          isAuthorized = true;
-        }
+        const { data: profile } = await supabaseAdmin
+            .from('profiles')
+            .select('is_admin')
+            .eq('id', user.id)
+            .single();
+        if (profile?.is_admin) isAuthorized = true;
       }
     }
   }
 
-  if (!isAuthorized) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  // --- MODIFICATION END ---
+  if (!isAuthorized) return res.status(401).json({ error: 'Unauthorized' });
+  // --- END MODIFICATION ---
 
   // Handle GET /file - download file
   if (req.method === 'GET') {
@@ -84,61 +72,41 @@ export default async function handler(req, res) {
       let relPath = req.query.path;
       if (!relPath) return res.status(400).json({ error: 'Missing path' });
       
-      // --- Security Fix: Path Sanitization ---
-      // 1. Remove null bytes
       if (relPath.indexOf('\0') !== -1) return res.status(400).json({ error: 'Invalid path' });
-      
-      // 2. Normalize and check for traversal
       let safePath = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '');
-      if (safePath.includes('..')) {
-         return res.status(400).json({ error: 'Path traversal detected' });
-      }
-      
-      // 3. Remove leading slashes
+      if (safePath.includes('..')) return res.status(400).json({ error: 'Path traversal detected' });
       relPath = safePath.replace(/^\/+/, '');
       
       const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
       
-      // 4. Strict Scope Check
-      if (!s3Key.startsWith(s3Prefix)) {
-          return res.status(400).json({ error: 'Access denied: Path outside server scope' });
-      }
-      // ---------------------------------------
+      if (!s3Key.startsWith(s3Prefix)) return res.status(400).json({ error: 'Access denied: Path outside server scope' });
 
       let content;
       if (server.status === 'Running' && server.ipv4) {
         try {
           const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/file?path=${encodeURIComponent(relPath)}`, {
-            headers: {
-              'Authorization': `Bearer ${server.rcon_password}`,
-            },
+            headers: { 'Authorization': `Bearer ${server.rcon_password}` },
             timeout: 10000, 
           });
 
-          if (!response.ok) {
-              console.warn(`Game server file fetch failed: ${response.status}`);
-          } else {
-              // --- FIX: Use arrayBuffer() for native fetch ---
-              const arrayBuffer = await response.arrayBuffer();
-              content = Buffer.from(arrayBuffer);
-              
-              // Async sync to S3 for consistency (optional, but good for caching)
-              s3.putObject({
+          if (response.ok) {
+             const arrayBuffer = await response.arrayBuffer();
+             content = Buffer.from(arrayBuffer);
+             
+             // Sync to S3
+             s3.putObject({
                 Bucket: S3_BUCKET,
                 Key: s3Key,
                 Body: content,
                 ContentType: 'application/octet-stream',
-              }).promise().catch(err => console.error('Failed to sync to S3:', err));
+             }).promise().catch(err => console.error('Failed to sync to S3:', err));
           }
-
         } catch (fetchError) {
           console.error('Game server fetch failed:', fetchError.message);
-          // Fall back to S3 will happen if content is still undefined
         }
       }
 
       if (!content) {
-        // Fetch from S3
         const s3Response = await s3.getObject({ Bucket: S3_BUCKET, Key: s3Key }).promise();
         content = s3Response.Body;
       }
@@ -147,7 +115,6 @@ export default async function handler(req, res) {
       res.setHeader('Content-Disposition', `attachment; filename="${path.basename(s3Key)}"`);
       return res.status(200).send(content);
     } catch (error) {
-      console.error('Error:', error);
       if (error.code === 'NoSuchKey') return res.status(404).json({ error: 'File not found' });
       return res.status(500).json({ error: 'Failed to download file', detail: error.message });
     }

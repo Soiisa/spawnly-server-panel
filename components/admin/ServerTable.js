@@ -82,6 +82,34 @@ export default function ServerTable() {
     }
   };
 
+  // Helper function to parse version strings
+  const formatVersion = (versionString) => {
+    if (!versionString) return <span className="text-slate-400 italic text-xs">Latest</span>;
+
+    // Check for Modpack format: URL::MC_VERSION::MODPACK_NAME
+    if (versionString.includes('::')) {
+      const parts = versionString.split('::');
+      // Ensure we have at least 3 parts (URL, MC Version, Name)
+      if (parts.length >= 3) {
+        const mcVersion = parts[1];
+        const modpackName = parts[2];
+        return (
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-slate-900 dark:text-white truncate max-w-[200px]" title={modpackName}>
+              {modpackName}
+            </span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+              MC {mcVersion}
+            </span>
+          </div>
+        );
+      }
+    }
+
+    // Default fallback for standard versions (e.g., "1.20.1")
+    return <span className="text-sm font-mono text-slate-600 dark:text-slate-400">{versionString}</span>;
+  };
+
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden h-full flex flex-col relative">
       
@@ -149,6 +177,8 @@ export default function ServerTable() {
           <thead className="bg-slate-50 dark:bg-slate-950">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Server Info</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Software</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Version</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Owner</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Resources</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
@@ -157,9 +187,9 @@ export default function ServerTable() {
           </thead>
           <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
             {loading ? (
-               <tr><td colSpan="5" className="px-6 py-4 text-center text-slate-500">Scanning network...</td></tr>
+               <tr><td colSpan="7" className="px-6 py-4 text-center text-slate-500">Scanning network...</td></tr>
             ) : servers.length === 0 ? (
-               <tr><td colSpan="5" className="px-6 py-4 text-center text-slate-500">No servers found.</td></tr>
+               <tr><td colSpan="7" className="px-6 py-4 text-center text-slate-500">No servers found.</td></tr>
             ) : (
               servers.map((server) => (
                 <tr key={server.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -168,6 +198,19 @@ export default function ServerTable() {
                     <div className="text-xs text-slate-500 font-mono">{server.subdomain}.spawnly.net</div>
                     {server.hetzner_id && <div className="text-[10px] text-indigo-400 font-mono">HZ-ID: {server.hetzner_id}</div>}
                   </td>
+                  
+                  {/* Software Cell */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 capitalize bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 inline-block">
+                      {server.type || 'Unknown'}
+                    </span>
+                  </td>
+
+                  {/* Version Cell with Parsing */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {formatVersion(server.version)}
+                  </td>
+
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-slate-700 dark:text-slate-300">{server.owner_email}</div>
                   </td>

@@ -5,6 +5,7 @@ import ServersHeader from '../../components/ServersHeader';
 import ServersFooter from '../../components/ServersFooter';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'; // Imported Icon
 
 export default function CreateTicket() {
   const router = useRouter();
@@ -61,6 +62,17 @@ export default function CreateTicket() {
       <ServersHeader user={user} credits={0} />
       <main className="max-w-3xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">{t('create.title', { defaultValue: 'Create Support Ticket' })}</h1>
+        
+        {/* --- LANGUAGE DISCLAIMER --- */}
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 mb-6 flex items-start gap-3">
+          <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-400">Language Policy</h3>
+            <p className="text-sm text-amber-700 dark:text-amber-500/90 mt-1">
+              Support is strictly provided in <strong>English</strong> or <strong>Portuguese</strong>. Tickets submitted in other languages may be closed without a response.
+            </p>
+          </div>
+        </div>
         
         <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-gray-200 dark:border-slate-700 space-y-6">
           

@@ -17,7 +17,13 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error('Missing Supaba
 if (!S3_BUCKET || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) throw new Error('Missing S3 configuration environment variables');
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-const s3 = new AWS.S3({ accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY, region: AWS_REGION, endpoint: S3_ENDPOINT || undefined, s3ForcePathStyle: !!S3_ENDPOINT });
+const s3 = new AWS.S3({ 
+  accessKeyId: AWS_ACCESS_KEY_ID, 
+  secretAccessKey: AWS_SECRET_ACCESS_KEY, 
+  region: AWS_REGION, 
+  endpoint: S3_ENDPOINT || undefined, 
+  s3ForcePathStyle: !!S3_ENDPOINT 
+});
 
 export const config = { api: { bodyParser: false } };
 
@@ -42,38 +48,45 @@ export default async function handler(req, res) {
   const { serverId } = req.query;
   const s3Prefix = `servers/${serverId}/`;
 
-  // --- MODIFICATION START: Added owner_id to selection ---
+  // --- MODIFICATION: Select user_id instead of owner_id ---
   const { data: server, error } = await supabaseAdmin
     .from('servers')
-    .select('rcon_password, ipv4, status, subdomain, owner_id')
+    .select('rcon_password, ipv4, status, subdomain, user_id') 
     .eq('id', serverId)
     .single();
-  // --- MODIFICATION END ---
-  
-  if (error || !server) return res.status(404).json({ error: 'Server not found' });
 
-  // --- MODIFICATION START: Dual Authentication (RCON or Admin/Owner Session) ---
+  if (error || !server) {
+      console.error("Server lookup error:", error);
+      return res.status(404).json({ error: 'Server not found' });
+  }
+
+  // --- MODIFICATION: Dual Authentication ---
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-  
+
   const token = authHeader.substring(7);
   let isAuthorized = false;
 
-  // 1. Check if token matches RCON Password (Original Behavior)
+  // 1. RCON Check (Agent/Game Panel)
   if (token === server.rcon_password) {
     isAuthorized = true;
   } else {
-    // 2. Check if token is a valid Supabase Session (New Admin/Owner Behavior)
+    // 2. User Session Check (Admin Dashboard)
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     
     if (user && !authError) {
-      // Check if user is Owner
-      if (server.owner_id === user.id) {
+      // Check Owner using 'user_id'
+      if (server.user_id === user.id) {
         isAuthorized = true;
       } else {
-        // Check if user is Admin
-        const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
-        if (profile?.role === 'admin') {
+        // Check Admin using 'is_admin'
+        const { data: profile } = await supabaseAdmin
+            .from('profiles')
+            .select('is_admin')
+            .eq('id', user.id)
+            .single();
+            
+        if (profile?.is_admin) {
           isAuthorized = true;
         }
       }
@@ -81,7 +94,7 @@ export default async function handler(req, res) {
   }
 
   if (!isAuthorized) return res.status(401).json({ error: 'Unauthorized' });
-  // --- MODIFICATION END ---
+  // --- END MODIFICATION ---
 
   let relPath = '';
   try { relPath = sanitizePath(req.query.path || ''); } catch (e) { return res.status(400).json({ error: 'Invalid path' }); }
@@ -94,7 +107,7 @@ export default async function handler(req, res) {
     try {
       if (server.status === 'Running' && server.ipv4) {
         try {
-          // Note: We authenticate with the Agent using the RCON password we fetched from DB, not the user's token
+          // Note: Use server.rcon_password to talk to the agent
           const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/files?path=${encodeURIComponent(relPath)}`, { headers: { 'Authorization': `Bearer ${server.rcon_password}` }, timeout: 5000 });
           if (response.ok) return res.status(200).json(await response.json());
         } catch (fetchError) { console.warn('Agent fetch failed, S3 fallback'); }
@@ -162,7 +175,7 @@ export default async function handler(req, res) {
                 body: JSON.stringify({ oldPath: safeOld, newPath: safeNew })
              });
              if (!response.ok) throw new Error(await response.text());
-             // Also try to rename in S3 for consistency (Copy+Delete) if feasible, or let sync handle it later.
+             // Sync to S3 later or rely on restart
           } else {
              // S3 Rename (Copy + Delete)
              const oldKey = path.join(s3Prefix, safeOld).replace(/\\/g, '/');
@@ -198,7 +211,6 @@ export default async function handler(req, res) {
       const list = await s3.listObjectsV2({ Bucket: S3_BUCKET, Prefix: s3Key + (s3Key.endsWith('/') ? '' : '/') }).promise();
       if (list.Contents?.length > 0) await s3.deleteObjects({ Bucket: S3_BUCKET, Delete: { Objects: list.Contents.map(o => ({ Key: o.Key })) } }).promise();
       else await s3.deleteObject({ Bucket: S3_BUCKET, Key: s3Key }).promise();
-      // Add Agent Delete if needed (Running)
       return res.status(200).json({ success: true });
     } catch (e) { return res.status(500).json({ error: 'Delete failed' }); }
   }

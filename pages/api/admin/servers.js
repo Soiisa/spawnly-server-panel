@@ -1,3 +1,5 @@
+// pages/api/admin/servers.js
+
 import { createClient } from '@supabase/supabase-js';
 import { 
   S3Client, 
@@ -5,7 +7,7 @@ import {
   ListObjectsV2Command 
 } from '@aws-sdk/client-s3';
 
-// --- Configuration (Same as your existing backend) ---
+// --- Configuration ---
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 const DOMAIN_SUFFIX = '.spawnly.net';
@@ -26,7 +28,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// --- Helpers (Reused logic for Admin robustness) ---
+// --- Helpers ---
 
 const hetznerDeleteServer = async (hetznerId) => {
   if (!hetznerId) return;
@@ -48,7 +50,6 @@ const deleteCloudflareRecords = async (subdomain) => {
   const zoneId = process.env.CLOUDFLARE_ZONE_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
   
-  // 1. Fetch Records
   const name = `${subdomain}${DOMAIN_SUFFIX}`;
   try {
     const res = await fetch(`${CLOUDFLARE_API_BASE}/zones/${zoneId}/dns_records?name=${encodeURIComponent(name)}`, {
@@ -56,7 +57,6 @@ const deleteCloudflareRecords = async (subdomain) => {
     });
     const data = await res.json();
     
-    // 2. Delete them
     if (data.result) {
       for (const record of data.result) {
         await fetch(`${CLOUDFLARE_API_BASE}/zones/${zoneId}/dns_records/${record.id}`, {
@@ -128,7 +128,7 @@ export default async function handler(req, res) {
   // 2. GET: List Servers
   if (req.method === 'GET') {
     try {
-      const { search } = req.query;
+      const { search, userId } = req.query; // Added userId support
 
       // Fetch Servers
       const { data: servers, error: serverError } = await supabaseAdmin
@@ -149,7 +149,12 @@ export default async function handler(req, res) {
         owner_email: userMap[s.user_id] || 'Unknown User'
       }));
 
-      // Filter
+      // --- NEW: Filter by User ID ---
+      if (userId) {
+        result = result.filter(s => s.user_id === userId);
+      }
+
+      // Filter by Search
       if (search) {
         const lower = search.toLowerCase();
         result = result.filter(s => 
@@ -171,22 +176,18 @@ export default async function handler(req, res) {
     const { action, serverId } = req.body;
     if (!serverId) return res.status(400).json({ error: 'Missing serverId' });
 
-    // Fetch target server
     const { data: server } = await supabaseAdmin.from('servers').select('*').eq('id', serverId).single();
     if (!server) return res.status(404).json({ error: 'Server not found' });
 
     try {
       if (action === 'force_stop') {
-        // 1. Delete VPS
         if (server.hetzner_id) await hetznerDeleteServer(server.hetzner_id);
         
-        // 2. Reset DNS to Sleeper
         if (server.subdomain) {
           await deleteCloudflareRecords(server.subdomain);
           await setSleeperDNS(server.subdomain);
         }
 
-        // 3. Update DB
         await supabaseAdmin.from('servers').update({
           status: 'Stopped',
           hetzner_id: null,
@@ -200,16 +201,9 @@ export default async function handler(req, res) {
       }
 
       if (action === 'delete') {
-        // 1. Delete VPS
         if (server.hetzner_id) await hetznerDeleteServer(server.hetzner_id);
-        
-        // 2. Delete DNS
         if (server.subdomain) await deleteCloudflareRecords(server.subdomain);
-
-        // 3. Delete S3 Files
         await deleteS3Data(serverId);
-
-        // 4. Delete DB Record
         await supabaseAdmin.from('servers').delete().eq('id', serverId);
 
         return res.status(200).json({ success: true, message: 'Server Deleted' });
