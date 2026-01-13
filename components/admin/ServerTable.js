@@ -1,17 +1,24 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
+import FileManager from '../FileManager';
 import { 
   MagnifyingGlassIcon, 
   ServerIcon, 
   TrashIcon, 
   StopCircleIcon,
-  CpuChipIcon
+  CpuChipIcon,
+  FolderIcon,
+  XMarkIcon
 } from "@heroicons/react/24/outline";
 
 export default function ServerTable() {
   const [servers, setServers] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // State for File Manager Modal
+  const [viewingServer, setViewingServer] = useState(null);
+  const [adminToken, setAdminToken] = useState(null);
 
   useEffect(() => {
     fetchServers();
@@ -35,6 +42,14 @@ export default function ServerTable() {
       console.error(e);
     }
     setLoading(false);
+  };
+
+  const handleOpenFiles = async (server) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      setAdminToken(session.access_token);
+      setViewingServer(server);
+    }
   };
 
   const handleAction = async (action, serverId, serverName) => {
@@ -68,8 +83,48 @@ export default function ServerTable() {
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden h-full flex flex-col">
+    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden h-full flex flex-col relative">
       
+      {/* File Manager Modal */}
+      {viewingServer && adminToken && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                  <FolderIcon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    File Manager
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">
+                    {viewingServer.name}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setViewingServer(null)}
+                className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500 dark:text-slate-400"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950 p-4">
+              <FileManager 
+                server={viewingServer} 
+                token={adminToken} 
+                isAdmin={true} 
+                setActiveTab={() => {}} 
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header & Search */}
       <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
@@ -129,6 +184,13 @@ export default function ServerTable() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => handleOpenFiles(server)}
+                        className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                        title="Browse Files"
+                      >
+                        <FolderIcon className="h-5 w-5" />
+                      </button>
                       <button 
                         onClick={() => handleAction('force_stop', server.id, server.name)}
                         disabled={server.status === 'Stopped'}

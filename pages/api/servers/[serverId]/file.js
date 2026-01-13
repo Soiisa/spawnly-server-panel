@@ -34,21 +34,49 @@ export default async function handler(req, res) {
   const { serverId } = req.query;
   const s3Prefix = `servers/${serverId}/`;
 
+  // --- MODIFICATION START: Added owner_id ---
   // Authenticate using server row
   const { data: server, error } = await supabaseAdmin
     .from('servers')
-    .select('rcon_password, ipv4, status, subdomain')
+    .select('rcon_password, ipv4, status, subdomain, owner_id')
     .eq('id', serverId)
     .single();
+  // --- MODIFICATION END ---
 
   if (error || !server) {
     return res.status(404).json({ error: 'Server not found' });
   }
 
+  // --- MODIFICATION START: Dual Authentication ---
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.substring(7) !== server.rcon_password) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+
+  const token = authHeader.substring(7);
+  let isAuthorized = false;
+
+  // 1. RCON Check
+  if (token === server.rcon_password) {
+    isAuthorized = true;
+  } else {
+    // 2. Session Check
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    
+    if (user && !authError) {
+      if (server.owner_id === user.id) {
+        isAuthorized = true;
+      } else {
+        const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+        if (profile?.role === 'admin') {
+          isAuthorized = true;
+        }
+      }
+    }
+  }
+
+  if (!isAuthorized) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
+  // --- MODIFICATION END ---
 
   // Handle GET /file - download file
   if (req.method === 'GET') {
@@ -88,19 +116,19 @@ export default async function handler(req, res) {
           });
 
           if (!response.ok) {
-             console.warn(`Game server file fetch failed: ${response.status}`);
+              console.warn(`Game server file fetch failed: ${response.status}`);
           } else {
-             // --- FIX: Use arrayBuffer() for native fetch ---
-             const arrayBuffer = await response.arrayBuffer();
-             content = Buffer.from(arrayBuffer);
-             
-             // Async sync to S3 for consistency (optional, but good for caching)
-             s3.putObject({
+              // --- FIX: Use arrayBuffer() for native fetch ---
+              const arrayBuffer = await response.arrayBuffer();
+              content = Buffer.from(arrayBuffer);
+              
+              // Async sync to S3 for consistency (optional, but good for caching)
+              s3.putObject({
                 Bucket: S3_BUCKET,
                 Key: s3Key,
                 Body: content,
                 ContentType: 'application/octet-stream',
-             }).promise().catch(err => console.error('Failed to sync to S3:', err));
+              }).promise().catch(err => console.error('Failed to sync to S3:', err));
           }
 
         } catch (fetchError) {

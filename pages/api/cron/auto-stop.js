@@ -12,7 +12,7 @@ const SLEEPER_PROXY_IP = process.env.SLEEPER_PROXY_IP || '91.99.130.49';
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// --- SHARED HELPERS (Mirrored from action.js) ---
+// --- SHARED HELPERS ---
 
 const hetznerDoAction = async (hetznerId, action) => {
   const url = `https://api.hetzner.cloud/v1/servers/${hetznerId}/actions/${action}`;
@@ -40,7 +40,6 @@ const deleteCloudflareRecords = async (subdomain) => {
   const cleanSub = subdomain.replace(DOMAIN_SUFFIX, '');
   const url = `https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
   
-  // Search for A and SRV records
   const searchUrls = [
     `${url}?type=A&name=${cleanSub}${DOMAIN_SUFFIX}`,
     `${url}?type=SRV&name=_minecraft._tcp.${cleanSub}${DOMAIN_SUFFIX}`
@@ -67,7 +66,6 @@ async function billRemainingTime(server) {
   const hours = elapsedSeconds / 3600;
   const cost = hours * server.cost_per_hour;
 
-  // Deduct Credits
   const { data: profile } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
   if (profile) {
     await supabaseAdmin.from('profiles').update({ credits: profile.credits - cost }).eq('id', server.user_id);
@@ -114,7 +112,7 @@ export default async function handler(req, res) {
         // 2. Infrastructure Shutdown
         if (server.hetzner_id) {
           await hetznerDoAction(server.hetzner_id, 'shutdown');
-          await waitForServerStatus(server.hetzner_id, 'off'); // Wait for S3 sync to finish
+          await waitForServerStatus(server.hetzner_id, 'off'); 
           await fetch(`https://api.hetzner.cloud/v1/servers/${server.hetzner_id}`, {
             method: 'DELETE', headers: { Authorization: `Bearer ${HETZNER_API_TOKEN}` }
           });
@@ -138,6 +136,15 @@ export default async function handler(req, res) {
           runtime_accumulated_seconds: 0, running_since: null, current_session_id: null,
           last_empty_at: null
         }).eq('id', server.id);
+
+        // [NEW] 5. Insert Audit Log
+        await supabaseAdmin.from('server_audit_logs').insert({
+          server_id: server.id,
+          user_id: null, // System action
+          action_type: 'AUTO_STOP',
+          details: `Server auto-stopped after ${server.auto_stop_timeout} mins of inactivity.`,
+          created_at: new Date().toISOString()
+        });
 
         stoppedCount++;
       } catch (err) {

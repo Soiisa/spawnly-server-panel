@@ -1172,13 +1172,15 @@ export default async function handler(req, res) {
 
   let isAuthorized = false;
   let userId = null;
+  let actionSource = 'USER'; // Track if it's User or Sleeper
 
   // 1. Sleeper Proxy Bypass (System Internal)
   const sleeperHeader = req.headers['x-sleeper-secret'];
   if (SLEEPER_SECRET && sleeperHeader === SLEEPER_SECRET) {
       isAuthorized = true;
+      actionSource = 'SLEEPER';
   } else {
-      // 2. User Authorization (Owner OR Shared 'control' permission)
+      // 2. User Authorization
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
           const token = authHeader.split(' ')[1];
@@ -1186,12 +1188,9 @@ export default async function handler(req, res) {
           
           if (user && !authError) {
               userId = user.id;
-              // --- USE verifyServerAccess to check shared permissions ---
               const access = await verifyServerAccess(supabaseAdmin, serverId, user.id, 'control');
               if (access.allowed) {
                   isAuthorized = true;
-              } else {
-                  console.warn(`[Provision] Access denied for user ${user.id} on server ${serverId}`);
               }
           }
       }
@@ -1209,8 +1208,7 @@ export default async function handler(req, res) {
     if (error || !serverRow) return res.status(404).json({ error: 'Server not found' });
     if (!serverRow.subdomain) return res.status(400).json({ error: 'No subdomain specified' });
 
-    // --- CHECK CREDITS OF THE OWNER (Not necessarily the requester) ---
-    // If the server is shared, we bill the OWNER (serverRow.user_id)
+    // Check Credits
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('credits')
@@ -1218,12 +1216,27 @@ export default async function handler(req, res) {
       .single();
 
     if (profileError || !profile) {
-        console.error("Failed to fetch owner profile for billing check");
         return res.status(500).json({ error: 'Owner profile not found' });
     }
 
     if ((profile.credits || 0) < 0.1) {
          return res.status(402).json({ error: 'Owner has insufficient credits to start server' });
+    }
+
+    // [NEW] Insert Audit Log
+    try {
+        await supabaseAdmin.from('server_audit_logs').insert({
+            server_id: serverId,
+            user_id: userId, // Will be null for Sleeper
+            action_type: actionSource === 'SLEEPER' ? 'WAKE_UP' : 'START',
+            details: actionSource === 'SLEEPER' 
+                ? 'Server woken up by Sleeper Proxy (Player connection)'
+                : 'Server started (provisioned) by user',
+            created_at: new Date().toISOString()
+        });
+    } catch (logErr) {
+        console.error('[Provision] Failed to log action:', logErr.message);
+        // Do not fail the request just because logging failed
     }
 
     return await provisionServer(serverRow, version, ssh_keys, res);
