@@ -21,7 +21,9 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
   const pricePerGB = 1;
   const costPerHour = Number((ram * pricePerGB).toFixed(2)); 
   const creditsNum = Number(credits); 
-  const canCreate = creditsNum >= costPerHour && !nameError && name.trim();
+  
+  // [MODIFIED] Removed "creditsNum >= costPerHour" check
+  const canCreate = !nameError && name.trim();
 
   useEffect(() => {
     const fetchUserAndServers = async () => {
@@ -79,10 +81,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
       alert(nameError);
       return;
     }
-    if (creditsNum < costPerHour) {
-      alert(t('errors.credits'));
-      return;
-    }
+    // [MODIFIED] Removed the credit balance check block here
 
     setLoading(true);
 
@@ -172,16 +171,13 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
             
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('labels.your_credits')}</span>
-              <span className={`text-sm font-medium ${creditsNum >= costPerHour ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+              {/* [MODIFIED] Changed class logic to always be green, removing the red conditional */}
+              <span className="text-sm font-medium text-green-600 dark:text-green-400">
                 {creditsNum.toFixed(2)} {t('units.credits')}
               </span>
             </div>
             
-            {creditsNum < costPerHour && (
-              <p className="text-red-500 dark:text-red-400 text-sm">
-                 {t('hints.insufficient_credits', { cost: costPerHour })}
-              </p>
-            )}
+            {/* [MODIFIED] Removed the insufficient credits warning text here */}
           </div>
         </div>
 
@@ -211,7 +207,8 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
                 {t('buttons.creating')}
               </>
             ) : (
-              canCreate ? t('buttons.create') : nameError ? t('buttons.fix_errors') : t('buttons.insufficient')
+              // [MODIFIED] Updated label logic to default to "Create" instead of "Insufficient"
+              canCreate ? t('buttons.create') : nameError ? t('buttons.fix_errors') : t('buttons.create')
             )}
           </button>
         </div>

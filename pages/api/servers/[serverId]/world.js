@@ -241,6 +241,47 @@ export default async function handler(req, res) {
           const fs = require('fs').promises;
           const zipBuffer = await fs.readFile(worldZip.path);
           const zip = new AdmZip(zipBuffer);
+          const entries = zip.getEntries();
+
+          // --- NEW: Single Root Folder Detection logic ---
+          let rootFolder = null;
+          let hasMultipleRoots = false;
+
+          for (const entry of entries) {
+            const name = entry.entryName;
+            // Ignore Mac junk and system files from check
+            if (name.startsWith('__MACOSX/') || name.endsWith('.DS_Store')) continue;
+            
+            // Normalize slashes just in case
+            const normalizedName = name.replace(/\\/g, '/');
+            const parts = normalizedName.split('/').filter(p => p);
+            
+            if (parts.length === 0) continue; // Empty path or just slashes
+
+            // If a file exists at the root level, we have "multiple roots" (or rather, no single container folder)
+            // Unless the entry is the directory itself (ends with /)
+            const isDirectory = entry.isDirectory || name.endsWith('/');
+            
+            if (!isDirectory && parts.length === 1) {
+                // A file at the root, e.g. "level.dat"
+                hasMultipleRoots = true;
+                break;
+            }
+
+            const currentRoot = parts[0];
+            if (rootFolder === null) {
+                rootFolder = currentRoot;
+            } else if (rootFolder !== currentRoot) {
+                hasMultipleRoots = true;
+                break;
+            }
+          }
+          
+          const shouldFlatten = !hasMultipleRoots && rootFolder;
+          if (shouldFlatten) {
+              console.log(`[WorldUpload] Detected single root folder "${rootFolder}". Flattening structure.`);
+          }
+          // -----------------------------------------------
 
           // Delete existing world first
           let listRes = await s3.listObjectsV2({ Bucket: S3_BUCKET, Prefix: worldPrefix }).promise();
@@ -267,11 +308,19 @@ export default async function handler(req, res) {
           }
 
           // Extract and upload with Zip Slip Protection
-          const entries = zip.getEntries();
           for (const entry of entries) {
             if (!entry.isDirectory) {
+              // Skip junk files
+              if (entry.entryName.startsWith('__MACOSX/') || entry.entryName.endsWith('.DS_Store')) continue;
+
+              // --- Flatten Path ---
+              let entryPath = entry.entryName.replace(/\\/g, '/');
+              if (shouldFlatten && entryPath.startsWith(rootFolder + '/')) {
+                  entryPath = entryPath.substring(rootFolder.length + 1);
+              }
+
               // --- Security Fix: Zip Slip Protection ---
-              const safeName = path.normalize(entry.entryName).replace(/^(\.\.(\/|\\|$))+/, '');
+              const safeName = path.normalize(entryPath).replace(/^(\.\.(\/|\\|$))+/, '');
               if (safeName.includes('..')) {
                   console.warn(`[Security] Skipped suspicious zip entry: ${entry.entryName}`);
                   continue;

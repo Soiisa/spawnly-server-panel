@@ -23,12 +23,6 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   
-  // Use the server object returned by verification (it includes basic info)
-  // We need to fetch full details like rcon/subdomain if verifyServerAccess didn't return them
-  // verifyServerAccess returns { server: { user_id, name } } usually.
-  // So we re-fetch to be safe or optimize verifyServerAccess later. 
-  // For now, let's fetch what we need securely.
-  
   const { data: server } = await supabaseAdmin
     .from('servers')
     .select('ipv4, rcon_password, status, subdomain')

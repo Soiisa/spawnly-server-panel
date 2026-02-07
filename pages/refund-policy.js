@@ -26,14 +26,21 @@ export default function RefundPolicy() {
               </p>
             </section>
 
+            {/* SECTION 1: EU WAIVER (UPDATED) */}
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">1. Waiver of Right of Withdrawal (EU Consumers)</h2>
               <p>
-                Under EU Consumer Law (Directive 2011/83/EU), consumers typically have a 14-day right of withdrawal. 
-                <strong>However, by purchasing Credits on Spawnly, you expressly consent to the immediate performance of the contract and acknowledge that you thereby lose your right of withdrawal.</strong>
+                <strong>Vital Information for EU Customers:</strong>
               </p>
-              <p>
-                Once credits are added to your account balance, the service is deemed fully delivered, and the purchase becomes final and non-refundable.
+              <p className="mt-2">
+                Spawnly Credits are digital content that is not supplied on a tangible medium. By purchasing Credits, you expressly:
+              </p>
+              <ul className="list-disc pl-5 space-y-1 mt-2">
+                <li>Consent to the immediate performance of the contract (instant delivery of credits).</li>
+                <li>Acknowledge that you lose your right of withdrawal (the "14-day cooling-off period") once the download or supply of digital content has begun.</li>
+              </ul>
+              <p className="mt-2">
+                If you do not consent to this waiver, you must not proceed with the purchase. Once credits are added to your account balance, the service is deemed fully delivered, and the purchase becomes final and non-refundable.
               </p>
             </section>
 

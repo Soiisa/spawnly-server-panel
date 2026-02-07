@@ -1019,7 +1019,8 @@ export default function ServerDetailPage({ initialServer }) {
                         </p>
                         </div>
                     </div>
-                    {credits < server.cost_per_hour && !server.pool_id && isOwner && (
+                    {/* [MODIFIED] Added && isRunning check to hide warning when server is stopped */}
+                    {credits < server.cost_per_hour && !server.pool_id && isOwner && isRunning && (
                         <div className="mt-4 bg-red-50 text-red-700 text-sm p-3 rounded-lg flex items-center gap-2">
                         <span className="font-bold">{t('billing.warning_low')}</span>
                         </div>

@@ -21,11 +21,15 @@ export default function TermsOfService() {
 
           <div className="prose prose-slate dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 space-y-6">
             
+            {/* SECTION 1: IDENTITY & ELIGIBILITY */}
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">1. Agreement to Terms</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">1. Service Provider & Eligibility</h2>
               <p>
-                These Terms of Service ("Terms") constitute a legally binding agreement made between you, whether personally or on behalf of an entity ("you") and <strong>Spawnly</strong> ("we," "us," or "our"), concerning your access to and use of the Spawnly website and hosting services.
+                These Terms of Service ("Terms") constitute a legally binding agreement made between you, whether personally or on behalf of an entity ("you") and <strong>Spawnly</strong> ("we," "us," or "our"), a commercial designation operated by <strong>[YOUR FULL LEGAL NAME]</strong> (Empresário em Nome Individual) under the laws of Portugal.
                 By registering for an account, you agree that you have read, understood, and agreed to be bound by all of these Terms.
+              </p>
+              <p className="mt-2">
+                <strong>Eligibility:</strong> By using our Services, you represent and warrant that you are at least 18 years of age, or if you are under 18, you are accessing the Service with the consent of a parent or legal guardian who agrees to be bound by these Terms.
               </p>
             </section>
 
@@ -104,13 +108,14 @@ export default function TermsOfService() {
               </p>
             </section>
 
+            {/* SECTION 8: GOVERNING LAW (UPDATED) */}
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">8. Governing Law & Dispute Resolution</h2>
               <p>
                 These Terms are governed by the laws of Portugal. Any legal action of whatever nature brought by either you or us shall be commenced or prosecuted in the courts of Portugal, and you hereby consent to active jurisdiction.
               </p>
               <p className="mt-2 text-sm text-gray-500">
-                <strong>European ODR:</strong> If you reside in the EU, the European Commission provides an online dispute resolution platform: <a href="https://ec.europa.eu/consumers/odr" className="underline">https://ec.europa.eu/consumers/odr</a>.
+                <strong>Dispute Resolution:</strong> Consumers may resort to Alternative Dispute Resolution (RAL) entities. A list of such entities is available via the Portuguese Consumer Portal at <a href="https://www.consumidor.gov.pt" target="_blank" rel="noopener noreferrer" className="underline">www.consumidor.gov.pt</a>.
               </p>
             </section>
 

@@ -41,8 +41,6 @@ export default async function handler(req, res) {
 
     if (!server.subdomain) return res.status(400).json({ error: 'Server has no subdomain' });
 
-    // 2. Send Command to Wrapper API (Port 3006)
-    // Note: We use HTTP, not HTTPS, because we haven't set up SSL for this custom port
     const wrapperUrl = `http://${server.subdomain}.spawnly.net:3006/api/command`;
     
     const wrapperRes = await fetch(wrapperUrl, {

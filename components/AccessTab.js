@@ -1,38 +1,51 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'next-i18next';
-import { TrashIcon, UserPlusIcon, PencilIcon, XMarkIcon, ClockIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline';
+import { 
+  TrashIcon, UserPlusIcon, PencilIcon, XMarkIcon, 
+  ClipboardDocumentListIcon, MagnifyingGlassIcon, 
+  ChevronLeftIcon, ChevronRightIcon 
+} from '@heroicons/react/24/outline';
 import { supabase } from '../lib/supabaseClient';
 
 export default function AccessTab({ server }) {
   const { t } = useTranslation('common');
   const [users, setUsers] = useState([]);
-  const [logs, setLogs] = useState([]); // [NEW] Logs state
+  
+  // Logs State
+  const [logs, setLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalLogs, setTotalLogs] = useState(0);
+  const [search, setSearch] = useState('');
+  
   const [loading, setLoading] = useState(true);
   
   // Form State
   const [inviteEmail, setInviteEmail] = useState('');
   const [editingUser, setEditingUser] = useState(null); 
   
-  // Full Permission Set Default State
   const defaultPerms = {
-    control: true,
-    console: false,
-    files: false,
-    settings: false,
-    schedules: false,
-    players: false,
-    software: false,
-    mods: false,
-    world: false,
-    backups: false
+    control: true, console: false, files: false, settings: false,
+    schedules: false, players: false, software: false, mods: false,
+    world: false, backups: false
   };
 
   const [perms, setPerms] = useState(defaultPerms);
 
   useEffect(() => {
     fetchUsers();
-    fetchLogs(); // [NEW] Fetch logs
+    // fetchLogs called via debounced effect below
   }, [server.id]);
+
+  // Debounced Search & Pagination Effect
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      fetchLogs(page, search);
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [search, page, server.id]);
 
   const fetchUsers = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -46,17 +59,31 @@ export default function AccessTab({ server }) {
     setLoading(false);
   };
 
-  // [NEW] Fetch Logs Function
-  const fetchLogs = async () => {
+  const fetchLogs = async (pageNum = 1, searchQuery = '') => {
+    setLogsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     
-    const res = await fetch(`/api/servers/${server.id}/audit-logs`, {
-      headers: { Authorization: `Bearer ${session.access_token}` }
+    const query = new URLSearchParams({
+        page: pageNum,
+        limit: 10,
+        search: searchQuery
     });
-    if (res.ok) {
-      const data = await res.json();
-      setLogs(data.logs || []);
+
+    try {
+        const res = await fetch(`/api/servers/${server.id}/audit-logs?${query.toString()}`, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setLogs(data.logs || []);
+            setTotalPages(data.totalPages || 1);
+            setTotalLogs(data.total || 0);
+        }
+    } catch (e) {
+        console.error("Failed to fetch logs", e);
+    } finally {
+        setLogsLoading(false);
     }
   };
 
@@ -200,13 +227,37 @@ export default function AccessTab({ server }) {
         </div>
       </div>
 
-      {/* [NEW] Action Logs Section */}
+      {/* Action Logs Section */}
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-        <h3 className="text-lg font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-2">
-          <ClipboardDocumentListIcon className="w-5 h-5" /> Activity Logs
-        </h3>
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <ClipboardDocumentListIcon className="w-5 h-5" /> Activity Logs
+            </h3>
+            
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
+                </div>
+                <input
+                    type="text"
+                    placeholder="Search logs..."
+                    value={search}
+                    onChange={(e) => {
+                        setSearch(e.target.value);
+                        setPage(1); // Reset to page 1 on search
+                    }}
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500"
+                />
+            </div>
+        </div>
         
-        <div className="overflow-hidden border border-gray-200 dark:border-slate-700 rounded-xl">
+        <div className="overflow-hidden border border-gray-200 dark:border-slate-700 rounded-xl relative">
+          {logsLoading && (
+              <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent"></div>
+              </div>
+          )}
           <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
             <thead className="bg-gray-50 dark:bg-slate-900">
               <tr>
@@ -219,13 +270,13 @@ export default function AccessTab({ server }) {
             <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
               {logs.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No activity recorded yet.
+                  <td colSpan="4" className="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {search ? 'No logs found matching your search.' : 'No activity recorded yet.'}
                   </td>
                 </tr>
               ) : (
                 logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                       {log.users?.email || 'System / Unknown'}
                     </td>
@@ -244,6 +295,34 @@ export default function AccessTab({ server }) {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalLogs > 0 && (
+            <div className="flex items-center justify-between mt-4 px-2">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                    Showing <span className="font-medium">{(page - 1) * 10 + 1}</span> to <span className="font-medium">{Math.min(page * 10, totalLogs)}</span> of <span className="font-medium">{totalLogs}</span> results
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        <ChevronLeftIcon className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 px-2">
+                        Page {page} of {totalPages}
+                    </span>
+                    <button
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages}
+                        className="p-2 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        <ChevronRightIcon className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+        )}
       </div>
     </div>
   );

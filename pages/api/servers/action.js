@@ -453,12 +453,7 @@ export default async function handler(req, res) {
     const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
     if (profileErr || !profile) return res.status(500).json({ error: 'Failed to fetch server owner profile' });
 
-    if (action === 'start' || action === 'restart') {
-      const minCost = (server.cost_per_hour / 60) * 5;
-      if (profile.credits < minCost) {
-        return res.status(402).json({ error: 'Insufficient credits to start server' });
-      }
-    }
+    // MODIFIED: Removed the credit check block for start/restart here
 
     // --- UPDATED: Handle STOP, DELETE, and KILL ---
     if (action === 'delete' || action === 'stop' || action === 'kill') {

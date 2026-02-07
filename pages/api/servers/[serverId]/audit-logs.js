@@ -24,15 +24,29 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Unauthorized to view audit logs' });
   }
 
-  // GET: Fetch Logs
+  // GET: Fetch Logs with Pagination & Search
   if (req.method === 'GET') {
-    // 1. Fetch raw logs without the join
-    const { data: logs, error } = await supabaseAdmin
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    
+    // Calculate range
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabaseAdmin
       .from('server_audit_logs')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('server_id', serverId)
       .order('created_at', { ascending: false })
-      .limit(100);
+      .range(from, to);
+
+    if (search) {
+      // Search in action_type or details
+      query = query.or(`action_type.ilike.%${search}%,details.ilike.%${search}%`);
+    }
+
+    const { data: logs, error, count } = await query;
 
     if (error) {
         console.error('Error fetching audit logs:', error);
@@ -44,18 +58,25 @@ export default async function handler(req, res) {
     const userMap = {};
 
     // 3. Fetch emails for each unique user
-    await Promise.all(userIds.map(async (uid) => {
-         const { data: u } = await supabaseAdmin.auth.admin.getUserById(uid);
-         userMap[uid] = u?.user?.email || 'Unknown';
-    }));
+    if (userIds.length > 0) {
+        await Promise.all(userIds.map(async (uid) => {
+            const { data: u } = await supabaseAdmin.auth.admin.getUserById(uid);
+            userMap[uid] = u?.user?.email || 'Unknown';
+        }));
+    }
 
-    // 4. Attach email to logs (mocking the join structure for frontend)
+    // 4. Attach email to logs
     const enrichedLogs = logs.map(log => ({
         ...log,
         users: { email: userMap[log.user_id] || 'Unknown' }
     }));
 
-    return res.json({ logs: enrichedLogs });
+    return res.json({ 
+        logs: enrichedLogs, 
+        total: count,
+        page,
+        totalPages: Math.ceil(count / limit) 
+    });
   }
 
   // POST: Create Log (For client-side actions like Software Change)

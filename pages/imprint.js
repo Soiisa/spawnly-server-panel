@@ -18,17 +18,28 @@ export default function Imprint() {
 
           <div className="prose prose-slate dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 space-y-6">
             
+            {/* Service Provider Section - ENI COMPLIANT */}
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Service Provider</h2>
               <p>
                 <strong>Spawnly</strong><br />
-                [YOUR LEGAL ENTITY NAME, e.g., Spawnly Unipessoal Lda.]<br />
-                [STREET ADDRESS]<br />
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  (Operated by Entrepreneur in Individual Name / Empresário em Nome Individual)
+                </span>
+              </p>
+              <p className="mt-2">
+                <strong>Legal Representative:</strong><br />
+                [YOUR FULL LEGAL NAME]<br /> {/* e.g., João Silva */}
+              </p>
+              <p className="mt-2">
+                <strong>Address:</strong><br />
+                [YOUR P.O. BOX OR VIRTUAL OFFICE ADDRESS]<br />
                 [POSTAL CODE] [CITY]<br />
                 Portugal
               </p>
             </section>
 
+            {/* Contact Section */}
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Contact</h2>
               <p>
@@ -37,30 +48,37 @@ export default function Imprint() {
               </p>
             </section>
 
+            {/* Legal / Tax Information */}
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Legal Information</h2>
               <p>
-                <strong>Managing Director / CEO:</strong> [YOUR NAME]<br />
                 <strong>VAT ID (NIF):</strong> [YOUR PORTUGUESE NIF]<br />
-                <strong>Registered at:</strong> [Registry Court/Conservatória if applicable]
+                <strong>Economic Activity (CAE):</strong> 63110 - Data processing, hosting and related activities<br />
+                <strong>Registered Authority:</strong> Autoridade Tributária e Aduaneira (Portugal)
               </p>
             </section>
 
+            {/* Dispute Resolution - UPDATED 2026 COMPLIANT */}
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">EU Dispute Resolution</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Consumer Dispute Resolution</h2>
+              <p className="mb-4">
+                <strong>Electronic Complaints Book (Livro de Reclamações):</strong><br />
+                Consumers can submit complaints via the official Portuguese platform: <a href="https://www.livroreclamacoes.pt" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">www.livroreclamacoes.pt</a>.
+              </p>
               <p>
-                The European Commission provides a platform for Online Dispute Resolution (ODR): <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">https://ec.europa.eu/consumers/odr</a>.<br/>
-                We are neither willing nor obligated to participate in dispute settlement proceedings before a consumer arbitration board.
+                <strong>Alternative Dispute Resolution (RAL):</strong><br />
+                In the event of a consumer dispute, the consumer may have recourse to an Alternative Dispute Resolution Entity. The list of Alternative Dispute Resolution entities is available at: <a href="https://consumer-redress.ec.europa.eu/dispute-resolution-bodies" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">European Consumer Redress</a> or via the Portuguese Consumer Portal at <a href="https://www.consumidor.gov.pt" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">www.consumidor.gov.pt</a>.
               </p>
             </section>
 
+            {/* Liability Disclaimer */}
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Liability Disclaimer</h2>
               <p>
-                <strong>Content Liability:</strong> As a service provider, we are responsible for our own content on these pages in accordance with general laws. However, we are not obligated to monitor transmitted or stored third-party information or to investigate circumstances that indicate illegal activity.
+                <strong>Content Liability:</strong> As an individual service provider, we are responsible for our own content on these pages in accordance with general laws. However, we are not obligated to monitor transmitted or stored third-party information or to investigate circumstances that indicate illegal activity.
               </p>
               <p className="mt-2">
-                <strong>Link Liability:</strong> Our offer contains links to external third-party websites. We have no influence on the contents of those websites, therefore we cannot assume any liability for such external content. The respective provider or operator of the pages is always responsible for the content of the linked pages.
+                <strong>External Links:</strong> Our service contains links to external third-party websites. We have no influence on the contents of those websites, therefore we cannot assume any liability for such external content.
               </p>
             </section>
 
