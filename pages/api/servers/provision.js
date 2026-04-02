@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
-import { verifyServerAccess } from '../../../lib/accessControl'; // <--- NEW IMPORT
+import { verifyServerAccess } from '../../../lib/accessControl'; 
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -381,23 +381,35 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
 
   const isModpack = software.startsWith('modpack-');
 
-  let javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'; 
-  if (effectiveVersion) {
+  // --- CHANGED: Advanced Version Parsing logic to support 26.x.y alongside 1.x.y ---
+  let javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java'; 
+  if (effectiveVersion && effectiveVersion !== 'latest') {
       const vClean = effectiveVersion.replace(/[^0-9.]/g, '');
       const parts = vClean.split('.').map(Number);
-      if (parts.length >= 2) {
-          const minor = parts[1];
-          const patch = parts[2] || 0;
-          if (minor > 20 || (minor === 20 && patch >= 5)) {
-             javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
-          } else if (minor >= 17) {
-             javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
-          } else {
-             if (software.includes('arclight') || software.includes('mohist')) {
+      
+      if (parts.length > 0) {
+          const major = parts[0];
+          const minor = parts.length >= 2 ? parts[1] : 0;
+          const patch = parts.length >= 3 ? parts[2] : 0;
+
+          if (major >= 26) {
+              // New Minecraft Versioning Format (e.g. 26.1)
+              javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
+          } else if (major === 1) {
+              // Legacy Minecraft Versioning Format (e.g. 1.21.4)
+              if (minor >= 22) {
+                 javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
+              } else if (minor > 20 || (minor === 20 && patch >= 5)) {
+                 javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
+              } else if (minor >= 17) {
                  javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
-             } else {
-                 javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
-             }
+              } else {
+                 if (software.includes('arclight') || software.includes('mohist')) {
+                     javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
+                 } else {
+                     javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
+                 }
+              }
           }
       }
   }
@@ -924,8 +936,12 @@ write_files:
 runcmd:
   - chown -R minecraft:minecraft /opt/minecraft /home/minecraft
   
-  # --- FIREWALL CONFIGURATION ---
+  # --- FIREWALL & DEPENDENCY CONFIGURATION ---
   - apt-get update && apt-get install -y ufw php-cli php-xml php-mbstring unzip
+  - apt-get install -y openjdk-25-jre-headless || true
+  - apt-get install -y openjdk-21-jre-headless || true
+  - apt-get install -y openjdk-17-jre-headless || true
+  - apt-get install -y openjdk-8-jre-headless || true
   
   # --- THANOS INSTALL (Reduced) ---
   - |
