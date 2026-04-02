@@ -655,6 +655,20 @@ write_files:
       chown -R minecraft:minecraft /opt/minecraft || true
       cd /opt/minecraft
 
+      # --- SMART VERSION TRACKING ---
+      CURRENT_INSTALLED=""
+      if [ -f ".installed_version" ]; then
+          CURRENT_INSTALLED=$(cat .installed_version)
+      fi
+
+      if [ "$CURRENT_INSTALLED" != "$SOFTWARE-$MC_VERSION" ]; then
+          echo "[Startup] Version or Software change detected ($CURRENT_INSTALLED -> $SOFTWARE-$MC_VERSION). Forcing update..."
+          FORCE_INSTALL="true"
+          echo "$SOFTWARE-$MC_VERSION" > .installed_version
+          chown minecraft:minecraft .installed_version
+      fi
+      # -----------------------------------
+
       setup_generic_start_script() {
           START_SCRIPT=$(find . -maxdepth 3 -name "start.sh" -o -name "run.sh" -o -name "ServerStart.sh" | head -n 1)
           if [ -n "$START_SCRIPT" ]; then
