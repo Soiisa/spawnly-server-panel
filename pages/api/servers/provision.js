@@ -381,7 +381,6 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
 
   const isModpack = software.startsWith('modpack-');
 
-  // --- CHANGED: Advanced Version Parsing logic to support 26.x.y alongside 1.x.y ---
   let javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java'; 
   if (effectiveVersion && effectiveVersion !== 'latest') {
       const vClean = effectiveVersion.replace(/[^0-9.]/g, '');
@@ -393,10 +392,8 @@ const buildCloudInitForMinecraft = (downloadUrl, ramGb, rconPassword, software, 
           const patch = parts.length >= 3 ? parts[2] : 0;
 
           if (major >= 26) {
-              // New Minecraft Versioning Format (e.g. 26.1)
               javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
           } else if (major === 1) {
-              // Legacy Minecraft Versioning Format (e.g. 1.21.4)
               if (minor >= 22) {
                  javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
               } else if (minor > 20 || (minor === 20 && patch >= 5)) {
@@ -503,19 +500,16 @@ write_files:
       echo "[mc-sync] Processing..."
       cd "$SRC"
 
-      # --- THANOS OPTIMIZATION ---
       if [ -f "/opt/tools/prune.php" ] && [ -d "$SRC/world/region" ]; then
           echo "[mc-sync] Running Thanos World Optimizer..."
           php /opt/tools/prune.php "$SRC/world" || echo "[mc-sync] Thanos failed, skipping."
       fi
-      # ---------------------------
       
       SYNC_EXCLUDES=""
       WORLD_NAME=$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\\r') || WORLD_NAME="world"
       [ -z "$WORLD_NAME" ] && WORLD_NAME="world"
 
       if [ "$IS_MODPACK" = "true" ]; then
-          echo "[mc-sync] Modpack mode detected. Analyzing folders for optimization..."
           DIRS_TO_ZIP=""
           FILE_LIMIT=50
           for d in */ ; do
@@ -526,17 +520,14 @@ write_files:
               fi
               count=$(find "$dirname" -maxdepth 20 -type f | wc -l)
               if [ "$count" -gt "$FILE_LIMIT" ]; then
-                  echo "[mc-sync] Folder '$dirname' has >$FILE_LIMIT files. Adding to zip."
                   DIRS_TO_ZIP="$DIRS_TO_ZIP $dirname"
                   SYNC_EXCLUDES="$SYNC_EXCLUDES --exclude $dirname --exclude $dirname/*"
               fi
           done
 
           if [ -n "$DIRS_TO_ZIP" ]; then
-            echo "[mc-sync] Compressing heavy folders..."
             zip -r -1 -q packed-data.zip $DIRS_TO_ZIP || true
             if [ -f packed-data.zip ]; then
-               echo "[mc-sync] Uploading packed-data.zip..."
                sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT cp packed-data.zip "s3://$BUCKET/$SERVER_PATH/packed-data.zip"
                rm -f packed-data.zip
             fi
@@ -564,12 +555,9 @@ write_files:
       EXIT_CODE=$?
       set +f
 
-      # --- FAIL-SAFE TEARDOWN ---
       if [ $EXIT_CODE -eq 0 ]; then
-        echo "[mc-sync] Sync complete. Notifying API for teardown..."
         SYNC_STATUS="true"
       else
-        echo "[mc-sync] Sync FAILED with exit code $EXIT_CODE. Forcing teardown anyway."
         SYNC_STATUS="false"
       fi
 
@@ -613,27 +601,26 @@ write_files:
       
       echo "[mc-sync-from-s3] Starting high-speed sync from s3://$BUCKET/$SERVER_PATH to $DEST ..."
       
-      # 1. Download everything (including packed-data.zip if it exists)
+      # Download everything
       sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync \
           --exclude 'node_modules/*' \
           "s3://$BUCKET/$SERVER_PATH/*" "$DEST/"
       
-      # 2. Unpack if zip exists (This works for ANY server that used zipping)
       cd "$DEST"
       if [ -f packed-data.zip ]; then
-          echo "[mc-sync-from-s3] Optimization archive found. Unpacking..."
           sudo -u minecraft unzip -o -q packed-data.zip
           rm packed-data.zip
       fi
-  - path: /opt/minecraft/startup.sh
+
+  # --- FIX: MOVED STARTUP.SH OUT OF /OPT/MINECRAFT TO PREVENT S3 OVERWRITES ---
+  - path: /usr/local/bin/mc-startup.sh
     permissions: '0755'
-    owner: minecraft:minecraft
+    owner: root:root
     defer: true
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
       
-      # Inputs
       SOFTWARE='${software}'
       DOWNLOAD_URL='${escapedDl}'
       FTB_PACK_ID='${modpackMeta.packId || ''}'
@@ -646,16 +633,16 @@ write_files:
       IS_MODPACK='${isModpack}'
       MC_VERSION='${escapedVersion}'
       
-      # Added ExitOnOutOfMemoryError to fix Zombie process issue
       AIKAR_FLAGS="-XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
       
       echo "[Startup] Initializing for software: $SOFTWARE"
       
       mkdir -p /opt/minecraft
       chown -R minecraft:minecraft /opt/minecraft || true
+      
+      # IMPORTANT: Run the entire script inside the minecraft working directory
       cd /opt/minecraft
 
-      # --- SMART VERSION TRACKING ---
       CURRENT_INSTALLED=""
       if [ -f ".installed_version" ]; then
           CURRENT_INSTALLED=$(cat .installed_version)
@@ -667,7 +654,6 @@ write_files:
           echo "$SOFTWARE-$MC_VERSION" > .installed_version
           chown minecraft:minecraft .installed_version
       fi
-      # -----------------------------------
 
       setup_generic_start_script() {
           START_SCRIPT=$(find . -maxdepth 3 -name "start.sh" -o -name "run.sh" -o -name "ServerStart.sh" | head -n 1)
@@ -705,20 +691,16 @@ write_files:
       if [ ! -f "server.properties" ] || [ "${needsFileDeletion}" = "true" ] || [ "$FORCE_INSTALL" = "true" ]; then
           
           if [ "$IS_MODPACK" = "true" ] && [ -f "server.properties" ] && [ "${needsFileDeletion}" != "true" ]; then
-              echo "[Startup] Smart Update detected. Cleaning old mods and config files..."
               rm -rf mods config scripts kubejs libraries defaultconfigs versions
           fi
 
           if [ "$SOFTWARE" = "modpack-ftb" ]; then
-              echo "[Startup] Downloading FTB Installer..."
               sudo -u minecraft curl -L -o serverinstaller https://dist.creeper.host/FTB2/server-installer/serverinstaller_linux
               sudo -u minecraft chmod +x serverinstaller
-              echo "[Startup] Running FTB Installer for Pack $FTB_PACK_ID Version $FTB_VER_ID..."
               sudo -u minecraft ./serverinstaller -auto -pack $FTB_PACK_ID -version $FTB_VER_ID
               setup_generic_start_script
 
           elif [[ "$SOFTWARE" == "modpack-"* ]] || [[ "$DOWNLOAD_URL" == *.zip ]]; then
-              echo "[Startup] Downloading Modpack Zip..."
               sudo -u minecraft wget -O modpack.zip "$DOWNLOAD_URL"
               sudo -u minecraft unzip -o modpack.zip
               rm modpack.zip
@@ -726,7 +708,6 @@ write_files:
               if [ "$COUNT" -eq 1 ]; then
                   DIR_NAME=$(ls -1)
                   if [ -d "$DIR_NAME" ]; then
-                      echo "[Startup] Detected subfolder '$DIR_NAME', moving contents to root..."
                       mv "$DIR_NAME"/* . 2>/dev/null || true
                       mv "$DIR_NAME"/.* . 2>/dev/null || true
                       rmdir "$DIR_NAME"
@@ -734,20 +715,13 @@ write_files:
               fi
               if [ -f "user_jvm_args.txt" ]; then rm user_jvm_args.txt; fi
               setup_generic_start_script
-              
-              # --- Inject Flags into user_jvm_args.txt (Modpack Mode) ---
-              echo "[Startup] Injecting AIKAR flags into user_jvm_args.txt (Modpack Mode)..."
               echo "$AIKAR_FLAGS" >> user_jvm_args.txt
               chown minecraft:minecraft user_jvm_args.txt || true
-              # ----------------------------------------------------------
               
           elif [ "$SOFTWARE" = "forge" ] || [ "$SOFTWARE" = "neoforge" ]; then
-             echo "[Startup] Downloading Forge/NeoForge Installer..."
              sudo -u minecraft wget -O server-installer.jar "$DOWNLOAD_URL"
              sudo -u minecraft $JAVA_BIN -jar server-installer.jar --installServer
              rm -f server-installer.jar
-             
-             echo "[Startup] Injecting AIKAR flags into user_jvm_args.txt..."
              echo "$AIKAR_FLAGS" >> user_jvm_args.txt
 
              if [ -f "run.sh" ]; then
@@ -763,14 +737,10 @@ write_files:
              fi
 
           elif [ "$SOFTWARE" = "quilt" ]; then
-             echo "[Startup] Downloading Quilt Installer..."
              sudo -u minecraft wget -O quilt-installer.jar "$DOWNLOAD_URL"
-             echo "[Startup] Running Quilt Installer for $MC_VERSION..."
-             
              sudo -u minecraft $JAVA_BIN -jar quilt-installer.jar install server "$MC_VERSION" --download-server
              
              if [ -d "server" ]; then
-                 echo "[Startup] Moving Quilt server files to root..."
                  mv server/* .
                  mv server/.* . 2>/dev/null || true
                  rmdir server
@@ -816,17 +786,24 @@ write_files:
           fi
       fi
 
-      # --- FIX: FORCE JAVA PATH IN EXISTING RUN SCRIPTS ---
+      # --- FIX: FORCE JAVA PATH IN EXISTING RUN SCRIPTS (BULLETPROOF) ---
       if [ -f "run.sh" ]; then
           echo "[Startup] Patching run.sh to enforce correct Java runtime ($JAVA_BIN)..."
-          sed -i -E "s|/usr/lib/jvm/java-[0-9]+-openjdk-[a-zA-Z0-9_-]+/bin/java|$JAVA_BIN|g" run.sh
+          
+          sed -i "s|/usr/lib/jvm/java-8-openjdk-[a-zA-Z0-9_-]*/bin/java|$JAVA_BIN|g" run.sh
+          sed -i "s|/usr/lib/jvm/java-11-openjdk-[a-zA-Z0-9_-]*/bin/java|$JAVA_BIN|g" run.sh
+          sed -i "s|/usr/lib/jvm/java-17-openjdk-[a-zA-Z0-9_-]*/bin/java|$JAVA_BIN|g" run.sh
+          sed -i "s|/usr/lib/jvm/java-21-openjdk-[a-zA-Z0-9_-]*/bin/java|$JAVA_BIN|g" run.sh
+          sed -i "s|/usr/lib/jvm/java-25-openjdk-[a-zA-Z0-9_-]*/bin/java|$JAVA_BIN|g" run.sh
+          
           sed -i "s|^java |$JAVA_BIN |g" run.sh
       fi
-      # ----------------------------------------------------
+      # ------------------------------------------------------------------
 
       chown -R minecraft:minecraft /opt/minecraft
       chmod -R u+rwX /opt/minecraft
       chmod +x /opt/minecraft/*.sh || true
+      
   - path: /etc/systemd/system/minecraft.service
     permissions: '0644'
     content: |
@@ -952,7 +929,7 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 runcmd:
-  - chown -R minecraft:minecraft /opt/minecraft /home/minecraft
+  - chown -R minecraft:minecraft /home/minecraft
   
   # --- FIREWALL & DEPENDENCY CONFIGURATION ---
   - apt-get update && apt-get install -y ufw php-cli php-xml php-mbstring unzip
@@ -981,6 +958,8 @@ ${allocationFirewallRules}
   - ufw --force enable
   # ------------------------------
 
+  - mkdir -p /opt/minecraft
+  - chown minecraft:minecraft /opt/minecraft
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js
@@ -991,12 +970,13 @@ ${allocationFirewallRules}
   - chmod 0755 /opt/minecraft/*.js
   - chown minecraft:minecraft /opt/minecraft/*.js
 
-  # --- FIX: SYNC FILES *BEFORE* STARTUP PATCHING ---
+  # 1. Download User's S3 files First
   - [ "/bin/bash", "/usr/local/bin/mc-sync-from-s3.sh" ]
 
-  # --- NOW WE CAN RUN STARTUP.SH AND PATCH SAFELY ---
-  - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
+  # 2. Run the protected startup/patching script safely
+  - [ "/bin/bash", "/usr/local/bin/mc-startup.sh" ]
 
+  # 3. Boot the Server
   - systemctl daemon-reload
   - systemctl enable minecraft
   - systemctl start minecraft
