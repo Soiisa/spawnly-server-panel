@@ -819,6 +819,14 @@ write_files:
           fi
       fi
 
+      # --- FIX: FORCE JAVA PATH IN EXISTING RUN SCRIPTS ---
+      if [ -f "run.sh" ]; then
+          echo "[Startup] Patching run.sh to enforce correct Java runtime ($JAVA_BIN)..."
+          sed -i -E "s|/usr/lib/jvm/java-[0-9]+-openjdk-[a-zA-Z0-9_-]+/bin/java|$JAVA_BIN|g" run.sh
+          sed -i "s|^java |$JAVA_BIN |g" run.sh
+      fi
+      # ----------------------------------------------------
+
       chown -R minecraft:minecraft /opt/minecraft
       chmod -R u+rwX /opt/minecraft
       chmod +x /opt/minecraft/*.sh || true
