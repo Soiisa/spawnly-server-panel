@@ -762,16 +762,13 @@ write_files:
                  fi
              fi
 
-          # FIX: Quilt installer logic: install to 'server/' then move files
           elif [ "$SOFTWARE" = "quilt" ]; then
              echo "[Startup] Downloading Quilt Installer..."
              sudo -u minecraft wget -O quilt-installer.jar "$DOWNLOAD_URL"
              echo "[Startup] Running Quilt Installer for $MC_VERSION..."
              
-             # Run installer (creates 'server' directory)
              sudo -u minecraft $JAVA_BIN -jar quilt-installer.jar install server "$MC_VERSION" --download-server
              
-             # Move files from 'server' subdirectory to current dir
              if [ -d "server" ]; then
                  echo "[Startup] Moving Quilt server files to root..."
                  mv server/* .
@@ -848,7 +845,6 @@ write_files:
       Environment="AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}"
       Environment="AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}"
       
-      ExecStartPre=/usr/local/bin/mc-sync-from-s3.sh
       ExecStart=/usr/bin/node /opt/minecraft/server-wrapper.js
       ExecStopPost=/usr/local/bin/mc-sync.sh
       
@@ -995,6 +991,10 @@ ${allocationFirewallRules}
   - chmod 0755 /opt/minecraft/*.js
   - chown minecraft:minecraft /opt/minecraft/*.js
 
+  # --- FIX: SYNC FILES *BEFORE* STARTUP PATCHING ---
+  - [ "/bin/bash", "/usr/local/bin/mc-sync-from-s3.sh" ]
+
+  # --- NOW WE CAN RUN STARTUP.SH AND PATCH SAFELY ---
   - [ "/bin/bash", "/opt/minecraft/startup.sh" ]
 
   - systemctl daemon-reload
