@@ -13,6 +13,9 @@ const PROVISION_API_URL = `${APP_BASE_URL}/api/servers/provision`;
 const SLEEPER_PORT = 25565;
 const SLEEPER_SECRET = process.env.SLEEPER_SECRET; // Must match .env on Next.js
 
+// --- MAINTENANCE TOGGLE ---
+const MAINTENANCE_MODE = true; // Set to false to disable server maintenance
+
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !SLEEPER_SECRET) {
   console.error("Missing Supabase credentials or SLEEPER_SECRET.");
   process.exit(1);
@@ -93,6 +96,11 @@ const server = net.createServer((socket) => {
     if (packetId === 0x00) {
       let motd = "§b§lSpawnly Server\n§7Server is Stopped. Join to Start!";
       let versionText = "§4● Sleeping";
+
+      if (MAINTENANCE_MODE) {
+        motd = "§b§lSpawnly Server\n§c§lUNDER MAINTENANCE";
+        versionText = "§c● Maintenance";
+      }
       
       if (subdomain) {
         const { data } = await supabase
@@ -102,24 +110,28 @@ const server = net.createServer((socket) => {
           .single();
         
         if (data) {
-           // Base MOTD
-           if (data.motd) motd = `${data.motd}\n§r§7(Server Sleeping)`;
+           if (MAINTENANCE_MODE) {
+               if (data.motd) motd = `${data.motd}\n§r§c(Maintenance Mode)`;
+           } else {
+               // Base MOTD
+               if (data.motd) motd = `${data.motd}\n§r§7(Server Sleeping)`;
 
-           // Dynamic Status Overrides
-           if (data.status === 'Initializing') {
-               versionText = "§e● Initializing";
-               motd = "§e§lServer Initializing...\n§7Preparing infrastructure...";
-           } else if (data.status === 'Starting') {
-               versionText = "§e● Starting";
-               motd = "§e§lServer Starting...\n§7Booting up Minecraft...";
-           } else if (data.status === 'Stopping') {
-               versionText = "§c● Stopping";
-               motd = "§c§lServer Stopping...\n§7Saving data...";
-           } else if (data.status === 'Running') {
-               // Rare case: Server is running but DNS hasn't propagated to client yet, 
-               // so they hit the sleeper instead of the real server.
-               versionText = "§a● Running";
-               motd = "§a§lServer is Online!\n§7Refresh to join.";
+               // Dynamic Status Overrides
+               if (data.status === 'Initializing') {
+                   versionText = "§e● Initializing";
+                   motd = "§e§lServer Initializing...\n§7Preparing infrastructure...";
+               } else if (data.status === 'Starting') {
+                   versionText = "§e● Starting";
+                   motd = "§e§lServer Starting...\n§7Booting up Minecraft...";
+               } else if (data.status === 'Stopping') {
+                   versionText = "§c● Stopping";
+                   motd = "§c§lServer Stopping...\n§7Saving data...";
+               } else if (data.status === 'Running') {
+                   // Rare case: Server is running but DNS hasn't propagated to client yet, 
+                   // so they hit the sleeper instead of the real server.
+                   versionText = "§a● Running";
+                   motd = "§a§lServer is Online!\n§7Refresh to join.";
+               }
            }
         }
       }
@@ -166,6 +178,12 @@ const server = net.createServer((socket) => {
       .single();
 
     if (error || !serverInfo) return kickClient("§cServer not found.");
+
+    // --- MAINTENANCE CHECK ---
+    if (MAINTENANCE_MODE) {
+        console.log(`[Sleeper] Blocked wake up for ${serverInfo.id} due to maintenance.`);
+        return kickClient("§c§lUNDER MAINTENANCE\n\n§fWe are currently performing scheduled maintenance.\n§fServers cannot be started at this time.\n\n§7Please check our website for updates.");
+    }
     
     // Status Checks
     if (serverInfo.status === 'Running') {
