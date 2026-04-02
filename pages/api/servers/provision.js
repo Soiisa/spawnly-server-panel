@@ -536,7 +536,10 @@ write_files:
       
       echo "[mc-sync] Syncing loose files..."
       set -f
+      
+      # FIX: EXCLUDE INFRASTRUCTURE SCRIPTS FROM BACKUPS
       sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
+          --exclude '*.js' \
           --exclude 'node_modules/*' \
           --exclude 'serverinstaller' \
           --exclude 'crash-reports/*' \
@@ -612,7 +615,6 @@ write_files:
           rm packed-data.zip
       fi
 
-  # --- FIX: MOVED STARTUP.SH OUT OF /OPT/MINECRAFT TO PREVENT S3 OVERWRITES ---
   - path: /usr/local/bin/mc-startup.sh
     permissions: '0755'
     owner: root:root
@@ -640,7 +642,6 @@ write_files:
       mkdir -p /opt/minecraft
       chown -R minecraft:minecraft /opt/minecraft || true
       
-      # IMPORTANT: Run the entire script inside the minecraft working directory
       cd /opt/minecraft
 
       CURRENT_INSTALLED=""
@@ -786,7 +787,6 @@ write_files:
           fi
       fi
 
-      # --- FIX: FORCE JAVA PATH IN EXISTING RUN SCRIPTS (BULLETPROOF) ---
       if [ -f "run.sh" ]; then
           echo "[Startup] Patching run.sh to enforce correct Java runtime ($JAVA_BIN)..."
           
@@ -798,7 +798,6 @@ write_files:
           
           sed -i "s|^java |$JAVA_BIN |g" run.sh
       fi
-      # ------------------------------------------------------------------
 
       chown -R minecraft:minecraft /opt/minecraft
       chmod -R u+rwX /opt/minecraft
@@ -960,6 +959,11 @@ ${allocationFirewallRules}
 
   - mkdir -p /opt/minecraft
   - chown minecraft:minecraft /opt/minecraft
+
+  # 1. Download User's S3 files First
+  - [ "/bin/bash", "/usr/local/bin/mc-sync-from-s3.sh" ]
+
+  # 2. Download Fresh System Scripts AFTER S3 Sync
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/status-reporter.js /opt/minecraft/status-reporter.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/server-wrapper.js /opt/minecraft/server-wrapper.js
   - sudo -u minecraft /usr/local/bin/s5cmd ${s5cmdEndpointOpt} cp s3://${S3_BUCKET}/scripts/console-server.js /opt/minecraft/console-server.js
@@ -970,13 +974,10 @@ ${allocationFirewallRules}
   - chmod 0755 /opt/minecraft/*.js
   - chown minecraft:minecraft /opt/minecraft/*.js
 
-  # 1. Download User's S3 files First
-  - [ "/bin/bash", "/usr/local/bin/mc-sync-from-s3.sh" ]
-
-  # 2. Run the protected startup/patching script safely
+  # 3. Run the protected startup/patching script safely
   - [ "/bin/bash", "/usr/local/bin/mc-startup.sh" ]
 
-  # 3. Boot the Server
+  # 4. Boot the Server
   - systemctl daemon-reload
   - systemctl enable minecraft
   - systemctl start minecraft
