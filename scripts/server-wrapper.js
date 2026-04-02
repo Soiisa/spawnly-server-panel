@@ -42,9 +42,13 @@ let lastSyncTime = Date.now();
 const sendUpdate = async (statusOverride = null) => {
   const logsToSend = logBuffer.join('\n');
   logBuffer = []; 
+  
+  // FIX: Accurately track time since last sync so heartbeats are sent when console is empty
+  const timeSinceLastSync = Date.now() - lastSyncTime;
   lastSyncTime = Date.now();
 
-  if (!logsToSend && !statusOverride && Date.now() - lastSyncTime < 10000) return;
+  // Only skip if there are no logs, no status change, AND it hasn't been 10 seconds yet.
+  if (!logsToSend && !statusOverride && timeSinceLastSync < 10000) return;
 
   try {
     const payload = {
@@ -146,13 +150,16 @@ const processLog = (data, isError) => {
   }
   // ---------------------------------------
 
+  // Startup Detection
   if (currentState === 'Starting') {
     if (line.includes('Done (') || line.includes('RCON running on') || line.includes('Thread RCON Listener started') || line.includes('Listening on')) {
       updateState('Running');
     }
   }
 
-  if (line.includes('Stopping server') || line.includes('Saving chunks')) {
+  // FIX: Removed 'Saving chunks' string to prevent false-positive shutdowns.
+  // We now strictly look for standard server shutdown messages.
+  if (line.match(/Stopping (the )?server/i)) {
     updateState('Stopping');
   }
 };

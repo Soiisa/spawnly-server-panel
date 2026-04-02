@@ -537,7 +537,6 @@ write_files:
       echo "[mc-sync] Syncing loose files..."
       set -f
       
-      # FIX: EXCLUDE INFRASTRUCTURE SCRIPTS FROM BACKUPS
       sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 $S5_ENDPOINT_OPT sync --delete \
           --exclude '*.js' \
           --exclude 'node_modules/*' \
@@ -1182,7 +1181,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
   }
 }
 
-// --- UPDATED HANDLER LOGIC ---
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -1191,15 +1189,13 @@ export default async function handler(req, res) {
 
   let isAuthorized = false;
   let userId = null;
-  let actionSource = 'USER'; // Track if it's User or Sleeper
+  let actionSource = 'USER';
 
-  // 1. Sleeper Proxy Bypass (System Internal)
   const sleeperHeader = req.headers['x-sleeper-secret'];
   if (SLEEPER_SECRET && sleeperHeader === SLEEPER_SECRET) {
       isAuthorized = true;
       actionSource = 'SLEEPER';
   } else {
-      // 2. User Authorization
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
           const token = authHeader.split(' ')[1];
@@ -1227,36 +1223,42 @@ export default async function handler(req, res) {
     if (error || !serverRow) return res.status(404).json({ error: 'Server not found' });
     if (!serverRow.subdomain) return res.status(400).json({ error: 'No subdomain specified' });
 
-    // Check Credits
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('credits')
-      .eq('id', serverRow.user_id) 
-      .single();
+    // --- FIX: CHECK POOL CREDITS FIRST IF ATTACHED ---
+    if (serverRow.pool_id) {
+        const { data: pool, error: poolError } = await supabaseAdmin
+          .from('credit_pools')
+          .select('balance')
+          .eq('id', serverRow.pool_id)
+          .single();
 
-    if (profileError || !profile) {
-        return res.status(500).json({ error: 'Owner profile not found' });
+        if (poolError || !pool) return res.status(500).json({ error: 'Credit pool not found' });
+        if ((pool.balance || 0) < 0.1) {
+            return res.status(402).json({ error: 'Linked credit pool has insufficient credits to start server' });
+        }
+    } else {
+        const { data: profile, error: profileError } = await supabaseAdmin
+          .from('profiles')
+          .select('credits')
+          .eq('id', serverRow.user_id) 
+          .single();
+
+        if (profileError || !profile) return res.status(500).json({ error: 'Owner profile not found' });
+        if ((profile.credits || 0) < 0.1) {
+            return res.status(402).json({ error: 'Owner has insufficient credits to start server' });
+        }
     }
 
-    if ((profile.credits || 0) < 0.1) {
-         return res.status(402).json({ error: 'Owner has insufficient credits to start server' });
-    }
-
-    // [NEW] Insert Audit Log
     try {
         await supabaseAdmin.from('server_audit_logs').insert({
             server_id: serverId,
-            user_id: userId, // Will be null for Sleeper
+            user_id: userId,
             action_type: actionSource === 'SLEEPER' ? 'WAKE_UP' : 'START',
             details: actionSource === 'SLEEPER' 
-                ? 'Server woken up by Sleeper Proxy (Player connection)'
+                ? 'Server woken up by Sleeper Proxy'
                 : 'Server started (provisioned) by user',
             created_at: new Date().toISOString()
         });
-    } catch (logErr) {
-        console.error('[Provision] Failed to log action:', logErr.message);
-        // Do not fail the request just because logging failed
-    }
+    } catch (logErr) {}
 
     return await provisionServer(serverRow, version, ssh_keys, res);
   } catch (err) {

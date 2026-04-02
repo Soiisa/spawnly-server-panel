@@ -13,7 +13,6 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-// --- Teardown Helpers (Mirrored from action.js) ---
 async function pointToSleeper(subdomain) {
   if (!subdomain) return;
   const url = `https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
@@ -28,26 +27,85 @@ async function pointToSleeper(subdomain) {
       headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'A', name: `${cleanSub}${DOMAIN_SUFFIX}`, content: SLEEPER_PROXY_IP, ttl: 60, proxied: false })
     });
-  } catch (e) {
-    console.error(`[DNS] Failed to point to sleeper: ${e.message}`);
+  } catch (e) {}
+}
+
+// --- FIX: ADDED DEDUCT CREDITS LOGIC ---
+async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds) {
+  const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
+  if (error || profile.credits < amount) throw new Error('Insufficient credits');
+
+  const newCredits = profile.credits - amount;
+  await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
+
+  let existingTx = null;
+  if (sessionId) {
+      const { data } = await supabaseAdmin.from('credit_transactions').select('*').eq('session_id', sessionId).eq('type', 'usage').single();
+      existingTx = data;
+  }
+
+  if (existingTx) {
+      const newAmount = existingTx.amount - amount;
+      const timeMatch = existingTx.description.match(/\((\d+)\s*seconds\)/);
+      let totalSeconds = billableSeconds;
+      if (timeMatch && timeMatch[1]) totalSeconds += parseInt(timeMatch[1], 10);
+      await supabaseAdmin.from('credit_transactions').update({
+        amount: newAmount, description: `Automated teardown charge (${totalSeconds} seconds)`
+      }).eq('id', existingTx.id);
+  } else {
+      await supabaseAdmin.from('credit_transactions').insert({
+          user_id: userId, amount: -amount, type: 'usage',
+          description: `Automated teardown charge (${billableSeconds} seconds)`, created_at: new Date().toISOString(), session_id: sessionId
+      });
   }
 }
 
+// --- FIX: ADDED POOL DEDUCTION LOGIC ---
+async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessionId, billableSeconds) {
+    const { data: pool, error } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', poolId).single();
+    if (error || pool.balance < amount) throw new Error('Insufficient pool credits');
+    
+    const newBalance = pool.balance - amount;
+    await supabaseAdmin.from('credit_pools').update({ balance: newBalance }).eq('id', poolId);
+
+    let existingTx = null;
+    if (sessionId) {
+        const { data } = await supabaseAdmin.from('pool_transactions').select('*').eq('session_id', sessionId).eq('pool_id', poolId).eq('type', 'usage').single();
+        existingTx = data;
+    }
+
+    if (existingTx) {
+         const newAmount = existingTx.amount - amount;
+         const timeMatch = existingTx.description.match(/\((\d+)\s*seconds\)/);
+         let totalSeconds = billableSeconds;
+         if (timeMatch && timeMatch[1]) totalSeconds += parseInt(timeMatch[1], 10);
+         await supabaseAdmin.from('pool_transactions').update({
+             amount: newAmount, description: `Automated teardown charge (${totalSeconds} seconds)`
+         }).eq('id', existingTx.id);
+    } else {
+        await supabaseAdmin.from('pool_transactions').insert({
+            pool_id: poolId, server_id: serverId, amount: -amount, type: 'usage',
+            description: `Automated teardown charge (${billableSeconds} seconds)`, session_id: sessionId
+        });
+    }
+}
+
+// --- FIX: ROUTE TO POOL OR PERSONAL WALLET ---
 async function billFinalTime(server, now) {
   if (server.status !== 'Running' && server.status !== 'Starting') return;
   let baseTime = server.last_billed_at ? new Date(server.last_billed_at) : (server.running_since ? new Date(server.running_since) : null);
   if (!baseTime) return;
-  const elapsedSeconds = Math.floor((now - baseTime) / 1000) + (server.runtime_accumulated_seconds || 0);
-  if (elapsedSeconds < 60) return; // Don't bill for less than a minute
-  const hours = elapsedSeconds / 3600;
-  const cost = hours * (server.cost_per_hour || 0);
   
-  const { data: profile } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
-  if (profile) {
-    await supabaseAdmin.from('profiles').update({ credits: profile.credits - cost }).eq('id', server.user_id);
-    await supabaseAdmin.from('credit_transactions').insert({
-      user_id: server.user_id, amount: -cost, type: 'usage', session_id: server.current_session_id, description: `Automated teardown charge (${elapsedSeconds}s)`
-    });
+  const elapsedSeconds = Math.floor((now - baseTime) / 1000) + (server.runtime_accumulated_seconds || 0);
+  if (elapsedSeconds < 60) return; 
+
+  const hours = elapsedSeconds / 3600;
+  const cost = Number((hours * (server.cost_per_hour || 0)).toFixed(4));
+  
+  if (server.pool_id) {
+      try { await deductPoolCredits(supabaseAdmin, server.pool_id, cost, server.id, server.current_session_id, elapsedSeconds); } catch(e){}
+  } else {
+      try { await deductCredits(supabaseAdmin, server.user_id, cost, server.id, server.current_session_id, elapsedSeconds); } catch(e){}
   }
 }
 
@@ -64,30 +122,18 @@ export default async function handler(req, res) {
 
     const authHeader = req.headers.authorization;
     if (!authHeader || authHeader !== `Bearer ${server.rcon_password}`) {
-      console.warn(`[Security] Unauthorized update attempt for ${serverId}`);
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // --- AUTOMATED TEARDOWN (TRIGGERED BY MC-SYNC.SH) ---
     if (sync_complete) {
-      console.log(`[Auto-Stop] Sync complete signal received for ${serverId}`);
-
-      // --- NEW: Development Mode Check ---
       if (server.development_mode) {
-          console.log(`[Auto-Stop] Development Mode ACTIVE. Skipping infrastructure teardown.`);
-          
-          // Update status to 'Maintenance' so UI shows it's not normal, 
-          // but KEEP the Hetzner ID and IP so SSH remains active.
           await supabaseAdmin.from('servers').update({
             status: 'Maintenance', 
-            // Do NOT clear hetzner_id or ipv4
             last_heartbeat_at: now.toISOString(),
-            started_at: null // --- Clear started_at if sync finished ---
+            started_at: null 
           }).eq('id', serverId);
-
           return res.status(200).json({ success: true, message: "Development mode active: Server preserved." });
       }
-      // -----------------------------------
 
       await billFinalTime(server, now);
       await pointToSleeper(server.subdomain);
@@ -97,21 +143,18 @@ export default async function handler(req, res) {
             await fetch(`https://api.hetzner.cloud/v1/servers/${server.hetzner_id}`, {
             method: 'DELETE', headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
             });
-        } catch (e) {
-            console.error(`[Hetzner] Failed to delete server: ${e.message}`);
-        }
+        } catch (e) {}
       }
       
       await supabaseAdmin.from('servers').update({
         status: 'Stopped', hetzner_id: null, ipv4: null, running_since: null,
         last_billed_at: null, runtime_accumulated_seconds: 0, current_session_id: null, last_empty_at: null,
-        started_at: null // --- Clear started_at ---
+        started_at: null 
       }).eq('id', serverId);
       
       return res.status(200).json({ success: true });
     }
 
-    // --- REGULAR STATUS UPDATES & METRICS ---
     const updates = {
       status: status || server.status,
       last_heartbeat_at: now.toISOString(),
@@ -120,18 +163,15 @@ export default async function handler(req, res) {
       players_online: players_online || server.players_online,
     };
 
-    // --- CLEAN UP STARTED_AT IF RUNNING, STOPPED, OR CRASHED ---
     if (status === 'Running' || status === 'Stopped' || status === 'Crashed') {
         updates.started_at = null;
     }
 
-    // Auto-stop logic (if empty for too long)
-    if (status === 'Running' && !server.development_mode) { // Disable auto-stop in dev mode too
+    if (status === 'Running' && !server.development_mode) { 
       if (Number(player_count) > 0) updates.last_empty_at = null;
       else if (!server.last_empty_at) updates.last_empty_at = now.toISOString();
     } else updates.last_empty_at = null;
 
-    // Optional metrics
     if (cpu !== undefined) updates.cpu = Number(cpu.toFixed(1));
     if (memory !== undefined) updates.memory = Number(memory.toFixed(1));
     if (disk !== undefined) updates.disk = Number(disk);
@@ -143,7 +183,6 @@ export default async function handler(req, res) {
     if (tps_5m !== undefined) updates.tps_5m = Number(tps_5m);
     if (tps_15m !== undefined) updates.tps_15m = Number(tps_15m);
 
-    // Runtime tracking logic
     if (status === 'Running') {
       if (!server.running_since) {
         updates.running_since = now.toISOString();
@@ -164,7 +203,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true, server: data });
   } catch (error) {
-    console.error('Unexpected error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

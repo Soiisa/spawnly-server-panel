@@ -12,20 +12,18 @@ const SLEEPER_PROXY_IP = process.env.SLEEPER_PROXY_IP || '91.99.130.49';
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// --- SHARED HELPERS ---
-
 const hetznerDoAction = async (hetznerId, action) => {
   const url = `https://api.hetzner.cloud/v1/servers/${hetznerId}/actions/${action}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${HETZNER_API_TOKEN}`, 'Content-Type': 'application/json' },
   });
-  if (!res.ok) throw new Error(`Hetzner action ${action} failed: ${res.status}`);
+  if (!res.ok) throw new Error(`Hetzner action failed`);
   return res.json();
 };
 
 const waitForServerStatus = async (hetznerId, targetStatus) => {
-  for (let i = 0; i < 20; i++) { // Max ~100 seconds
+  for (let i = 0; i < 20; i++) { 
     const r = await fetch(`https://api.hetzner.cloud/v1/servers/${hetznerId}`, {
       headers: { Authorization: `Bearer ${HETZNER_API_TOKEN}` }
     });
@@ -54,6 +52,67 @@ const deleteCloudflareRecords = async (subdomain) => {
   }
 };
 
+// --- FIX: ADDED DEDUCT CREDITS LOGIC ---
+async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds) {
+  const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
+  if (error || profile.credits < amount) throw new Error('Insufficient credits');
+
+  const newCredits = profile.credits - amount;
+  await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
+
+  let existingTx = null;
+  if (sessionId) {
+      const { data } = await supabaseAdmin.from('credit_transactions').select('*').eq('session_id', sessionId).eq('type', 'usage').single();
+      existingTx = data;
+  }
+
+  if (existingTx) {
+      const newAmount = existingTx.amount - amount;
+      const timeMatch = existingTx.description.match(/\((\d+)\s*seconds\)/);
+      let totalSeconds = billableSeconds;
+      if (timeMatch && timeMatch[1]) totalSeconds += parseInt(timeMatch[1], 10);
+      await supabaseAdmin.from('credit_transactions').update({
+        amount: newAmount, description: `Auto-stop charge (${totalSeconds} seconds)`
+      }).eq('id', existingTx.id);
+  } else {
+      await supabaseAdmin.from('credit_transactions').insert({
+          user_id: userId, amount: -amount, type: 'usage',
+          description: `Auto-stop charge (${billableSeconds} seconds)`, created_at: new Date().toISOString(), session_id: sessionId
+      });
+  }
+}
+
+// --- FIX: ADDED POOL DEDUCTION LOGIC ---
+async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessionId, billableSeconds) {
+    const { data: pool, error } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', poolId).single();
+    if (error || pool.balance < amount) throw new Error('Insufficient pool credits');
+    
+    const newBalance = pool.balance - amount;
+    await supabaseAdmin.from('credit_pools').update({ balance: newBalance }).eq('id', poolId);
+
+    let existingTx = null;
+    if (sessionId) {
+        const { data } = await supabaseAdmin.from('pool_transactions').select('*').eq('session_id', sessionId).eq('pool_id', poolId).eq('type', 'usage').single();
+        existingTx = data;
+    }
+
+    if (existingTx) {
+         const newAmount = existingTx.amount - amount;
+         const timeMatch = existingTx.description.match(/\((\d+)\s*seconds\)/);
+         let totalSeconds = billableSeconds;
+         if (timeMatch && timeMatch[1]) totalSeconds += parseInt(timeMatch[1], 10);
+         await supabaseAdmin.from('pool_transactions').update({
+             amount: newAmount, description: `Auto-stop charge (${totalSeconds} seconds)`
+         }).eq('id', existingTx.id);
+    } else {
+        await supabaseAdmin.from('pool_transactions').insert({
+            pool_id: poolId, server_id: serverId, amount: -amount, type: 'usage',
+            description: `Auto-stop charge (${billableSeconds} seconds)`, session_id: sessionId
+        });
+    }
+}
+
+// --- FIX: ROUTE TO POOL OR PERSONAL WALLET ---
 async function billRemainingTime(server) {
   if (server.status !== 'Running') return;
   const now = new Date();
@@ -64,19 +123,14 @@ async function billRemainingTime(server) {
   if (elapsedSeconds < 60) return;
 
   const hours = elapsedSeconds / 3600;
-  const cost = hours * server.cost_per_hour;
+  const cost = Number((hours * server.cost_per_hour).toFixed(4));
 
-  const { data: profile } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
-  if (profile) {
-    await supabaseAdmin.from('profiles').update({ credits: profile.credits - cost }).eq('id', server.user_id);
-    await supabaseAdmin.from('credit_transactions').insert({
-      user_id: server.user_id, amount: -cost, type: 'usage',
-      description: `Auto-stop charge (${elapsedSeconds}s)`, session_id: server.current_session_id
-    });
+  if (server.pool_id) {
+      try { await deductPoolCredits(supabaseAdmin, server.pool_id, cost, server.id, server.current_session_id, elapsedSeconds); } catch(e){}
+  } else {
+      try { await deductCredits(supabaseAdmin, server.user_id, cost, server.id, server.current_session_id, elapsedSeconds); } catch(e){}
   }
 }
-
-// --- MAIN CRON HANDLER ---
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -92,8 +146,6 @@ export default async function handler(req, res) {
     .not('last_empty_at', 'is', null);
 
   if (error) return res.status(500).json({ error: 'Database error' });
-
-  console.log(`[Auto-Stop] Checking ${servers?.length || 0} potentially empty servers...`);
   
   const now = new Date();
   let stoppedCount = 0;
@@ -103,13 +155,9 @@ export default async function handler(req, res) {
     const emptyMinutes = (now - lastEmpty) / 1000 / 60;
 
     if (emptyMinutes >= server.auto_stop_timeout) {
-      console.log(`[Auto-Stop] Processing full teardown for ${server.id}`);
-
       try {
-        // 1. Billing
         await billRemainingTime(server);
 
-        // 2. Infrastructure Shutdown
         if (server.hetzner_id) {
           await hetznerDoAction(server.hetzner_id, 'shutdown');
           await waitForServerStatus(server.hetzner_id, 'off'); 
@@ -118,7 +166,6 @@ export default async function handler(req, res) {
           });
         }
 
-        // 3. DNS Cleanup & Redirect
         if (server.subdomain) {
           await deleteCloudflareRecords(server.subdomain);
           await fetch(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records`, {
@@ -130,26 +177,22 @@ export default async function handler(req, res) {
           });
         }
 
-        // 4. Update Database
         await supabaseAdmin.from('servers').update({
           status: 'Stopped', hetzner_id: null, ipv4: null, last_billed_at: null,
           runtime_accumulated_seconds: 0, running_since: null, current_session_id: null,
           last_empty_at: null
         }).eq('id', server.id);
 
-        // [NEW] 5. Insert Audit Log
         await supabaseAdmin.from('server_audit_logs').insert({
           server_id: server.id,
-          user_id: null, // System action
+          user_id: null, 
           action_type: 'AUTO_STOP',
           details: `Server auto-stopped after ${server.auto_stop_timeout} mins of inactivity.`,
           created_at: new Date().toISOString()
         });
 
         stoppedCount++;
-      } catch (err) {
-        console.error(`[Auto-Stop] Failed teardown for ${server.id}:`, err.message);
-      }
+      } catch (err) {}
     }
   }
 

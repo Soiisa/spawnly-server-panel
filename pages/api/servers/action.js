@@ -243,7 +243,8 @@ const deleteS3ServerFolderFast = async (serverId) => {
   }
 };
 
-async function deductCredits(supabaseAdmin, userId, amount, description, sessionId) {
+// --- MODIFIED: ADDED DEDUCT CREDITS AGGREGATION FOR USERS ---
+async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds) {
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
   if (error || profile.credits < amount) {
     throw new Error('Insufficient credits');
@@ -252,16 +253,59 @@ async function deductCredits(supabaseAdmin, userId, amount, description, session
   const newCredits = profile.credits - amount;
   await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
 
-  await supabaseAdmin.from('credit_transactions').insert({
-    user_id: userId,
-    amount: -amount,
-    type: 'usage',
-    description,
-    created_at: new Date().toISOString(),
-    session_id: sessionId
-  });
+  let existingTx = null;
+  if (sessionId) {
+      const { data } = await supabaseAdmin.from('credit_transactions').select('*').eq('session_id', sessionId).eq('type', 'usage').single();
+      existingTx = data;
+  }
+
+  if (existingTx) {
+      const newAmount = existingTx.amount - amount;
+      const timeMatch = existingTx.description.match(/\((\d+)\s*seconds\)/);
+      let totalSeconds = billableSeconds;
+      if (timeMatch && timeMatch[1]) totalSeconds += parseInt(timeMatch[1], 10);
+      await supabaseAdmin.from('credit_transactions').update({
+        amount: newAmount, description: `Final runtime charge for server ${serverId} (${totalSeconds} seconds)`
+      }).eq('id', existingTx.id);
+  } else {
+      await supabaseAdmin.from('credit_transactions').insert({
+          user_id: userId, amount: -amount, type: 'usage',
+          description: `Final runtime charge for server ${serverId} (${billableSeconds} seconds)`, created_at: new Date().toISOString(), session_id: sessionId
+      });
+  }
 }
 
+// --- NEW: ADDED POOL DEDUCTION LOGIC ---
+async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessionId, billableSeconds) {
+    const { data: pool, error } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', poolId).single();
+    if (error || pool.balance < amount) throw new Error('Insufficient pool credits');
+    
+    const newBalance = pool.balance - amount;
+    await supabaseAdmin.from('credit_pools').update({ balance: newBalance }).eq('id', poolId);
+
+    let existingTx = null;
+    if (sessionId) {
+        const { data } = await supabaseAdmin.from('pool_transactions').select('*').eq('session_id', sessionId).eq('pool_id', poolId).eq('type', 'usage').single();
+        existingTx = data;
+    }
+
+    if (existingTx) {
+         const newAmount = existingTx.amount - amount;
+         const timeMatch = existingTx.description.match(/\((\d+)\s*seconds\)/);
+         let totalSeconds = billableSeconds;
+         if (timeMatch && timeMatch[1]) totalSeconds += parseInt(timeMatch[1], 10);
+         await supabaseAdmin.from('pool_transactions').update({
+             amount: newAmount, description: `Final runtime charge for server ${serverId} (${totalSeconds} seconds)`
+         }).eq('id', existingTx.id);
+    } else {
+        await supabaseAdmin.from('pool_transactions').insert({
+            pool_id: poolId, server_id: serverId, amount: -amount, type: 'usage',
+            description: `Final runtime charge for server ${serverId} (${billableSeconds} seconds)`, session_id: sessionId
+        });
+    }
+}
+
+// --- MODIFIED: ADDED ROUTING BETWEEN POOL WALLET AND PERSONAL WALLET ---
 async function billRemainingTime(supabaseAdmin, server) {
   // We check for Running, but if we are KILLING a stuck server (Initializing/Starting), 
   // we might check if billing started (last_billed_at exists).
@@ -282,10 +326,18 @@ async function billRemainingTime(supabaseAdmin, server) {
   if (elapsedSeconds < 60) return;
 
   const hours = elapsedSeconds / 3600;
-  const cost = hours * server.cost_per_hour;
+  const cost = Number((hours * server.cost_per_hour).toFixed(4));
 
-  // BILL THE OWNER (server.user_id), regardless of who triggered the action
-  await deductCredits(supabaseAdmin, server.user_id, cost, `Final runtime charge for server ${server.id} (${elapsedSeconds} seconds)`, server.current_session_id);
+  // Determine which wallet to bill based on pool_id
+  if (server.pool_id) {
+      try {
+          await deductPoolCredits(supabaseAdmin, server.pool_id, cost, server.id, server.current_session_id, elapsedSeconds);
+      } catch (e) { console.warn(`[billRemainingTime] Pool Error: ${e.message}`); }
+  } else {
+      try {
+          await deductCredits(supabaseAdmin, server.user_id, cost, server.id, server.current_session_id, elapsedSeconds);
+      } catch (e) { console.error(`[billRemainingTime] Wallet Error: ${e.message}`); }
+  }
 
   try {
     await supabaseAdmin.from('servers').update({ last_billed_at: now.toISOString(), runtime_accumulated_seconds: 0 }).eq('id', server.id);
