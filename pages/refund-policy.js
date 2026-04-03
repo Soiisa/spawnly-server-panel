@@ -15,7 +15,7 @@ export default function RefundPolicy() {
         <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
           
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Refund Policy</h1>
-          <p className="text-gray-500 dark:text-gray-400 mb-8">Effective Date: {new Date().toLocaleDateString()}</p>
+          <p className="text-gray-500 dark:text-gray-400 mb-8">Effective Date: April 3, 2026</p>
 
           <div className="prose prose-slate dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 space-y-6">
             

@@ -5,7 +5,8 @@ import Footer from "../components/Footer";
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 export default function TermsOfService() {
-  const lastUpdated = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  // Hardcoded to reflect the actual date the text was finalized
+  const lastUpdated = "April 3, 2026";
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
