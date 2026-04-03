@@ -26,22 +26,15 @@ export default async function handler(req, res) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // --- HANDLES BOTH OLD CHECKOUT AND NEW PAYMENT INTENTS ---
   if (event.type === 'checkout.session.completed' || event.type === 'payment_intent.succeeded') {
     const object = event.data.object;
     
-    // In PaymentIntent, metadata is directly on the object. 
-    // In CheckoutSession, it is also on the object.
     const userId = object.metadata.user_id;
+    const waiverTimestamp = object.metadata.refund_waiver_timestamp;
     
-    // Note: Checkout Session amounts are integers (cents), and PaymentIntent amounts are also integers (cents).
-    // If the event is payment_intent, the amount is in 'amount'.
-    // If checkout_session, it is 'amount_total'.
     const amountInCents = object.amount || object.amount_total;
     const amountEuro = amountInCents / 100; 
 
-    // Calculate Credits + Bonus using the JSON config
-    // 1 Euro cent = 1 Credit
     const baseCredits = amountInCents; 
     const bonusTier = bonusesConfig.bonuses.find(b => amountEuro >= b.min_euro);
     const bonusCredits = bonusTier ? Math.floor(baseCredits * (bonusTier.bonus_percent / 100)) : 0;
@@ -55,11 +48,17 @@ export default async function handler(req, res) {
       
       await supabaseAdmin.from('profiles').update({ credits: newBalance }).eq('id', userId);
 
+      // Append the exact timestamp of the waiver agreement into the permanent database record
+      let transactionDesc = `Stripe Deposit: €${amountEuro.toFixed(2)}${bonusCredits > 0 ? ` (+${bonusCredits} Bonus)` : ''}`;
+      if (waiverTimestamp) {
+        transactionDesc += ` | EU Waiver Agreed: ${waiverTimestamp}`;
+      }
+
       await supabaseAdmin.from('credit_transactions').insert({
         user_id: userId,
         amount: totalCreditsToAdd,
         type: 'deposit',
-        description: `Stripe Deposit: €${amountEuro.toFixed(2)}${bonusCredits > 0 ? ` (+${bonusCredits} Bonus)` : ''}`,
+        description: transactionDesc,
         created_at: new Date().toISOString()
       });
       

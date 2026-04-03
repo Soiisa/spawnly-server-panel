@@ -242,7 +242,11 @@ export default function CreditsPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ amount: depositAmount }),
+        // We now send the waiver state in the payload
+        body: JSON.stringify({ 
+          amount: depositAmount, 
+          refund_waiver_agreed: agreedToRefundWaiver 
+        }),
       });
 
       const data = await response.json();

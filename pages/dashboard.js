@@ -63,8 +63,15 @@ export default function Dashboard() {
   const [isLoadingServers, setIsLoadingServers] = useState(true);
   const [error, setError] = useState(null);
   
-  // --- NEW STATE FOR TOUR ---
+  // --- STATE FOR TOUR ---
   const [runTour, setRunTour] = useState(false);
+  const [tourPending, setTourPending] = useState(false);
+
+  // --- NEW STATE FOR USERNAME MODAL ---
+  const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [savingUsername, setSavingUsername] = useState(false);
+  const [usernameError, setUsernameError] = useState("");
 
   // Polling and mounted refs
   const pollingRef = useRef(false);
@@ -86,17 +93,29 @@ export default function Dashboard() {
       } else {
         setUser(data.session.user);
         
-        // --- CHANGED: Fetch credits AND tutorial status ---
+        // Fetch credits, tutorial status, AND username
         const { data: profile } = await supabase
             .from('profiles')
-            .select('credits, tutorial_completed')
+            .select('credits, tutorial_completed, username')
             .eq('id', data.session.user.id)
             .single();
 
         if (profile) {
             setCredits(profile.credits || 0);
-            // Check if tutorial is needed
-            if (!profile.tutorial_completed) {
+        }
+
+        // --- NEW: Verify Username Exists ---
+        const hasUsername = data.session.user.user_metadata?.username || profile?.username;
+        
+        if (!hasUsername) {
+            setShowUsernameModal(true);
+            // Delay the tour if they also need to complete it
+            if (profile && !profile.tutorial_completed) {
+                setTourPending(true);
+            }
+        } else {
+            // Check if tutorial is needed normally
+            if (profile && !profile.tutorial_completed) {
                 setRunTour(true);
             }
         }
@@ -223,14 +242,12 @@ export default function Dashboard() {
     setIsLoadingServers(true);
     
     try {
-        // 1. Fetch Owned Servers
         const { data: owned } = await supabase
           .from('servers')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
 
-        // 2. Fetch Shared Servers (via permissions)
         const { data: sharedPerms } = await supabase
           .from('server_permissions')
           .select('server:servers(*)')
@@ -242,7 +259,6 @@ export default function Dashboard() {
               .map(p => ({ ...p.server, isShared: true })) 
           : [];
 
-        // 3. Merge & Sort
         const allServers = [...(owned || []), ...shared].sort((a, b) => 
           new Date(b.created_at) - new Date(a.created_at)
         );
@@ -259,6 +275,43 @@ export default function Dashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
+  };
+
+  // --- NEW: Handle Saving the Username ---
+  const handleSaveUsername = async (e) => {
+    e.preventDefault();
+    setSavingUsername(true);
+    setUsernameError("");
+
+    try {
+      // Update Supabase Auth Metadata
+      const { data: authData, error: authError } = await supabase.auth.updateUser({
+        data: { username: usernameInput }
+      });
+
+      if (authError) throw authError;
+
+      // Update Public Profile Table
+      if (user?.id) {
+        await supabase
+          .from('profiles')
+          .update({ username: usernameInput })
+          .eq('id', user.id);
+      }
+
+      setUser(authData.user);
+      setShowUsernameModal(false);
+
+      // Trigger tour if it was waiting for them to set a username
+      if (tourPending) {
+        setRunTour(true);
+        setTourPending(false);
+      }
+    } catch (err) {
+      setUsernameError(err.message || "An error occurred while saving your username.");
+    } finally {
+      setSavingUsername(false);
+    }
   };
 
   const handleCreateServer = async (serverData) => {
@@ -325,7 +378,6 @@ export default function Dashboard() {
         },
         body: JSON.stringify({ serverId, action: 'delete' }),
       });
-      // Explicitly remove from UI if it was shared (realtime might not catch it for deletions)
       setServers(prev => prev.filter(s => s.id !== serverId));
     } catch (err) {
       setError(t('messages.error_delete')); 
@@ -374,8 +426,6 @@ export default function Dashboard() {
     }
   };
 
-  // --- Render Helpers ---
-
   if (loading) return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
@@ -389,17 +439,63 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={isLoadingServers} onLogout={handleLogout} />
 
-      {/* --- ADD TOUR COMPONENT HERE --- */}
       <DashboardTour 
          run={runTour} 
          userId={user?.id} 
          onFinish={() => setRunTour(false)} 
       />
 
-      {/* CHANGED: max-w-7xl -> w-full to make it occupy full width */}
+      {/* --- NEW USERNAME SETUP MODAL --- */}
+      {showUsernameModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl max-w-md w-full border border-gray-200 dark:border-slate-700">
+            <div className="mx-auto w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mb-4">
+              <UsersIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 text-center">
+              {t('setup.username_title', 'Choose a Username')}
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 text-center">
+              {t('setup.username_desc', 'Welcome! Please pick a username to continue using your dashboard.')}
+            </p>
+            
+            <form onSubmit={handleSaveUsername} className="space-y-5">
+              {usernameError && (
+                <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-900/50 text-sm text-red-600 dark:text-red-300 text-center">
+                  {usernameError}
+                </div>
+              )}
+              
+              <div>
+                <label htmlFor="usernameInput" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {t('setup.username_label', 'Username')}
+                </label>
+                <input
+                  id="usernameInput"
+                  type="text"
+                  required
+                  minLength={3}
+                  maxLength={20}
+                  value={usernameInput}
+                  onChange={(e) => setUsernameInput(e.target.value)}
+                  className="block w-full px-4 py-3 border-gray-300 dark:border-slate-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white sm:text-sm border shadow-sm"
+                  placeholder="e.g. ServerMaster99"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingUsername || usernameInput.trim().length < 3}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-50"
+              >
+                {savingUsername ? t('setup.saving', 'Saving...') : t('setup.save_btn', 'Continue')}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
-        
-        {/* Error Toast */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex justify-between items-center shadow-sm">
             <span className="flex items-center gap-2">
@@ -410,7 +506,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 tour-stats">
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><ServerIcon className="w-6 h-6" /></div>
@@ -442,7 +537,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Action Bar */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('headers.your_servers')}</h2> 
           <button
@@ -454,7 +548,6 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Server Grid / Empty State */}
         {isLoadingServers && servers.length === 0 ? (
           <div className="py-20 flex justify-center"><div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent" /></div>
         ) : servers.length === 0 ? (
@@ -469,14 +562,12 @@ export default function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {servers.map((server) => {
-              // --- USE HELPER HERE with 't' ---
               const { software, version } = getDisplayInfo(server, t);
               const isShared = server.isShared === true;
               
               return (
               <div key={server.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col group hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors">
                 
-                {/* Card Header */}
                 <div className="p-6 border-b border-gray-100 dark:border-slate-700">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
@@ -514,7 +605,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Card Actions */}
                 <div className="p-4 bg-gray-50 dark:bg-slate-700 flex items-center gap-2 mt-auto">
                   {server.status === "Stopped" ? (
                     <button 
@@ -554,7 +644,6 @@ export default function Dashboard() {
                     <AdjustmentsHorizontalIcon className="w-5 h-5" />
                   </Link>
 
-                  {/* Hide Delete for Shared Servers */}
                   {!isShared && (
                     <button
                       onClick={() => handleDeleteServer(server.id)}
@@ -572,7 +661,6 @@ export default function Dashboard() {
         )}
       </main>
 
-      {/* Create Server Modal */}
       {showModal && (
         <CreateServerForm
           onClose={() => setShowModal(false)}
@@ -586,7 +674,7 @@ export default function Dashboard() {
   );
 }
 
-// --- REQUIRED FOR NEXT-I18NEXT (Server Side Translation Loading) ---
+// --- REQUIRED FOR NEXT-I18NEXT ---
 export async function getStaticProps({ locale }) {
   return {
     props: {
