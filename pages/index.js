@@ -1,4 +1,7 @@
 // pages/index.js
+import { useEffect } from "react";
+import { useRouter } from "next/router";
+import { supabase } from "../lib/supabaseClient";
 import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -21,6 +24,19 @@ import {
 
 export default function Home() {
   const { t } = useTranslation('landing');
+  const router = useRouter();
+
+  // --- NEW: Auto-redirect logged-in users ---
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push('/dashboard');
+      }
+    };
+    checkSession();
+  }, [router]);
+  // ------------------------------------------
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 selection:bg-indigo-500 selection:text-white">
