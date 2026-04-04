@@ -248,7 +248,6 @@ const AllocationsManager = ({ serverId, t }) => {
 
 // --- Main Component ---
 
-// --- CHANGED: Added isAdmin prop ---
 export default function ServerPropertiesEditor({ server, isAdmin }) {
   const { t } = useTranslation('server'); 
   
@@ -361,10 +360,8 @@ export default function ServerPropertiesEditor({ server, isAdmin }) {
     const load = async () => {
       try {
         setIsLoading(true);
-        // --- AUTH FIX: Get Token ---
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("No active session");
-        // --------------------------
 
         const res = await fetch(`/api/servers/${server.id}/properties`, {
            headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -475,7 +472,7 @@ export default function ServerPropertiesEditor({ server, isAdmin }) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
@@ -490,7 +487,6 @@ export default function ServerPropertiesEditor({ server, isAdmin }) {
           />
         </div>
         
-        {/* --- CHANGED: Only show Raw/Visual toggle if Admin --- */}
         {isAdmin && (
           <div className="flex items-center gap-2 w-full md:w-auto bg-gray-100 dark:bg-slate-700 p-1 rounded-xl">
             <button
@@ -566,7 +562,6 @@ export default function ServerPropertiesEditor({ server, isAdmin }) {
               </div>
             )}
 
-            {/* --- NEW: Allocations Manager (Inside Visual View) --- */}
             {!searchQuery && (
               <AllocationsManager serverId={server.id} t={t} />
             )}
@@ -582,7 +577,7 @@ export default function ServerPropertiesEditor({ server, isAdmin }) {
             initial={{ y: 100, opacity: 0 }} 
             animate={{ y: 0, opacity: 1 }} 
             exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border border-indigo-200 dark:border-indigo-900 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 max-w-lg w-[90%]"
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border border-indigo-200 dark:border-indigo-900 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 max-w-lg w-[90%]"
           >
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('properties.ui.unsaved_title')}</p> 
@@ -609,15 +604,15 @@ export default function ServerPropertiesEditor({ server, isAdmin }) {
         )}
       </AnimatePresence>
 
-      {/* Feedback Toasts (No change needed) */}
+      {/* Feedback Toasts */}
       <AnimatePresence>
         {message && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-6 right-6 z-50 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-24 right-6 z-[60] bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
             <CheckCircleIcon className="w-5 h-5" /> {message}
           </motion.div>
         )}
         {error && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-6 right-6 z-50 bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-24 right-6 z-[60] bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
             <ExclamationCircleIcon className="w-5 h-5" /> {error}
           </motion.div>
         )}
