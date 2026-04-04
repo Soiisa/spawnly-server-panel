@@ -1,196 +1,171 @@
 // pages/admin/reports.js
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
-import Head from 'next/head';
-import Header from '../../components/ServersHeader';
-import Footer from '../../components/ServersFooter';
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { 
-  UserPlusIcon, 
-  ServerStackIcon, 
-  CurrencyDollarIcon, 
+  ArrowLeftIcon, 
+  UsersIcon,
+  ServerIcon,
+  CurrencyDollarIcon,
   ClockIcon,
-  ArrowPathIcon,
-  DocumentChartBarIcon
-} from '@heroicons/react/24/outline';
+  ChartBarIcon
+} from "@heroicons/react/24/outline";
 
 export default function AdminReports() {
   const router = useRouter();
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  
-  const [period, setPeriod] = useState('daily'); // 'daily', 'weekly', 'monthly'
+  const [period, setPeriod] = useState('daily');
   const [reportData, setReportData] = useState(null);
-  const [fetchingReport, setFetchingReport] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-        return;
-      }
-      setUser(session.user);
+    fetchReport(period);
+  }, [period]);
 
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
+  const fetchReport = async (selectedPeriod) => {
+    setLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return router.push('/login');
 
-      if (!prof || !prof.is_admin) {
-        router.push('/dashboard');
-        return;
-      }
-      setProfile(prof);
-      setLoading(false);
-    };
-    init();
-  }, [router]);
-
-  useEffect(() => {
-    if (profile?.is_admin) {
-      fetchReport();
-    }
-  }, [period, profile]);
-
-  const fetchReport = async () => {
-    setFetchingReport(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/admin/reports?period=${period}`, {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setReportData(data);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setFetchingReport(false);
+        const res = await fetch(`/api/admin/reports?period=${selectedPeriod}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+
+        if (res.status === 403) return router.push('/');
+        if (res.ok) {
+          const data = await res.json();
+          setReportData(data);
+        }
+    } catch (e) {
+        console.error("Failed to fetch reports", e);
     }
+    setLoading(false);
   };
 
   const formatRuntime = (seconds) => {
-    if (!seconds) return '0h 0m';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return `${h}h ${m}m`;
+      if (!seconds) return '0h 0m';
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      return `${hours}h ${minutes}m`;
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-      </div>
-    );
+  if (loading && !reportData) {
+      return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-mono">Generating Report...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col font-sans">
-      <Head><title>Admin Reports - Spawnly</title></Head>
-      <Header user={user} credits={profile?.credits} onLogout={handleLogout} />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white flex flex-col">
+      
+      {/* Header Bar */}
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+        <div className="flex items-center gap-4">
+          <Link 
+            href="/admin"
+            className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors font-medium text-sm"
+          >
+            <ArrowLeftIcon className="h-4 w-4" />
+            Back to Dashboard
+          </Link>
+          <div className="h-6 w-px bg-slate-300 dark:bg-slate-700"></div>
+          <h1 className="text-xl font-bold tracking-tight hidden sm:block flex items-center gap-2">
+            <ChartBarIcon className="w-6 h-6 text-indigo-500 inline-block mr-2" />
+            Growth Reports
+          </h1>
+        </div>
 
-      <main className="flex-grow w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
-              <DocumentChartBarIcon className="w-8 h-8 text-indigo-600" />
-              Performance Reports
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              View daily, weekly, and monthly aggregate statistics for Spawnly.
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm">
-            {['daily', 'weekly', 'monthly'].map((p) => (
+        {/* Time Period Toggle */}
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+          {['daily', 'weekly', 'monthly'].map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition-all ${
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all capitalize ${
                   period === p 
-                  ? 'bg-indigo-600 text-white shadow-md' 
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                    ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' 
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                 }`}
               >
                 {p}
               </button>
-            ))}
-          </div>
+          ))}
+        </div>
+      </header>
+      
+      <main className="flex-grow w-full max-w-6xl mx-auto px-6 py-12">
+         
+         <div className="mb-8">
+             <h2 className="text-3xl font-black tracking-tight capitalize text-slate-900 dark:text-white">
+                 {period} Resume
+             </h2>
+             <p className="text-slate-500 dark:text-slate-400 mt-1">
+                 Performance metrics for the last {period === 'daily' ? '24 hours' : period === 'weekly' ? '7 days' : '30 days'}.
+             </p>
+         </div>
+
+        {/* Report Metric Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">New Users</h3>
+                    <div className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+                        <UsersIcon className="w-6 h-6" />
+                    </div>
+                </div>
+                <p className="text-4xl font-black text-slate-900 dark:text-white">
+                    {loading ? '...' : reportData?.newUsers}
+                </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">New Servers</h3>
+                    <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                        <ServerIcon className="w-6 h-6" />
+                    </div>
+                </div>
+                <p className="text-4xl font-black text-slate-900 dark:text-white">
+                    {loading ? '...' : reportData?.newServers}
+                </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Deposits (CR)</h3>
+                    <div className="p-2 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg">
+                        <CurrencyDollarIcon className="w-6 h-6" />
+                    </div>
+                </div>
+                <p className="text-4xl font-black text-slate-900 dark:text-white">
+                    {loading ? '...' : `+${reportData?.revenue?.toFixed(2)}`}
+                </p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Runtime</h3>
+                    <div className="p-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
+                        <ClockIcon className="w-6 h-6" />
+                    </div>
+                </div>
+                <p className="text-4xl font-black text-slate-900 dark:text-white">
+                    {loading ? '...' : formatRuntime(reportData?.totalRuntimeSeconds)}
+                </p>
+            </div>
+
         </div>
 
-        {fetchingReport ? (
-          <div className="flex justify-center py-24">
-            <ArrowPathIcon className="w-10 h-10 text-indigo-600 animate-spin" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            
-            {/* New Users */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-gray-200 dark:border-slate-700 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">New Users</h3>
-                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg">
-                  <UserPlusIcon className="w-6 h-6" />
-                </div>
-              </div>
-              <p className="text-4xl font-black text-gray-900 dark:text-white">
-                {reportData?.newUsers.toLocaleString()}
-              </p>
-            </div>
-
-            {/* New Servers */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-gray-200 dark:border-slate-700 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">New Servers</h3>
-                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg">
-                  <ServerStackIcon className="w-6 h-6" />
-                </div>
-              </div>
-              <p className="text-4xl font-black text-gray-900 dark:text-white">
-                {reportData?.newServers.toLocaleString()}
-              </p>
-            </div>
-
-            {/* Revenue */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-gray-200 dark:border-slate-700 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Deposits (Cr)</h3>
-                <div className="p-2 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg">
-                  <CurrencyDollarIcon className="w-6 h-6" />
-                </div>
-              </div>
-              <p className="text-4xl font-black text-gray-900 dark:text-white">
-                {reportData?.revenueCredits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-            </div>
-
-            {/* Total Runtime */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-gray-200 dark:border-slate-700 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Runtime</h3>
-                <div className="p-2 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-lg">
-                  <ClockIcon className="w-6 h-6" />
-                </div>
-              </div>
-              <p className="text-4xl font-black text-gray-900 dark:text-white">
-                {formatRuntime(reportData?.totalRuntimeSeconds)}
-              </p>
-            </div>
-
-          </div>
-        )}
       </main>
-      
-      <Footer />
     </div>
   );
+}
+
+export async function getStaticProps({ locale }) {
+  return {
+    props: {
+      ...(await serverSideTranslations(locale, ['common'])),
+    },
+  };
 }

@@ -124,6 +124,14 @@ export default function AdminDashboard() {
             </Link>
 
             <Link 
+                href="/admin/reports" 
+                className="bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
+            >
+                <ChartBarIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Reports</span>
+            </Link>
+
+            <Link 
                 href="/admin/live" 
                 target="_blank"
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm shadow-lg shadow-indigo-500/20"

@@ -1,100 +1,92 @@
 // pages/api/admin/reports.js
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  // 1. Authenticate Admin Request
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const token = authHeader.substring(7);
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
+  if (!authHeader) return res.status(401).json({ error: 'No token provided' });
+  const token = authHeader.split(' ')[1];
+  
   const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-  if (authError || !user) return res.status(401).json({ error: 'Unauthorized' });
+  if (authError || !user) return res.status(401).json({ error: 'Invalid token' });
 
   const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
+    .from('profiles').select('is_admin').eq('id', user.id).single();
 
   if (!profile?.is_admin) return res.status(403).json({ error: 'Forbidden' });
 
-  // 2. Define Time Range
   const { period = 'daily' } = req.query;
-  const now = new Date();
-  let startDate = new Date();
   
-  if (period === 'daily') startDate.setDate(now.getDate() - 1);
-  else if (period === 'weekly') startDate.setDate(now.getDate() - 7);
-  else if (period === 'monthly') startDate.setMonth(now.getMonth() - 1);
-  else startDate.setDate(now.getDate() - 1);
-
-  const startDateIso = startDate.toISOString();
+  // Calculate Date Threshold
+  const now = new Date();
+  let threshold = new Date();
+  if (period === 'daily') threshold.setDate(now.getDate() - 1);
+  else if (period === 'weekly') threshold.setDate(now.getDate() - 7);
+  else if (period === 'monthly') threshold.setMonth(now.getMonth() - 1);
+  
+  const thresholdIso = threshold.toISOString();
 
   try {
-    // 3. Aggregate New Users
-    const { count: newUsersCount } = await supabaseAdmin
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startDateIso);
+    // 1. New Users
+    const { count: newUsers } = await supabaseAdmin
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', thresholdIso);
 
-    // 4. Aggregate New Servers
-    const { count: newServersCount } = await supabaseAdmin
-      .from('servers')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startDateIso);
+    // 2. New Servers
+    const { count: newServers } = await supabaseAdmin
+        .from('servers')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', thresholdIso);
 
-    // 5. Aggregate Revenue (Deposits are positive amounts)
+    // 3. Revenue (Deposits via Stripe/Manual)
     const { data: deposits } = await supabaseAdmin
-      .from('credit_transactions')
-      .select('amount')
-      .gte('created_at', startDateIso)
-      .gt('amount', 0); 
+        .from('credit_transactions')
+        .select('amount')
+        .eq('type', 'deposit')
+        .gte('created_at', thresholdIso);
 
-    const totalRevenueCredits = deposits?.reduce((sum, tx) => sum + tx.amount, 0) || 0;
+    const totalRevenue = deposits ? deposits.reduce((sum, tx) => sum + tx.amount, 0) : 0;
 
-    // 6. Aggregate Total Runtime (Parse seconds from usage transaction descriptions)
-    const { data: usages } = await supabaseAdmin
-      .from('credit_transactions')
-      .select('description')
-      .gte('created_at', startDateIso)
-      .eq('type', 'usage');
+    // 4. Total Runtime (Extracted from usage transaction descriptions)
+    const { data: personalUsage } = await supabaseAdmin
+        .from('credit_transactions')
+        .select('description')
+        .eq('type', 'usage')
+        .gte('created_at', thresholdIso);
 
-    const { data: poolUsages } = await supabaseAdmin
-      .from('pool_transactions')
-      .select('description')
-      .gte('created_at', startDateIso)
-      .eq('type', 'usage');
+    const { data: poolUsage } = await supabaseAdmin
+        .from('pool_transactions')
+        .select('description')
+        .eq('type', 'usage')
+        .gte('created_at', thresholdIso);
 
     let totalSeconds = 0;
     const parseSeconds = (desc) => {
-      if (!desc) return 0;
-      const match = desc.match(/\((\d+)\s*seconds\)/);
-      return match ? parseInt(match[1], 10) : 0;
+        if (!desc) return 0;
+        const match = desc.match(/\((\d+)\s*seconds\)/);
+        return match ? parseInt(match[1], 10) : 0;
     };
 
-    usages?.forEach(tx => { totalSeconds += parseSeconds(tx.description); });
-    poolUsages?.forEach(tx => { totalSeconds += parseSeconds(tx.description); });
+    personalUsage?.forEach(tx => totalSeconds += parseSeconds(tx.description));
+    poolUsage?.forEach(tx => totalSeconds += parseSeconds(tx.description));
 
-    // Return the response payload
     res.status(200).json({
-      period,
-      newUsers: newUsersCount || 0,
-      newServers: newServersCount || 0,
-      revenueCredits: totalRevenueCredits,
+      newUsers: newUsers || 0,
+      newServers: newServers || 0,
+      revenue: totalRevenue,
       totalRuntimeSeconds: totalSeconds,
+      period
     });
-    
+
   } catch (err) {
-    console.error('Reports generation error:', err);
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.error("Report Generation Error:", err);
+    res.status(500).json({ error: 'Failed to generate report' });
   }
 }
