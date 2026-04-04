@@ -45,14 +45,24 @@ export default async function handler(req, res) {
         .select('*', { count: 'exact', head: true })
         .gte('created_at', thresholdIso);
 
-    // 3. Revenue (Deposits via Stripe/Manual)
+    // 3. Revenue (Parse exact Euros from the description to ignore bonuses)
     const { data: deposits } = await supabaseAdmin
         .from('credit_transactions')
-        .select('amount')
+        .select('description')
         .eq('type', 'deposit')
         .gte('created_at', thresholdIso);
 
-    const totalRevenue = deposits ? deposits.reduce((sum, tx) => sum + tx.amount, 0) : 0;
+    let totalRevenueEuros = 0;
+    if (deposits) {
+        deposits.forEach(tx => {
+            // Extracts the number after the € symbol. 
+            // Example match: "Stripe Deposit: €50.00 (+1000 Bonus)" -> "50.00"
+            const match = tx.description?.match(/€([\d.]+)/);
+            if (match && match[1]) {
+                totalRevenueEuros += parseFloat(match[1]);
+            }
+        });
+    }
 
     // 4. Total Runtime (Extracted from usage transaction descriptions)
     const { data: personalUsage } = await supabaseAdmin
@@ -80,7 +90,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       newUsers: newUsers || 0,
       newServers: newServers || 0,
-      revenue: totalRevenue,
+      revenue: totalRevenueEuros,
       totalRuntimeSeconds: totalSeconds,
       period
     });

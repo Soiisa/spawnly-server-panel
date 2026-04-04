@@ -133,13 +133,13 @@ export default function AdminReports() {
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Deposits (CR)</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Deposits (EUR)</h3>
                     <div className="p-2 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg">
                         <CurrencyDollarIcon className="w-6 h-6" />
                     </div>
                 </div>
                 <p className="text-4xl font-black text-slate-900 dark:text-white">
-                    {loading ? '...' : `+${reportData?.revenue?.toFixed(2)}`}
+                    {loading ? '...' : `+€${reportData?.revenue?.toFixed(2)}`}
                 </p>
             </div>
 
