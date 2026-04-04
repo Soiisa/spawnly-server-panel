@@ -13,7 +13,8 @@ import {
   UsersIcon,
   ServerIcon,
   ChatBubbleLeftRightIcon,
-  DocumentTextIcon // <--- ADDED ICON
+  DocumentTextIcon,
+  ChartBarIcon
 } from "@heroicons/react/24/outline";
 
 export default function AdminDashboard() {
