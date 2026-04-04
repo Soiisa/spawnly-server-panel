@@ -297,23 +297,43 @@ export default function CreditsPage() {
     const groups = [];
     const sessionMap = new Map();
     const singles = [];
+    
     transactions.forEach((tx) => {
       if (tx.session_id && tx.type === 'usage') {
         if (!sessionMap.has(tx.session_id)) sessionMap.set(tx.session_id, []);
         sessionMap.get(tx.session_id).push(tx);
       } else singles.push(tx);
     });
+    
     sessionMap.forEach((txs, sessionId) => {
       txs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       const totalAmount = txs.reduce((sum, t) => sum + t.amount, 0);
       const totalSeconds = txs.reduce((sum, t) => sum + (parseUsage(t.description).seconds || 0), 0);
       const { serverId } = parseUsage(txs[0].description);
-      groups.push({ id: sessionId, isSession: true, date: txs[txs.length - 1].created_at, startDate: txs[0].created_at, endDate: txs[txs.length - 1].created_at, amount: totalAmount, details: txs, meta: { serverId, totalSeconds } });
+      
+      // --- BUG FIX ---
+      // Add the total elapsed runtime (totalSeconds) to the start date 
+      // to calculate the actual visual end date.
+      const startDateStr = txs[0].created_at;
+      const calculatedEndDate = new Date(new Date(startDateStr).getTime() + (totalSeconds * 1000)).toISOString();
+
+      groups.push({ 
+        id: sessionId, 
+        isSession: true, 
+        date: txs[txs.length - 1].created_at, 
+        startDate: startDateStr, 
+        endDate: calculatedEndDate, 
+        amount: totalAmount, 
+        details: txs, 
+        meta: { serverId, totalSeconds } 
+      });
     });
+    
     singles.forEach(tx => {
       const { serverId, seconds } = parseUsage(tx.description);
       groups.push({ id: tx.id, isSession: false, date: tx.created_at, amount: tx.amount, type: tx.type, description: tx.description, meta: { serverId, seconds } });
     });
+    
     return groups.sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
