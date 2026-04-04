@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { read, write } from 'nbtify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
+import { useTranslation } from 'next-i18next';
 import { 
   CloudArrowDownIcon, 
   CloudArrowUpIcon, 
@@ -16,7 +16,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function WorldTab({ server, token }) {
-  const { t } = useTranslation('server'); // <--- INITIALIZED
+  const { t } = useTranslation('server');
   
   // --- State ---
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
@@ -38,7 +38,7 @@ export default function WorldTab({ server, token }) {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingAction, setLoadingAction] = useState(null); // 'download', 'upload', 'generate', 'options'
+  const [loadingAction, setLoadingAction] = useState(null); 
 
   const isServerStopped = server?.status === 'Stopped';
 
@@ -52,7 +52,7 @@ export default function WorldTab({ server, token }) {
   // --- Handlers ---
 
   const handleDownload = async () => {
-    if (!isServerStopped) return showError(t('world.errors.server_must_stop')); // <--- TRANSLATED
+    if (!isServerStopped) return showError(t('world.errors.server_must_stop'));
     
     setLoadingAction('download');
     setError(null);
@@ -71,7 +71,7 @@ export default function WorldTab({ server, token }) {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      showSuccess(t('world.download.started')); // <--- TRANSLATED
+      showSuccess(t('world.download.started'));
     } catch (err) {
       showError(err.message);
     } finally {
@@ -103,7 +103,7 @@ export default function WorldTab({ server, token }) {
       showError(err.message);
     } finally {
       setLoadingAction(null);
-      event.target.value = ''; // Reset input
+      event.target.value = '';
     }
   };
 
@@ -142,7 +142,6 @@ export default function WorldTab({ server, token }) {
       
       const content = await res.arrayBuffer();
       const nbtData = await read(new Uint8Array(content), { compression: 'gzip', endian: 'big' });
-      // Clean parsing via JSON round-trip for BigInt safety
       const parsed = JSON.parse(JSON.stringify(nbtData.data, bigIntReplacer, 2), bigIntReviver);
       
       setLevelData(parsed);
@@ -180,25 +179,23 @@ export default function WorldTab({ server, token }) {
   const handleLevelDataChange = (path, value) => {
     const parts = path.split('.');
     setLevelData((prev) => {
-      const newData = { ...prev }; // Shallow copy
+      const newData = { ...prev }; 
       let current = newData;
       
       for (let i = 0; i < parts.length - 1; i++) {
-        current = current[parts[i]] = { ...current[parts[i]] }; // Deep copy path
+        current = current[parts[i]] = { ...current[parts[i]] }; 
       }
       
       const lastKey = parts[parts.length - 1];
       let typedValue = value;
 
-      // Type safety for NBT specific fields
       if (path === 'Data.RandomSeed') {
         try { typedValue = BigInt(value); } catch { typedValue = 0n; }
       } else if (['Data.SpawnX', 'Data.SpawnY', 'Data.SpawnZ', 'Data.Difficulty'].includes(path)) {
         typedValue = parseInt(value) || 0;
       } else if (['Data.hardcore', 'Data.allowCommands', 'Data.MapFeatures'].includes(path)) {
-        typedValue = value ? 1 : 0; // Boolean to Byte/Int
+        typedValue = value ? 1 : 0; 
       } else if (path.startsWith('Data.GameRules.') || path.startsWith('Data.game_rules.')) {
-        // Detect current type to preserve format (Int vs String)
         const currentVal = current[lastKey];
         if (typeof currentVal === 'number') {
            typedValue = value ? 1 : 0;
@@ -217,7 +214,6 @@ export default function WorldTab({ server, token }) {
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
-  // --- Constants for UI ---
   const WORLD_TYPES = [
     { value: 'default', label: t('world.generate.types.default') },
     { value: 'superflat', label: t('world.generate.types.superflat') },
@@ -226,7 +222,6 @@ export default function WorldTab({ server, token }) {
     { value: 'single_biome', label: t('world.generate.types.single_biome') },
   ];
 
-  // Helper to resolve the game rules object and path
   const getGameRulesInfo = () => {
     if (!levelData?.Data) return { rules: null, path: '' };
     if (levelData.Data.GameRules) return { rules: levelData.Data.GameRules, path: 'Data.GameRules' };
@@ -237,7 +232,7 @@ export default function WorldTab({ server, token }) {
   const { rules: gameRules, path: gameRulesPath } = getGameRulesInfo();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       
       {/* Warning Banner */}
       {!isServerStopped && (
@@ -348,15 +343,15 @@ export default function WorldTab({ server, token }) {
         </button>
       </div>
 
-      {/* --- Feedback Toasts --- */}
+      {/* --- Feedback Toasts (Z-INDEX FIXED) --- */}
       <AnimatePresence>
         {error && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-6 right-6 z-50 bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-24 right-6 z-[60] bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
             <ExclamationTriangleIcon className="w-5 h-5" /> {error}
           </motion.div>
         )}
         {success && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-6 right-6 z-50 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-24 right-6 z-[60] bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
             <CheckCircleIcon className="w-5 h-5" /> {success}
           </motion.div>
         )}
@@ -367,7 +362,7 @@ export default function WorldTab({ server, token }) {
         {isGenerateModalOpen && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           >
             <motion.div 
               initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
@@ -437,7 +432,7 @@ export default function WorldTab({ server, token }) {
         {isOptionsOpen && levelData && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           >
             <motion.div 
               initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
