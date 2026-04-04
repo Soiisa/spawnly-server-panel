@@ -78,15 +78,17 @@ export default async function handler(req, res) {
         
         const transporter = nodemailer.createTransport({
           host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || '465', 10),
+          port: parseInt(process.env.SMTP_PORT || '587', 10),
           secure: parseInt(process.env.SMTP_PORT, 10) === 465, 
           auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS,
           },
+          connectionTimeout: 10000, 
+          greetingTimeout: 10000,
         });
 
-        console.log("6. Verifying SMTP Connection (This is where it often hangs)...");
+        console.log("6. Verifying SMTP Connection...");
         try {
             await transporter.verify();
             console.log("✅ SMTP Connection Verified successfully!");
@@ -103,9 +105,14 @@ export default async function handler(req, res) {
         console.log("✅ HTML Template read successfully.");
 
         console.log(`8. Sending Email to: ${userEmail}...`);
+        
+        // Ensure we extract the domain correctly if they change the from email
+        const senderDomain = process.env.SMTP_FROM_EMAIL ? process.env.SMTP_FROM_EMAIL.split('@')[1] : 'spawnly.net';
+
         const info = await transporter.sendMail({
           from: `"Spawnly Billing" <${process.env.SMTP_FROM_EMAIL}>`,
           to: userEmail,
+          replyTo: `no-reply@${senderDomain}`, // <--- THIS FORCES REPLIES TO GO TO NO-REPLY
           subject: 'Sua Fatura / Your Invoice - Spawnly',
           html: htmlTemplate,
           attachments: [
