@@ -20,8 +20,8 @@ export default async function handler(req, res) {
 
     const { amount } = req.body; // Amount in Euros from slider
 
-    if (!amount || isNaN(amount) || amount < 3 || amount > 50) {
-      return res.status(400).json({ error: 'Amount must be between 3€ and 50€.' });
+    if (!amount || isNaN(amount) || amount < 5 || amount > 50) {
+      return res.status(400).json({ error: 'Amount must be between 5€ and 50€.' });
     }
 
     // Calculate Bonus logic
