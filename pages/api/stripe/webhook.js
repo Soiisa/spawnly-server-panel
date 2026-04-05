@@ -2,6 +2,9 @@ import { stripe } from '../../../lib/stripe';
 import { createClient } from '@supabase/supabase-js';
 import { buffer } from 'micro'; 
 import bonusesConfig from '../../../lib/stripeBonuses.json';
+import nodemailer from 'nodemailer';
+import fs from 'fs';
+import path from 'path';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -43,7 +46,8 @@ export default async function handler(req, res) {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     try {
-      const { data: profile } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
+      // 1. Update Database
+      const { data: profile } = await supabaseAdmin.from('profiles').select('credits, email').eq('id', userId).single();
       const newBalance = (profile?.credits || 0) + totalCreditsToAdd;
       
       await supabaseAdmin.from('profiles').update({ credits: newBalance }).eq('id', userId);
@@ -63,6 +67,44 @@ export default async function handler(req, res) {
       });
       
       console.log(`✅ Success: Added ${totalCreditsToAdd} credits to user ${userId}`);
+
+      // 2. Send Confirmation Email
+      if (profile?.email) {
+          try {
+              console.log(`📧 Sending confirmation email to ${profile.email}...`);
+              
+              const transporter = nodemailer.createTransport({
+                  host: process.env.SMTP_HOST,
+                  port: parseInt(process.env.SMTP_PORT || '587', 10),
+                  secure: parseInt(process.env.SMTP_PORT, 10) === 465, 
+                  auth: {
+                    user: process.env.SMTP_USER,
+                    pass: process.env.SMTP_PASS,
+                  },
+              });
+
+              const templatePath = path.join(process.cwd(), 'public', 'emails', 'purchase_confirmation.html');
+              let htmlTemplate = fs.readFileSync(templatePath, 'utf8');
+              
+              // Replace placeholder with formatted amount
+              htmlTemplate = htmlTemplate.replace('{{CREDITS_AMOUNT}}', totalCreditsToAdd.toLocaleString());
+
+              await transporter.sendMail({
+                  from: `"Spawnly Billing" <${process.env.SMTP_FROM_EMAIL}>`,
+                  to: profile.email,
+                  replyTo: process.env.SMTP_FROM_EMAIL, // Allow them to reply directly to support
+                  subject: 'Payment Successful - Credits Added to Spawnly',
+                  html: htmlTemplate,
+              });
+              
+              console.log(`✅ Confirmation email sent!`);
+          } catch (emailErr) {
+              console.error('❌ Failed to send confirmation email:', emailErr.message);
+              // We do NOT throw here, because we don't want to tell Stripe the webhook failed 
+              // just because the email failed. The credits were already added successfully.
+          }
+      }
+
     } catch (err) {
       console.error('❌ DB Error:', err.message);
       return res.status(500).json({ error: err.message });
