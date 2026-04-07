@@ -67,6 +67,16 @@ function App({ Component, pageProps }) {
 
   useEffect(() => {
     const checkMaintenanceAndAdmin = async () => {
+      // --- NEW: Check environment variable for maintenance mode ---
+      const isMaintenanceEnabled = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
+
+      if (!isMaintenanceEnabled) {
+        setIsMaintenance(false);
+        setLoadingAuth(false);
+        return;
+      }
+      // ------------------------------------------------------------
+
       // Allow public pages to bypass maintenance
       if (ALLOWED_PAGES.includes(router.pathname)) {
         setIsMaintenance(false);
