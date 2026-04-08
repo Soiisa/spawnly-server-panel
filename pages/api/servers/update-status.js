@@ -30,7 +30,6 @@ async function pointToSleeper(subdomain) {
   } catch (e) {}
 }
 
-// --- FIX: ADDED DEDUCT CREDITS LOGIC ---
 async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds) {
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
   if (error || profile.credits < amount) throw new Error('Insufficient credits');
@@ -60,7 +59,6 @@ async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId,
   }
 }
 
-// --- FIX: ADDED POOL DEDUCTION LOGIC ---
 async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessionId, billableSeconds) {
     const { data: pool, error } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', poolId).single();
     if (error || pool.balance < amount) throw new Error('Insufficient pool credits');
@@ -90,7 +88,6 @@ async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessio
     }
 }
 
-// --- FIX: ROUTE TO POOL OR PERSONAL WALLET ---
 async function billFinalTime(server, now) {
   if (server.status !== 'Running' && server.status !== 'Starting') return;
   let baseTime = server.last_billed_at ? new Date(server.last_billed_at) : (server.running_since ? new Date(server.running_since) : null);
@@ -155,19 +152,25 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
+    // --- FIX: Prevent premature 'Stopped' overriding 'Provisioning'/'Initializing' ---
+    let nextStatus = status || server.status;
+    if (nextStatus === 'Stopped' && ['Provisioning', 'Initializing', 'Starting'].includes(server.status)) {
+        nextStatus = server.status; // Preserve the booting state
+    }
+
     const updates = {
-      status: status || server.status,
+      status: nextStatus,
       last_heartbeat_at: now.toISOString(),
       error_message: reporterError || null,
       player_count: player_count !== undefined ? Number(player_count) : server.player_count,
       players_online: players_online || server.players_online,
     };
 
-    if (status === 'Running' || status === 'Stopped' || status === 'Crashed') {
+    if (nextStatus === 'Running' || nextStatus === 'Stopped' || nextStatus === 'Crashed') {
         updates.started_at = null;
     }
 
-    if (status === 'Running' && !server.development_mode) { 
+    if (nextStatus === 'Running' && !server.development_mode) { 
       if (Number(player_count) > 0) updates.last_empty_at = null;
       else if (!server.last_empty_at) updates.last_empty_at = now.toISOString();
     } else updates.last_empty_at = null;
@@ -183,7 +186,7 @@ export default async function handler(req, res) {
     if (tps_5m !== undefined) updates.tps_5m = Number(tps_5m);
     if (tps_15m !== undefined) updates.tps_15m = Number(tps_15m);
 
-    if (status === 'Running') {
+    if (nextStatus === 'Running') {
       if (!server.running_since) {
         updates.running_since = now.toISOString();
         if (!server.last_billed_at) updates.last_billed_at = now.toISOString();

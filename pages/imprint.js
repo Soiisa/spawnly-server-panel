@@ -23,12 +23,12 @@ export default function Imprint() {
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Service Provider</h2>
               <p>
                 <strong>Spawnly</strong><br />
-                [YOUR FULL LEGAL NAME] (Empresário em Nome Individual)
+                Rodrigo Santos Sousa (Empresário em Nome Individual)
               </p>
               <p className="mt-2">
                 <strong>Address:</strong><br />
-                [YOUR P.O. BOX OR VIRTUAL OFFICE ADDRESS]<br />
-                [POSTAL CODE] [CITY]<br />
+                Rua Ponte de Anta Nº 264 3º Esq<br />
+                4500-088 Espinho<br />
                 Portugal
               </p>
             </section>
@@ -46,7 +46,10 @@ export default function Imprint() {
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Legal Information</h2>
               <p>
-                <strong>VAT ID (NIF):</strong> [YOUR PORTUGUESE NIF]
+                <strong>VAT ID (NIF):</strong> 259112500
+              </p>
+              <p className="text-sm mt-2">
+                Regime de Isenção de IVA ao abrigo do Artigo 53.º do CIVA.
               </p>
             </section>
 
@@ -56,6 +59,11 @@ export default function Imprint() {
               <p className="mb-4">
                 <strong>Electronic Complaints Book (Livro de Reclamações Eletrónico):</strong><br />
                 Consumers can submit complaints via the official Portuguese platform: <a href="https://www.livroreclamacoes.pt" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">www.livroreclamacoes.pt</a>.
+              </p>
+              <p className="mb-4">
+                <strong>Alternative Dispute Resolution (RAL):</strong><br />
+                In case of dispute, the consumer may resort to an Alternative Dispute Resolution Entity: 
+                CICAP - Centro de Informação de Consumo e Arbitragem do Porto (<a href="https://www.cicap.pt" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">www.cicap.pt</a>).
               </p>
               <p>
                 <strong>EU Online Dispute Resolution (ODR):</strong><br />
