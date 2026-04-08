@@ -98,7 +98,7 @@ export default function Dashboard() {
             .from('profiles')
             .select('credits, tutorial_completed, username')
             .eq('id', data.session.user.id)
-            .single();
+            .maybeSingle(); // Changed from single() to maybeSingle() to prevent 406 Errors
 
         if (profile) {
             setCredits(profile.credits || 0);
@@ -233,11 +233,6 @@ export default function Dashboard() {
     }, 3000);
   };
 
-  const fetchUserCredits = async (userId) => {
-    const { data } = await supabase.from('profiles').select('credits').eq('id', userId).single();
-    if (data) setCredits(data.credits || 0);
-  };
-
   const fetchServers = async (userId) => {
     setIsLoadingServers(true);
     
@@ -277,26 +272,45 @@ export default function Dashboard() {
     router.push("/login");
   };
 
-  // --- NEW: Handle Saving the Username ---
+  // --- NEW: Handle Saving the Username with Uniqueness Check ---
   const handleSaveUsername = async (e) => {
     e.preventDefault();
     setSavingUsername(true);
     setUsernameError("");
 
     try {
-      // Update Supabase Auth Metadata
+      // 1. Check if username is already taken by another user
+      const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('username', usernameInput) // Case insensitive check
+        .maybeSingle();
+
+      if (existingUser && existingUser.id !== user.id) {
+        throw new Error(t('setup.username_taken', 'This username is already taken. Please choose another.'));
+      }
+
+      // 2. Update Supabase Auth Metadata
       const { data: authData, error: authError } = await supabase.auth.updateUser({
         data: { username: usernameInput }
       });
 
       if (authError) throw authError;
 
-      // Update Public Profile Table
+      // 3. Update Public Profile Table
       if (user?.id) {
-        await supabase
+        const { error: dbError } = await supabase
           .from('profiles')
           .update({ username: usernameInput })
           .eq('id', user.id);
+          
+        // Handle constraint violation just in case they snuck past the check
+        if (dbError) {
+          if (dbError.code === '23505') {
+            throw new Error(t('setup.username_taken', 'This username is already taken. Please choose another.'));
+          }
+          throw dbError;
+        }
       }
 
       setUser(authData.user);

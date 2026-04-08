@@ -94,7 +94,7 @@ function App({ Component, pageProps }) {
           .from('profiles')
           .select('is_admin') 
           .eq('id', user.id)
-          .single();
+          .maybeSingle(); // Changed from single() to maybeSingle() to fix 406 Not Acceptable error
 
         if (profile?.is_admin) {
           setIsMaintenance(false); // Admin bypasses the maintenance block

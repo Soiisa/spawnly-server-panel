@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import { EnvelopeIcon, LockClosedIcon, UserIcon } from "@heroicons/react/24/outline"; // <--- Added UserIcon
+import { EnvelopeIcon, LockClosedIcon, UserIcon } from "@heroicons/react/24/outline"; 
 import { useTranslation, Trans } from "next-i18next"; 
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
 
 export default function Register() {
   const { t } = useTranslation('auth'); 
-  const [username, setUsername] = useState(""); // <--- Added State
+  const [username, setUsername] = useState(""); 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -23,7 +23,19 @@ export default function Register() {
     setBusy(true);
     setMessage("");
 
-    // <--- Updated signUp to include username metadata
+    // --- NEW: Check if username is already taken to avoid duplicate names
+    const { data: existingUser } = await supabase
+      .from('profiles')
+      .select('id')
+      .ilike('username', username)
+      .maybeSingle();
+
+    if (existingUser) {
+      setMessage(t('username_taken', 'This username is already taken. Please choose another.'));
+      setBusy(false);
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -118,7 +130,6 @@ export default function Register() {
                 </div>
               </div>
 
-              {/* --- NEW USERNAME INPUT START --- */}
               <div>
                 <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   {t('username_label')} 
@@ -142,7 +153,6 @@ export default function Register() {
                   />
                 </div>
               </div>
-              {/* --- NEW USERNAME INPUT END --- */}
 
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
