@@ -6,7 +6,8 @@
     "dev": "next dev -p 3002",
     "build": "next build",
     "start": "next start -p 3001",
-    "start:sleeper": "node scripts/sleeper.js"
+    "start:sleeper": "node scripts/sleeper.js",
+    "postbuild": "next-sitemap"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.879.0",
@@ -34,6 +35,7 @@
     "nbtify": "^2.2.0",
     "next": "^15.4.6",
     "next-i18next": "^15.4.3",
+    "next-sitemap": "^4.2.3",
     "node-ssh": "^13.2.1",
     "nodemailer": "^8.0.4",
     "rcon-client": "^4.2.5",

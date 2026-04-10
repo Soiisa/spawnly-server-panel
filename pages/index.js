@@ -6,7 +6,8 @@ import Link from "next/link";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { useTranslation } from "next-i18next"; 
-import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import Head from 'next/head';
 import { 
   RocketLaunchIcon, 
   CpuChipIcon, 
@@ -40,6 +41,20 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 selection:bg-indigo-500 selection:text-white">
+      {/* --- SEO META TAGS --- */}
+      <Head>
+        <title>Spawnly | Premium Game Server Hosting</title>
+        <meta name="description" content="Spawnly offers high-performance, affordable, and reliable game server hosting. Instantly deploy your Minecraft, Rust, and game servers today." />
+        <meta name="keywords" content="Spawnly, Spawnly server hosting, Minecraft server hosting, game server hosting, cheap server hosting" />
+        
+        {/* Open Graph / Social Media Tags */}
+        <meta property="og:title" content="Spawnly | Premium Game Server Hosting" />
+        <meta property="og:description" content="High-performance game server hosting made easy." />
+        <meta property="og:url" content="https://spawnly.net" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Spawnly" />
+      </Head>
+
       <Navbar />
 
       <main className="flex-grow">
