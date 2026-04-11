@@ -1076,26 +1076,43 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
       }
     }
 
-    const payload = {
-      name: serverRow.name,
-      server_type: serverType,
-      image: '342669261',
-      user_data: sanitizedUserData,
-      ssh_keys: sshKeysToUse,
-      location: 'nbg1',
-    };
+    // Define the locations to try in order of preference
+    const locationsToTry = ['nbg1', 'fsn1', 'hel1'];
+    let createRes = null;
+    let lastError = null;
 
-    let createRes;
-    try {
-      createRes = await axios.post(`${HETZNER_API_BASE}/servers`, payload, {
-        headers: {
-          Authorization: `Bearer ${HETZNER_TOKEN}`,
-          'Content-Type': 'application/json',
-        }
-      });
-    } catch (postErr) {
-      const errMsg = postErr.response ? JSON.stringify(postErr.response.data) : postErr.message;
-      return res.status(502).json({ error: 'Hetzner create failed', detail: errMsg });
+    for (const loc of locationsToTry) {
+      const payload = {
+        name: serverRow.name,
+        server_type: serverType,
+        image: '342669261',
+        user_data: sanitizedUserData,
+        ssh_keys: sshKeysToUse,
+        location: loc,
+      };
+
+      try {
+        console.log(`[Provision] Attempting to create server in location: ${loc}`);
+        createRes = await axios.post(`${HETZNER_API_BASE}/servers`, payload, {
+          headers: {
+            Authorization: `Bearer ${HETZNER_TOKEN}`,
+            'Content-Type': 'application/json',
+          }
+        });
+        console.log(`[Provision] Successfully created server in location: ${loc}`);
+        break; // Success! Exit the loop.
+      } catch (postErr) {
+        lastError = postErr;
+        const errMsg = postErr.response ? postErr.response.data : postErr.message;
+        console.warn(`[Provision] Failed to create in ${loc}:`, JSON.stringify(errMsg));
+        // If it fails, the loop continues to the next location in the array
+      }
+    }
+
+    // If it failed in all locations, return the final error
+    if (!createRes) {
+      const errMsg = lastError.response ? JSON.stringify(lastError.response.data) : lastError.message;
+      return res.status(502).json({ error: 'Hetzner create failed in all locations', detail: errMsg });
     }
 
     const createJson = createRes.data;
