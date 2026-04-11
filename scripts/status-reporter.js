@@ -4,8 +4,8 @@ const WebSocket = require('ws');
 const Query = require('minecraft-query');
 const url = require('url');
 const os = require('os');
-const fs = require('fs'); // Added fs
-const path = require('path'); // Added path
+const fs = require('fs'); 
+const path = require('path'); 
 
 const SERVER_ID = process.env.SERVER_ID || 'unknown';
 const QUERY_PORT = parseInt(process.env.QUERY_PORT) || 25565;
@@ -82,18 +82,24 @@ function getSystemMetrics() {
 
 function getMinecraftStatus() {
   try {
-    // 1. Check if the wrapper process is actually alive as a safety guard
-    const procCheck = execSync('ps aux | grep server-wrapper.js | grep -v grep | wc -l', { encoding: 'utf8' }).trim();
-    if (parseInt(procCheck) === 0) return 'Stopped';
+    const stateFileExists = fs.existsSync(STATE_FILE);
+    let savedState = null;
 
-    // 2. Read the state file written by server-wrapper.js
-    if (fs.existsSync(STATE_FILE)) {
-      const state = fs.readFileSync(STATE_FILE, 'utf8').trim();
-      return state || 'Starting';
+    if (stateFileExists) {
+      savedState = fs.readFileSync(STATE_FILE, 'utf8').trim();
+    }
+
+    // 1. Check if the wrapper process is actually alive
+    const procCheck = execSync('ps aux | grep server-wrapper.js | grep -v grep | wc -l', { encoding: 'utf8' }).trim();
+    
+    // 2. Race condition fix: If process is 0, but no state file exists yet, the VPS is still in its initial boot sequence.
+    if (parseInt(procCheck) === 0) {
+      if (!stateFileExists) return 'Starting'; 
+      return 'Stopped';
     }
     
-    // Fallback: if process is running but file is missing, assume starting
-    return 'Starting'; 
+    // Fallback to the saved state, or 'Starting' if it's currently empty
+    return savedState || 'Starting'; 
   } catch (e) {
     return 'Stopped';
   }
@@ -159,8 +165,11 @@ async function broadcastStatus() {
   }
 }
 
-setInterval(broadcastStatus, 8000);
-broadcastStatus();
+// Add a slight initial delay to let server-wrapper breathe before the first broadcast
+setTimeout(() => {
+  setInterval(broadcastStatus, 8000);
+  broadcastStatus();
+}, 2000);
 
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));

@@ -14,7 +14,7 @@ const SLEEPER_PORT = 25565;
 const SLEEPER_SECRET = process.env.SLEEPER_SECRET; // Must match .env on Next.js
 
 // --- MAINTENANCE TOGGLE ---
-const MAINTENANCE_MODE = true; // Set to false to disable server maintenance
+const MAINTENANCE_MODE = false; // Set to false to disable server maintenance
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !SLEEPER_SECRET) {
   console.error("Missing Supabase credentials or SLEEPER_SECRET.");
