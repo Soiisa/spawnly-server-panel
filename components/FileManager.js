@@ -77,7 +77,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
 
   const apiBase = `/api/servers/${server.id}`;
   const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md', '.dat', '.toml'];
-  const maskedItems = ['server.jar', '.git', 'eula.txt', 'file-api.js', 'metrics-server.js', 'properties-api.js', 'status-reporter.js', 'console-server.js', 'startup.sh', 'startup.bat', 'package.json', 'package-lock.json', 'server-installer.jar.log', 'libraries', 'node_modules', 'server-wrapper.js', '.server_status', 'packed-data.zip', 'run.bat', 'run.sh', 'startserver.sh', 'startserver.bat', 'user_jvm_args.txt'].map(item => item.toLowerCase());
+  const maskedItems = ['server.jar', '.git', 'eula.txt', 'file-api.js', 'metrics-server.js', 'properties-api.js', 'status-reporter.js', 'console-server.js', 'startup.sh', 'startup.bat', 'package.json', 'package-lock.json', 'server-installer.jar.log', 'libraries', 'node_modules', 'server-wrapper.js', '.server_status', 'packed-data.zip', 'run.bat', 'run.sh', 'startserver.sh', 'startserver.bat', 'user_jvm_args.txt', '.installed_version', 'vps_system.log'].map(item => item.toLowerCase());
   const specialFiles = ['server.properties'].map(item => item.toLowerCase());
 
   const bigIntReplacer = (key, value) => typeof value === 'bigint' ? value.toString() : value;
