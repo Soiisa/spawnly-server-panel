@@ -5,6 +5,28 @@ const path = require('path');
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const util = require('util');
+
+// --- VPS LOGGING SETUP ---
+const LOG_FILE = '/opt/minecraft/vps_system.log';
+const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+
+console.log = function (...args) {
+  const msg = util.format(...args);
+  const ts = new Date().toISOString();
+  logStream.write(`[${ts}] [server-wrapper] [INFO] ${msg}\n`);
+  originalConsoleLog.apply(console, args);
+};
+
+console.error = function (...args) {
+  const msg = util.format(...args);
+  const ts = new Date().toISOString();
+  logStream.write(`[${ts}] [server-wrapper] [ERROR] ${msg}\n`);
+  originalConsoleError.apply(console, args);
+};
+// -------------------------
 
 // --- Configuration ---
 const PORT = 3006;
@@ -43,11 +65,9 @@ const sendUpdate = async (statusOverride = null) => {
   const logsToSend = logBuffer.join('\n');
   logBuffer = []; 
   
-  // FIX: Accurately track time since last sync so heartbeats are sent when console is empty
   const timeSinceLastSync = Date.now() - lastSyncTime;
   lastSyncTime = Date.now();
 
-  // Only skip if there are no logs, no status change, AND it hasn't been 10 seconds yet.
   if (!logsToSend && !statusOverride && timeSinceLastSync < 10000) return;
 
   try {
@@ -115,8 +135,6 @@ const startServer = () => {
   mcProcess.on('close', async (code) => {
     console.log(`[Wrapper] Process exited with code ${code}`);
     
-    // If exit was clean or we asked for it, stay 'Stopped'. 
-    // If random crash (non-zero code), marked as 'Crashed'.
     const finalStatus = (code !== 0 && code !== null && !isShuttingDown) ? 'Crashed' : 'Stopped';
 
     updateState(finalStatus);
@@ -129,36 +147,27 @@ const processLog = (data, isError) => {
   const line = data.toString().trim();
   if (!line) return;
   
-  console.log(line); 
+  // We use originalConsoleLog here so raw MC logs don't spam vps_system.log
+  originalConsoleLog.apply(console, [line]); 
+  
   logBuffer.push(line);
   if (logBuffer.length > MAX_LOG_LINES) logBuffer.shift();
 
-  // --- OOM DETECTION & AGGRESSIVE KILL ---
   if (line.includes('java.lang.OutOfMemoryError')) {
     console.error('[Wrapper] CRITICAL: OutOfMemoryError detected. Executing aggressive kill...');
-    
-    // 1. Kill the shell wrapper immediately
     if (mcProcess) mcProcess.kill('SIGKILL');
-
-    // 2. Kill the Java process specifically (to prevent zombies)
-    // We use 'pkill -9' matching the 'java' process name owned by the current user
     exec('pkill -9 -u minecraft java', (err) => {
         if (err) console.error('[Wrapper] pkill failed (might already be dead):', err.message);
     });
-    
     return;
   }
-  // ---------------------------------------
 
-  // Startup Detection
   if (currentState === 'Starting') {
     if (line.includes('Done (') || line.includes('RCON running on') || line.includes('Thread RCON Listener started') || line.includes('Listening on')) {
       updateState('Running');
     }
   }
 
-  // FIX: Removed 'Saving chunks' string to prevent false-positive shutdowns.
-  // We now strictly look for standard server shutdown messages.
   if (line.match(/Stopping (the )?server/i)) {
     updateState('Stopping');
   }
@@ -208,7 +217,7 @@ process.on('SIGTERM', () => {
     setTimeout(() => {
       if (mcProcess && !mcProcess.killed) {
           mcProcess.kill('SIGKILL');
-          exec('pkill -9 -u minecraft java'); // Aggressive cleanup on timeout too
+          exec('pkill -9 -u minecraft java'); 
       }
     }, 30000);
   } else {

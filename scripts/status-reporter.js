@@ -6,6 +6,28 @@ const url = require('url');
 const os = require('os');
 const fs = require('fs'); 
 const path = require('path'); 
+const util = require('util');
+
+// --- VPS LOGGING SETUP ---
+const LOG_FILE = '/opt/minecraft/vps_system.log';
+const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+
+console.log = function (...args) {
+  const msg = util.format(...args);
+  const ts = new Date().toISOString();
+  logStream.write(`[${ts}] [status-reporter] [INFO] ${msg}\n`);
+  originalConsoleLog.apply(console, args);
+};
+
+console.error = function (...args) {
+  const msg = util.format(...args);
+  const ts = new Date().toISOString();
+  logStream.write(`[${ts}] [status-reporter] [ERROR] ${msg}\n`);
+  originalConsoleError.apply(console, args);
+};
+// -------------------------
 
 const SERVER_ID = process.env.SERVER_ID || 'unknown';
 const QUERY_PORT = parseInt(process.env.QUERY_PORT) || 25565;
@@ -89,16 +111,13 @@ function getMinecraftStatus() {
       savedState = fs.readFileSync(STATE_FILE, 'utf8').trim();
     }
 
-    // 1. Check if the wrapper process is actually alive
     const procCheck = execSync('ps aux | grep server-wrapper.js | grep -v grep | wc -l', { encoding: 'utf8' }).trim();
     
-    // 2. Race condition fix: If process is 0, but no state file exists yet, the VPS is still in its initial boot sequence.
     if (parseInt(procCheck) === 0) {
       if (!stateFileExists) return 'Starting'; 
       return 'Stopped';
     }
     
-    // Fallback to the saved state, or 'Starting' if it's currently empty
     return savedState || 'Starting'; 
   } catch (e) {
     return 'Stopped';
@@ -126,7 +145,6 @@ async function broadcastStatus() {
         map: stats.map || ''
       };
     } catch (error) {
-      // If we are "Running" but query fails, it might just be the query port isn't ready yet or blocked
       playerData.online_text = 'Online (Querying...)';
     }
   }
@@ -143,7 +161,6 @@ async function broadcastStatus() {
     timestamp: new Date().toISOString()
   };
 
-  // Broadcast only to authenticated clients
   wss.clients.forEach(c => {
     if (c.readyState === WebSocket.OPEN) c.send(JSON.stringify(statusData));
   });
@@ -165,7 +182,6 @@ async function broadcastStatus() {
   }
 }
 
-// Add a slight initial delay to let server-wrapper breathe before the first broadcast
 setTimeout(() => {
   setInterval(broadcastStatus, 8000);
   broadcastStatus();

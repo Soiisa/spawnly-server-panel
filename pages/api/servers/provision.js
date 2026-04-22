@@ -486,6 +486,12 @@ write_files:
     content: |
       #!/bin/bash
       set -u
+      # --- VPS LOGGING SETUP ---
+      LOG_FILE="/opt/minecraft/vps_system.log"
+      touch "$LOG_FILE" && chown minecraft:minecraft "$LOG_FILE" || true
+      exec > >(tee -a "$LOG_FILE") 2>&1
+      echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-sync.sh] Started script execution"
+      # -------------------------
       
       SRC="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
@@ -568,12 +574,21 @@ write_files:
           -d "{\\"serverId\\": \\"${serverId}\\", \\"sync_complete\\": $SYNC_STATUS}" \
           "${appBaseUrl.replace(/\/+$/, '')}/api/servers/update-status" || true
       
+      echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-sync.sh] Finished script execution with exit code $EXIT_CODE"
       exit $EXIT_CODE
+
   - path: /usr/local/bin/mc-sync-from-s3.sh
     permissions: '0755'
     content: |
       #!/bin/bash
       set -eo pipefail
+      # --- VPS LOGGING SETUP ---
+      LOG_FILE="/opt/minecraft/vps_system.log"
+      touch "$LOG_FILE" && chown minecraft:minecraft "$LOG_FILE" || true
+      exec > >(tee -a "$LOG_FILE") 2>&1
+      echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-sync-from-s3.sh] Started script execution"
+      # -------------------------
+
       DEST="/opt/minecraft"
       BUCKET="${S3_BUCKET}"
       SERVER_PATH="servers/${serverId}"
@@ -613,6 +628,8 @@ write_files:
           sudo -u minecraft unzip -o -q packed-data.zip
           rm packed-data.zip
       fi
+      
+      echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-sync-from-s3.sh] Finished script execution"
 
   - path: /usr/local/bin/mc-startup.sh
     permissions: '0755'
@@ -621,6 +638,12 @@ write_files:
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
+      # --- VPS LOGGING SETUP ---
+      LOG_FILE="/opt/minecraft/vps_system.log"
+      touch "$LOG_FILE" && chown minecraft:minecraft "$LOG_FILE" || true
+      exec > >(tee -a "$LOG_FILE") 2>&1
+      echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-startup.sh] Started script execution"
+      # -------------------------
       
       SOFTWARE='${software}'
       DOWNLOAD_URL='${escapedDl}'
@@ -803,6 +826,8 @@ write_files:
       chmod -R u+rwX /opt/minecraft
       chmod +x /opt/minecraft/*.sh || true
       
+      echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-startup.sh] Finished script execution"
+
   - path: /etc/systemd/system/minecraft.service
     permissions: '0644'
     content: |
