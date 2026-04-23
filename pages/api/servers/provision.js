@@ -17,10 +17,10 @@ const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-
 const SLEEPER_SECRET = process.env.SLEEPER_SECRET;
 const DOMAIN_SUFFIX = '.spawnly.net';
 
-// Smarter API URL Resolution
+// Smarter API URL Resolution (Prevents VPS from pinging its own localhost)
 let appUrl = process.env.APP_BASE_URL || process.env.NEXTAUTH_URL;
 if (!appUrl && process.env.VERCEL_URL) appUrl = `https://${process.env.VERCEL_URL}`;
-if (!appUrl) appUrl = 'https://spawnly.net';
+if (!appUrl || appUrl.includes('localhost')) appUrl = 'https://spawnly.net';
 const APP_BASE_URL = appUrl;
 
 const sanitizeYaml = (str) => str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, '');
@@ -351,6 +351,11 @@ AIKAR_FLAGS="-XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -XX:+ParallelRefProcEnable
 
 mkdir -p /opt/minecraft && cd /opt/minecraft
 
+# --- EULA FIX: Guarantee EULA exists to prevent crash ---
+echo "eula=true" > eula.txt
+chown minecraft:minecraft eula.txt
+# --------------------------------------------------------
+
 if [ -f ".installed_version" ] && [ "\$(cat .installed_version)" != "\$SOFTWARE-\$MC_VERSION" ]; then
     echo "\$SOFTWARE-\$MC_VERSION" > .installed_version
     FORCE_INSTALL="true"
@@ -479,7 +484,6 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
     fi
     
     if [ ! -f "server.properties" ]; then
-        echo "eula=true" > eula.txt
         echo -e "enable-rcon=true\\nrcon.port=25575\\nrcon.password=${escapedRconPassword}\\nbroadcast-rcon-to-ops=true\\nserver-port=25565\\nenable-query=true\\nquery.port=25565\\nonline-mode=false\\nmax-players=20\\ndifficulty=easy\\ngamemode=survival\\nspawn-protection=16\\nview-distance=10\\nsimulation-distance=10\\nmotd=A Spawnly Server\\npvp=true\\ngenerate-structures=true\\nmax-world-size=29999984\\nmax-tick-time=-1\\npause-when-empty-seconds=-1" > server.properties
     fi
 fi
