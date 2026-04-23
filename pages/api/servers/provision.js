@@ -736,8 +736,130 @@ write_files:
                       rmdir "$DIR_NAME"
                   fi
               fi
+
+              # --- CURSEFORGE OVERRIDES EXTRACTION ---
+              if [ -d "overrides" ]; then
+                  echo "[Startup] CurseForge 'overrides' found. Moving to root..."
+                  sudo -u minecraft cp -R overrides/* . 2>/dev/null || true
+                  rm -rf overrides
+              fi
+              # ---------------------------------------
+
               if [ -f "user_jvm_args.txt" ]; then rm user_jvm_args.txt; fi
               setup_generic_start_script
+              
+              # --- AUTO-SERVERIFY LOGIC (RAW MODPACKS) ---
+              HAS_EXECUTABLE="false"
+              if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ]; then HAS_EXECUTABLE="true"; fi
+              if ls forge-*.jar >/dev/null 2>&1; then HAS_EXECUTABLE="true"; fi
+
+              if [ "$HAS_EXECUTABLE" = "false" ]; then
+                  echo "[Startup] No server script/jar detected. Attempting Auto-Serverify..."
+                  
+                  DETECTED_MC_VER="${escapedVersion}"
+                  DETECTED_LOADER=""
+                  LOADER_VER=""
+
+                  if [ -f "manifest.json" ]; then
+                      echo "[Startup] Parsing CurseForge manifest.json..."
+                      MANIFEST_MC=$(jq -r '.minecraft.version // empty' manifest.json)
+                      if [ -n "$MANIFEST_MC" ]; then DETECTED_MC_VER="$MANIFEST_MC"; fi
+                      
+                      LOADER_ID=$(jq -r '.minecraft.modLoaders[0].id // empty' manifest.json)
+                      if [[ "$LOADER_ID" == forge-* ]]; then
+                          DETECTED_LOADER="forge"
+                          LOADER_VER="\${LOADER_ID#forge-}"
+                      elif [[ "$LOADER_ID" == neoforge-* ]]; then
+                          DETECTED_LOADER="neoforge"
+                          LOADER_VER="\${LOADER_ID#neoforge-}"
+                      elif [[ "$LOADER_ID" == fabric-* ]]; then
+                          DETECTED_LOADER="fabric"
+                          LOADER_VER="\${LOADER_ID#fabric-}"
+                      fi
+                  elif [ -f "modrinth.index.json" ]; then
+                      echo "[Startup] Parsing modrinth.index.json..."
+                      MANIFEST_MC=$(jq -r '.dependencies.minecraft // empty' modrinth.index.json)
+                      if [ -n "$MANIFEST_MC" ]; then DETECTED_MC_VER="$MANIFEST_MC"; fi
+                      
+                      if jq -e '.dependencies["fabric-loader"]' modrinth.index.json > /dev/null 2>&1; then
+                          DETECTED_LOADER="fabric"
+                      elif jq -e '.dependencies["forge"]' modrinth.index.json > /dev/null 2>&1; then
+                          DETECTED_LOADER="forge"
+                          LOADER_VER=$(jq -r '.dependencies.forge' modrinth.index.json)
+                      elif jq -e '.dependencies["neoforge"]' modrinth.index.json > /dev/null 2>&1; then
+                          DETECTED_LOADER="neoforge"
+                          LOADER_VER=$(jq -r '.dependencies.neoforge' modrinth.index.json)
+                      fi
+                  fi
+                  
+                  if [ -z "$DETECTED_LOADER" ] && [ -d "mods" ]; then
+                      echo "[Startup] Scanning mods folder to guess loader..."
+                      if find mods/ -name "*.jar" | head -n 20 | xargs -I {} unzip -l {} "fabric.mod.json" 2>/dev/null | grep -q "fabric.mod.json"; then
+                          DETECTED_LOADER="fabric"
+                      elif find mods/ -name "*.jar" | head -n 20 | xargs -I {} unzip -l {} "META-INF/mods.toml" 2>/dev/null | grep -q "META-INF/mods.toml"; then
+                          DETECTED_LOADER="forge"
+                      elif find mods/ -name "*.jar" | head -n 20 | xargs -I {} unzip -l {} "META-INF/neoforge.mods.toml" 2>/dev/null | grep -q "neoforge"; then
+                          DETECTED_LOADER="neoforge"
+                      fi
+                  fi
+
+                  if [ -z "$DETECTED_LOADER" ] && [ -d "mods" ]; then
+                      DETECTED_LOADER="forge" 
+                  fi
+
+                  echo "[Startup] Auto-Serverify Decision: Loader=$DETECTED_LOADER, MC_Version=$DETECTED_MC_VER"
+
+                  if [ "$DETECTED_LOADER" = "fabric" ]; then
+                      sudo -u minecraft curl -o fabric-server-launch.jar "https://meta.fabricmc.net/v2/versions/loader/\${DETECTED_MC_VER}/server/jar"
+                      echo "#!/bin/bash" > run.sh
+                      echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar fabric-server-launch.jar nogui" >> run.sh
+                      chmod +x run.sh
+
+                  elif [ "$DETECTED_LOADER" = "forge" ]; then
+                      if [ -z "$LOADER_VER" ]; then
+                          LOADER_VER=$(curl -s https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json | jq -r ".promos[\"\${DETECTED_MC_VER}-latest\"] // empty")
+                      fi
+                      if [ -n "$LOADER_VER" ]; then
+                          FORGE_URL="https://maven.minecraftforge.net/net/minecraftforge/forge/\${DETECTED_MC_VER}-\${LOADER_VER}/forge-\${DETECTED_MC_VER}-\${LOADER_VER}-installer.jar"
+                          sudo -u minecraft wget -O forge-installer.jar "\$FORGE_URL" || true
+                          if [ -f "forge-installer.jar" ]; then
+                              sudo -u minecraft $JAVA_BIN -jar forge-installer.jar --installServer
+                              rm -f forge-installer.jar
+                              
+                              if [ ! -f "run.sh" ]; then
+                                  FORGE_JAR=$(ls forge-*.jar | grep -v installer | head -n 1)
+                                  if [ -n "$FORGE_JAR" ]; then 
+                                      echo "#!/bin/bash" > run.sh
+                                      echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar \$FORGE_JAR nogui" >> run.sh
+                                      chmod +x run.sh
+                                  fi
+                              fi
+                          fi
+                      fi
+
+                  elif [ "$DETECTED_LOADER" = "neoforge" ]; then
+                      if [ -n "$LOADER_VER" ]; then
+                          NEO_URL="https://maven.neoforged.net/releases/net/neoforged/neoforge/\${LOADER_VER}/neoforge-\${LOADER_VER}-installer.jar"
+                          sudo -u minecraft wget -O neo-installer.jar "\$NEO_URL" || true
+                          if [ -f "neo-installer.jar" ]; then
+                              sudo -u minecraft $JAVA_BIN -jar neo-installer.jar --installServer
+                              rm -f neo-installer.jar
+                              
+                              if [ ! -f "run.sh" ]; then
+                                  echo "#!/bin/bash" > run.sh
+                                  echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS @libraries/net/neoforged/neoforge/\${LOADER_VER}/unix_args.txt nogui" >> run.sh
+                                  chmod +x run.sh
+                              fi
+                          fi
+                      fi
+                  fi
+                  
+                  if [ ! -d "mods" ]; then
+                      echo "[Startup] WARNING: Modpack manifest parsed, but no 'mods/' folder exists. You may need to upload the mod files manually via SFTP."
+                  fi
+              fi
+              # --- END AUTO-SERVERIFY LOGIC ---
+
               echo "$AIKAR_FLAGS" >> user_jvm_args.txt
               chown minecraft:minecraft user_jvm_args.txt || true
               
@@ -956,7 +1078,7 @@ runcmd:
   - chown -R minecraft:minecraft /home/minecraft
   
   # --- FIREWALL & DEPENDENCY CONFIGURATION ---
-  - apt-get update && apt-get install -y ufw php-cli php-xml php-mbstring unzip
+  - apt-get update && apt-get install -y ufw php-cli php-xml php-mbstring unzip jq
   - apt-get install -y openjdk-25-jre-headless || true
   - apt-get install -y openjdk-21-jre-headless || true
   - apt-get install -y openjdk-17-jre-headless || true
