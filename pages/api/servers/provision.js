@@ -737,9 +737,9 @@ write_files:
                   fi
               fi
 
-              # --- CURSEFORGE OVERRIDES EXTRACTION ---
+              # --- CURSEFORGE/MODRINTH OVERRIDES EXTRACTION ---
               if [ -d "overrides" ]; then
-                  echo "[Startup] CurseForge 'overrides' found. Moving to root..."
+                  echo "[Startup] Modpack 'overrides' found. Moving to root..."
                   sudo -u minecraft cp -R overrides/* . 2>/dev/null || true
                   rm -rf overrides
               fi
@@ -776,6 +776,11 @@ write_files:
                           DETECTED_LOADER="fabric"
                           LOADER_VER="\${LOADER_ID#fabric-}"
                       fi
+
+                      if [ ! -d "mods" ]; then
+                          echo "[Startup] WARNING: CurseForge client packs do not contain mod files. Please use a Server Pack or upload mods manually."
+                      fi
+
                   elif [ -f "modrinth.index.json" ]; then
                       echo "[Startup] Parsing modrinth.index.json..."
                       MANIFEST_MC=$(jq -r '.dependencies.minecraft // empty' modrinth.index.json)
@@ -783,6 +788,7 @@ write_files:
                       
                       if jq -e '.dependencies["fabric-loader"]' modrinth.index.json > /dev/null 2>&1; then
                           DETECTED_LOADER="fabric"
+                          LOADER_VER=$(jq -r '.dependencies["fabric-loader"]' modrinth.index.json)
                       elif jq -e '.dependencies["forge"]' modrinth.index.json > /dev/null 2>&1; then
                           DETECTED_LOADER="forge"
                           LOADER_VER=$(jq -r '.dependencies.forge' modrinth.index.json)
@@ -790,6 +796,18 @@ write_files:
                           DETECTED_LOADER="neoforge"
                           LOADER_VER=$(jq -r '.dependencies.neoforge' modrinth.index.json)
                       fi
+
+                      echo "[Startup] Downloading Modrinth mods automatically..."
+                      sudo -u minecraft jq -c '.files[] | select(.env == null or .env.server != "unsupported")' modrinth.index.json | while read -r item; do
+                          DL_URL=\$(echo "\$item" | jq -r '.downloads[0]')
+                          FILE_PATH=\$(echo "\$item" | jq -r '.path')
+                          if [ -n "\$DL_URL" ] && [ "\$DL_URL" != "null" ]; then
+                              sudo -u minecraft mkdir -p "\$(dirname "\$FILE_PATH")"
+                              sudo -u minecraft wget -q -O "\$FILE_PATH" "\$DL_URL" &
+                          fi
+                      done
+                      wait
+                      echo "[Startup] Modrinth mod download complete!"
                   fi
                   
                   if [ -z "$DETECTED_LOADER" ] && [ -d "mods" ]; then
@@ -810,14 +828,22 @@ write_files:
                   echo "[Startup] Auto-Serverify Decision: Loader=$DETECTED_LOADER, MC_Version=$DETECTED_MC_VER"
 
                   if [ "$DETECTED_LOADER" = "fabric" ]; then
-                      sudo -u minecraft curl -o fabric-server-launch.jar "https://meta.fabricmc.net/v2/versions/loader/\${DETECTED_MC_VER}/server/jar"
+                      if [ -z "$LOADER_VER" ] || [ "$LOADER_VER" = "null" ]; then
+                          LOADER_VER=\$(curl -s https://meta.fabricmc.net/v2/versions/loader | jq -r '.[0].version')
+                      fi
+                      INSTALLER_VER=\$(curl -s https://meta.fabricmc.net/v2/versions/installer | jq -r '.[0].version')
+                      FABRIC_URL="https://meta.fabricmc.net/v2/versions/loader/\${DETECTED_MC_VER}/\${LOADER_VER}/\${INSTALLER_VER}/server/jar"
+                      
+                      echo "[Startup] Downloading Fabric Server Jar from: \$FABRIC_URL"
+                      sudo -u minecraft curl -o fabric-server-launch.jar "\$FABRIC_URL"
+                      
                       echo "#!/bin/bash" > run.sh
                       echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar fabric-server-launch.jar nogui" >> run.sh
                       chmod +x run.sh
 
                   elif [ "$DETECTED_LOADER" = "forge" ]; then
-                      if [ -z "$LOADER_VER" ]; then
-                          LOADER_VER=$(curl -s https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json | jq -r ".promos[\"\${DETECTED_MC_VER}-latest\"] // empty")
+                      if [ -z "$LOADER_VER" ] || [ "$LOADER_VER" = "null" ]; then
+                          LOADER_VER=\$(curl -s https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json | jq -r ".promos[\"\${DETECTED_MC_VER}-latest\"] // empty")
                       fi
                       if [ -n "$LOADER_VER" ]; then
                           FORGE_URL="https://maven.minecraftforge.net/net/minecraftforge/forge/\${DETECTED_MC_VER}-\${LOADER_VER}/forge-\${DETECTED_MC_VER}-\${LOADER_VER}-installer.jar"
@@ -827,8 +853,8 @@ write_files:
                               rm -f forge-installer.jar
                               
                               if [ ! -f "run.sh" ]; then
-                                  FORGE_JAR=$(ls forge-*.jar | grep -v installer | head -n 1)
-                                  if [ -n "$FORGE_JAR" ]; then 
+                                  FORGE_JAR=\$(ls forge-*.jar | grep -v installer | head -n 1)
+                                  if [ -n "\$FORGE_JAR" ]; then 
                                       echo "#!/bin/bash" > run.sh
                                       echo "$JAVA_BIN -Xms1G -Xmx${heapGb}G $AIKAR_FLAGS -jar \$FORGE_JAR nogui" >> run.sh
                                       chmod +x run.sh
@@ -838,7 +864,7 @@ write_files:
                       fi
 
                   elif [ "$DETECTED_LOADER" = "neoforge" ]; then
-                      if [ -n "$LOADER_VER" ]; then
+                      if [ -n "$LOADER_VER" ] && [ "$LOADER_VER" != "null" ]; then
                           NEO_URL="https://maven.neoforged.net/releases/net/neoforged/neoforge/\${LOADER_VER}/neoforge-\${LOADER_VER}-installer.jar"
                           sudo -u minecraft wget -O neo-installer.jar "\$NEO_URL" || true
                           if [ -f "neo-installer.jar" ]; then
@@ -852,10 +878,6 @@ write_files:
                               fi
                           fi
                       fi
-                  fi
-                  
-                  if [ ! -d "mods" ]; then
-                      echo "[Startup] WARNING: Modpack manifest parsed, but no 'mods/' folder exists. You may need to upload the mod files manually via SFTP."
                   fi
               fi
               # --- END AUTO-SERVERIFY LOGIC ---
