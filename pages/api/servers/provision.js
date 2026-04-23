@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
+import zlib from 'zlib';
 import { verifyServerAccess } from '../../../lib/accessControl'; 
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
@@ -13,9 +14,20 @@ const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-key';
-const APP_BASE_URL = process.env.NEXTAUTH_URL || process.env.VERCEL_URL || 'http://localhost:3000';
-const DOMAIN_SUFFIX = '.spawnly.net';
 const SLEEPER_SECRET = process.env.SLEEPER_SECRET;
+const DOMAIN_SUFFIX = '.spawnly.net';
+
+// Smarter API URL Resolution
+let appUrl = process.env.APP_BASE_URL || process.env.NEXTAUTH_URL;
+if (!appUrl && process.env.VERCEL_URL) appUrl = `https://${process.env.VERCEL_URL}`;
+if (!appUrl) appUrl = 'https://spawnly.net';
+const APP_BASE_URL = appUrl;
+
+const sanitizeYaml = (str) => str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, '');
+
+const compressToGzB64 = (str) => {
+  return zlib.gzipSync(Buffer.from(str, 'utf-8')).toString('base64');
+};
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -35,7 +47,9 @@ const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
     try {
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}` } });
       const json = res.data;
-      if (json.action && (json.action.status === 'success' || json.action.status === 'error')) return json.action;
+      if (json.action && (json.action.status === 'success' || json.action.status === 'error')) {
+        return json.action;
+      }
       await new Promise((r) => setTimeout(r, intervalMs));
     } catch (err) {
       await new Promise((r) => setTimeout(r, intervalMs));
@@ -88,10 +102,7 @@ const getWaterfallDownloadUrl = async (version) => {
 
 const getForgeDownloadUrl = async (version) => `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}/forge-${version}-installer.jar`;
 const getNeoForgeDownloadUrl = async (version) => `https://maven.neoforged.net/releases/net/neoforged/neoforge/${version}/neoforge-${version}-installer.jar`;
-
-const getFabricDownloadUrl = async (version) => {
-  return `https://meta.fabricmc.net/v2/versions/loader`; // Dynamic Fetch handled in bash now
-};
+const getFabricDownloadUrl = async (version) => `https://meta.fabricmc.net/v2/versions/loader`;
 
 const getQuiltDownloadUrl = async (version) => {
   const installerRes = await fetch('https://meta.quiltmc.org/v3/versions/installer');
@@ -266,7 +277,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     const escapedDl = escapeForSingleQuotes(modpackMeta.url || downloadUrl || '');
     const escapedRconPassword = escapeForSingleQuotes(rconPassword);
-    const escapedSubdomain = escapeForSingleQuotes((serverRow.subdomain || '').toLowerCase());
     const escapedVersion = escapeForSingleQuotes(effectiveVersion);
     const escapedRestoreKey = escapeForSingleQuotes(serverRow.pending_backup_restore || '');
     const forceInstall = serverRow.force_software_install || false;
@@ -469,7 +479,8 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
     fi
     
     if [ ! -f "server.properties" ]; then
-        echo -e "eula=true\\nenable-rcon=true\\nrcon.port=25575\\nrcon.password=${escapedRconPassword}\\nbroadcast-rcon-to-ops=true\\nserver-port=25565\\nenable-query=true\\nquery.port=25565\\nonline-mode=false\\nmax-players=20\\ndifficulty=easy\\ngamemode=survival\\nspawn-protection=16\\nview-distance=10\\nsimulation-distance=10\\nmotd=A Spawnly Server\\npvp=true\\ngenerate-structures=true\\nmax-world-size=29999984\\nmax-tick-time=-1\\npause-when-empty-seconds=-1" > server.properties
+        echo "eula=true" > eula.txt
+        echo -e "enable-rcon=true\\nrcon.port=25575\\nrcon.password=${escapedRconPassword}\\nbroadcast-rcon-to-ops=true\\nserver-port=25565\\nenable-query=true\\nquery.port=25565\\nonline-mode=false\\nmax-players=20\\ndifficulty=easy\\ngamemode=survival\\nspawn-protection=16\\nview-distance=10\\nsimulation-distance=10\\nmotd=A Spawnly Server\\npvp=true\\ngenerate-structures=true\\nmax-world-size=29999984\\nmax-tick-time=-1\\npause-when-empty-seconds=-1" > server.properties
     fi
 fi
 
@@ -628,10 +639,8 @@ chmod 0755 /opt/minecraft/*.js && chown minecraft:minecraft /opt/minecraft/*.js
 systemctl daemon-reload && systemctl enable --now minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
 `;
 
-    // Upload the master script to S3 to bypass Hetzner size limits
     await uploadBootstrapScript(serverRow.id, s3Config, bootstrapContent);
 
-    // Provide Hetzner with a tiny payload to pull the master script
     const cloudInitPayload = `#cloud-config
 users:
   - name: minecraft
