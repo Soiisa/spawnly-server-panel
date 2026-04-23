@@ -390,14 +390,15 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
         setup_generic_start_script
 
     elif [[ "\$SOFTWARE" == "modpack-"* ]] || [[ "\$DOWNLOAD_URL" == *.zip ]]; then
+        echo "[Startup] Downloading raw Modpack/ZIP file..."
         wget -O modpack.zip "\$DOWNLOAD_URL"
         unzip -q -o modpack.zip || true
         rm -f modpack.zip
         
         COUNT=\$(ls -1 | grep -v 'modpack.zip' | wc -l || true)
         if [ "\$COUNT" -eq 1 ]; then 
-            DIR_NAME=\$(ls -1 | head -n 1)
-            if [ -d "\$DIR_NAME" ]; then 
+            DIR_NAME=\$(ls -1 | head -n 1 || true)
+            if [ -n "\$DIR_NAME" ] && [ -d "\$DIR_NAME" ]; then 
                 mv "\$DIR_NAME"/* . 2>/dev/null || true
                 mv "\$DIR_NAME"/.* . 2>/dev/null || true
                 rmdir "\$DIR_NAME" || true
@@ -414,6 +415,7 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
         fi
 
         if [ "\$HAS_EXECUTABLE" = "false" ]; then
+            echo "[Startup] No executable found. Proceeding with Auto-Serverify..."
             DETECTED_MC_VER="\$MC_VERSION"
             DETECTED_LOADER=""
             LOADER_VER=""
@@ -441,17 +443,18 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
                     LOADER_VER=\$(jq -r '.dependencies.neoforge' modrinth.index.json || true)
                 fi
                 
+                echo "[Startup] Downloading Modrinth Mods concurrently..."
                 jq -c '.files[] | select(.env == null or .env.server != "unsupported")' modrinth.index.json > /tmp/mr_mods.json || true
                 if [ -s /tmp/mr_mods.json ]; then
-                    while read -r item; do
-                        DL_URL=\$(echo "\$item" | jq -r '.downloads[0]')
-                        FILE_PATH=\$(echo "\$item" | jq -r '.path')
+                    cat /tmp/mr_mods.json | xargs -n 1 -P 10 -I {} bash -c '
+                        DL_URL=\$(echo "{}" | jq -r ".downloads[0]")
+                        FILE_PATH=\$(echo "{}" | jq -r ".path")
                         if [ -n "\$DL_URL" ] && [ "\$DL_URL" != "null" ]; then
-                            ( mkdir -p "\$(dirname "\$FILE_PATH")" && wget -q -O "\$FILE_PATH" "\$DL_URL" || true ) &
+                            mkdir -p "\$(dirname "\$FILE_PATH")"
+                            wget -q -O "\$FILE_PATH" "\$DL_URL" || true
                         fi
-                        if [ \$(jobs -r -p | wc -l) -ge 10 ]; then wait -n || true; fi
-                    done < /tmp/mr_mods.json
-                    wait || true
+                    ' || true
+                    echo "[Startup] Modrinth downloads finished."
                 fi
             fi
             
@@ -461,6 +464,8 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
                 elif find mods/ -name "*.jar" | head -n 20 | xargs -I {} unzip -l {} "META-INF/neoforge.mods.toml" 2>/dev/null | grep -q "neoforge"; then DETECTED_LOADER="neoforge"; fi
             fi
             [ -z "\$DETECTED_LOADER" ] && [ -d "mods" ] && DETECTED_LOADER="forge"
+
+            echo "[Startup] Resolved Environment: \$DETECTED_LOADER \$DETECTED_MC_VER"
 
             if [ "\$DETECTED_LOADER" = "fabric" ]; then
                 [ -z "\$LOADER_VER" ] || [ "\$LOADER_VER" = "null" ] && LOADER_VER=\$(curl -s https://meta.fabricmc.net/v2/versions/loader | jq -r '.[0].version')
@@ -534,6 +539,7 @@ fi
 chown -R minecraft:minecraft /opt/minecraft || true
 chmod -R u+rwX /opt/minecraft || true
 chmod +x /opt/minecraft/*.sh 2>/dev/null || true
+echo "[\$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-startup.sh] Finished script execution"
 `;
 
 // -------------------------------------------------------------------------------------------------
