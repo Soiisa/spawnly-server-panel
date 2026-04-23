@@ -1,3 +1,4 @@
+// components/ServerSoftwareTab.js
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -474,7 +475,6 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
     if (loadingMorePacks || !hasMorePacks || loadingVersions) return;
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     
-    // Trigger when within 50px of bottom
     if (scrollHeight - scrollTop <= clientHeight + 50) {
         fetchModpacks(modpackPage + 1);
     }
@@ -501,6 +501,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                     return {
                         id: f.id,
                         name: f.displayName,
+                        fileName: f.fileName, // Added for Edge URL Generation
                         mcVersion: mcVer,
                         loader: loader,
                         downloadUrl: f.downloadUrl,
@@ -572,7 +573,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
                 version: version,
                 needs_file_deletion: impact.requiresFileDeletion || false,
                 needs_recreation: impact.requiresRecreation,
-                force_software_install: !impact.requiresFileDeletion // Force update even if keeping files
+                force_software_install: !impact.requiresFileDeletion 
             }
         });
         setShowVersionWarning(true);
@@ -606,37 +607,65 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             payloadVersion = `${selectedModpack.id}|${modpackVersionId}::${mcVer}::${packName}`;
 
         } else if (modpackProvider === 'curseforge') {
+            setIsInstalling(true);
+            setError(null);
             
-            if (verObj.serverPackFileId) {
-                try {
-                    setIsInstalling(true);
-                    setError(null);
+            try {
+                if (verObj.serverPackFileId) {
                     const serverPackRes = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/${selectedModpack.id}/files/${verObj.serverPackFileId}`);
                     const packData = serverPackRes.data || serverPackRes;
 
-                    if (packData && packData.downloadUrl) {
-                        payloadVersion = `${packData.downloadUrl}::${mcVer}::${packName}`;
-                    } else {
-                        throw new Error("Server pack file found, but no download URL available.");
+                    let srvDlUrl = packData.downloadUrl;
+                    
+                    if (!srvDlUrl) {
+                        try {
+                            const dlRes = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/${selectedModpack.id}/files/${verObj.serverPackFileId}/download-url`);
+                            if (dlRes && dlRes.data) srvDlUrl = dlRes.data;
+                        } catch (e) { console.warn("Failed to fetch server pack DL URL", e); }
                     }
-                } catch (e) {
-                    setError(t('software.errors.resolve_fail', { error: e.message }));
-                    setIsInstalling(false);
-                    return; 
-                } finally {
-                    setIsInstalling(false);
+
+                    if (!srvDlUrl && packData.fileName) {
+                        const idStr = String(packData.id || verObj.serverPackFileId);
+                        srvDlUrl = `https://edge.forgecdn.net/files/${idStr.slice(0, 4)}/${idStr.slice(4)}/${encodeURIComponent(packData.fileName)}`;
+                    }
+
+                    if (srvDlUrl) {
+                        payloadVersion = `${srvDlUrl}::${mcVer}::${packName}`;
+                    } else {
+                        throw new Error("Server pack file found, but no download URL could be generated.");
+                    }
+                } else {
+                    let finalDlUrl = verObj.downloadUrl;
+                    
+                    // Fallback 1: Fetch via explicit download-url endpoint
+                    if (!finalDlUrl) {
+                        try {
+                            const dlRes = await fetchWithLocalProxy(`https://api.curseforge.com/v1/mods/${selectedModpack.id}/files/${verObj.id}/download-url`);
+                            if (dlRes && dlRes.data) finalDlUrl = dlRes.data;
+                        } catch (e) { console.warn("Failed to fetch explicit download URL", e); }
+                    }
+
+                    // Fallback 2: Construct Edge CDN URL Manually
+                    if (!finalDlUrl && verObj.fileName) {
+                        const idStr = String(verObj.id);
+                        finalDlUrl = `https://edge.forgecdn.net/files/${idStr.slice(0, 4)}/${idStr.slice(4)}/${encodeURIComponent(verObj.fileName)}`;
+                    }
+
+                    if (!finalDlUrl) {
+                        throw new Error(t('software.errors.no_download', { defaultValue: 'This file does not have a download URL.' }));
+                    }
+                    payloadVersion = `${finalDlUrl}::${mcVer}::${packName}`;
                 }
-            } else {
-                if (!verObj.downloadUrl) {
-                    setError(t('software.errors.no_download'));
-                    return;
-                }
-                payloadVersion = `${verObj.downloadUrl}::${mcVer}::${packName}`;
+            } catch (e) {
+                setError(e.message || t('software.errors.resolve_fail', { error: e.message }));
+                setIsInstalling(false);
+                return;
             }
+            setIsInstalling(false);
 
         } else if (modpackProvider === 'modrinth') {
             if (!verObj.downloadUrl) {
-                 setError(t('software.errors.no_download'));
+                 setError(t('software.errors.no_download', { defaultValue: 'This file does not have a download URL.' }));
                  return;
             }
             payloadVersion = `${verObj.downloadUrl}::${mcVer}::${packName}`;
@@ -653,7 +682,7 @@ export default function ServerSoftwareTab({ server, onSoftwareChange }) {
             version: payloadVersion,
             needs_file_deletion: impact.requiresFileDeletion,
             needs_recreation: true,
-            force_software_install: true // Always force for modpacks
+            force_software_install: true 
         }
     });
     setShowVersionWarning(true);
