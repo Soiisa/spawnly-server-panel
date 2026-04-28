@@ -367,7 +367,7 @@ run_installer() {
     \$JAVA_BIN -Xmx1024M -Djava.awt.headless=true -jar "\$inst" --installServer || true
     
     if [ -f "run.sh" ]; then
-        local af=\$(grep -o "libraries/net/[^ \"]*args.txt" run.sh || true)
+        local af=\$(grep -o 'libraries/net/[^ "]*args.txt' run.sh || true)
         if [ -n "\$af" ] && [ ! -f "\$af" ]; then
             echo "[Startup] Missing args.txt (\$af). Installer failed. Retrying..."
             \$JAVA_BIN -Xmx1024M -Djava.awt.headless=true -jar "\$inst" --installServer || true
@@ -425,10 +425,11 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
         setup_generic_start_script
         
         HAS_EXECUTABLE="false"
-        if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)" ]; then 
+        if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)" ]; then 
             HAS_EXECUTABLE="true"
         fi
 
+        # Repair mechanism for previously broken S3 backups
         if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ] && [ ! -d "libraries" ]; then
             if grep -q "libraries/net/minecraftforge" run.sh || grep -q "libraries/net/neoforged" run.sh; then
                 echo "[Startup] Missing libraries/ folder. Forcing repair..."
@@ -437,7 +438,7 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
             fi
         fi
         if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ]; then
-            ARGS_FILE=\$(grep -o "libraries/net/[^ \"]*args.txt" run.sh || true)
+            ARGS_FILE=\$(grep -o 'libraries/net/[^ "]*args.txt' run.sh || true)
             if [ -n "\$ARGS_FILE" ] && [ ! -f "\$ARGS_FILE" ]; then
                 echo "[Startup] Missing args file. Forcing repair..."
                 HAS_EXECUTABLE="false"
