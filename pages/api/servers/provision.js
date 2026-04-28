@@ -366,7 +366,6 @@ run_installer() {
     echo "[Startup] Running installer: \$inst"
     \$JAVA_BIN -Xmx1024M -Djava.awt.headless=true -jar "\$inst" --installServer || true
     
-    # Modern Forge 1.17+ Verification
     if [ -f "run.sh" ]; then
         local af=\$(grep -o "libraries/net/[^ \"]*args.txt" run.sh || true)
         if [ -n "\$af" ] && [ ! -f "\$af" ]; then
@@ -391,7 +390,7 @@ setup_generic_start_script() {
         chmod +x "\$START_SCRIPT"
         if [ "\$START_SCRIPT" != "run.sh" ]; then cp "\$START_SCRIPT" run.sh && chmod +x run.sh; fi
     else
-        FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v installer | head -n 1 || true)
+        FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
         if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
     fi
 }
@@ -430,7 +429,6 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
             HAS_EXECUTABLE="true"
         fi
 
-        # Repair mechanism for previously broken S3 backups
         if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ] && [ ! -d "libraries" ]; then
             if grep -q "libraries/net/minecraftforge" run.sh || grep -q "libraries/net/neoforged" run.sh; then
                 echo "[Startup] Missing libraries/ folder. Forcing repair..."
@@ -513,7 +511,7 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
                         run_installer forge-installer.jar
                         rm -f forge-installer.jar installer.log || true
                         if [ ! -f "run.sh" ]; then 
-                            FORGE_JAR=\$(ls -1 forge-*.jar 2>/dev/null | grep -v installer | head -n 1 || true)
+                            FORGE_JAR=\$(ls -1 forge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
                             if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
                         fi
                     fi
@@ -539,7 +537,7 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
        if [ -f "run.sh" ]; then 
            chmod +x run.sh
        else 
-           FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v installer | head -n 1 || true)
+           FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
            if [ -n "\$FORGE_JAR" ]; then 
                mv "\$FORGE_JAR" server.jar
                echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
