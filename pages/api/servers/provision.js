@@ -17,7 +17,7 @@ const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-
 const SLEEPER_SECRET = process.env.SLEEPER_SECRET;
 const DOMAIN_SUFFIX = '.spawnly.net';
 
-// Smarter API URL Resolution (Prevents VPS from pinging its own localhost)
+// Smarter API URL Resolution
 let appUrl = process.env.APP_BASE_URL || process.env.NEXTAUTH_URL;
 if (!appUrl && process.env.VERCEL_URL) appUrl = `https://${process.env.VERCEL_URL}`;
 if (!appUrl || appUrl.includes('localhost')) appUrl = 'https://spawnly.net';
@@ -347,7 +347,7 @@ SOFTWARE='${software}'
 DOWNLOAD_URL='${escapedDl}'
 JAVA_BIN='${javaBin}'
 MC_VERSION='${escapedVersion}'
-AIKAR_FLAGS="-XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1"
+AIKAR_FLAGS="-XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Djava.awt.headless=true"
 
 mkdir -p /opt/minecraft && cd /opt/minecraft
 
@@ -387,11 +387,16 @@ setup_generic_start_script() {
 
     START_SCRIPT=\$(ls -1 start.sh run.sh ServerStart.sh 2>/dev/null | head -n 1 || true)
     if [ -n "\$START_SCRIPT" ]; then
+        echo "[Startup] Found start script: \$START_SCRIPT"
         chmod +x "\$START_SCRIPT"
         if [ "\$START_SCRIPT" != "run.sh" ]; then cp "\$START_SCRIPT" run.sh && chmod +x run.sh; fi
     else
-        FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
-        if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
+        echo "[Startup] No start script found. Searching for server/loader jars..."
+        FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar server.jar fabric-server-launch.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
+        if [ -n "\$FORGE_JAR" ]; then 
+            echo "[Startup] Falling back to discovered JAR: \$FORGE_JAR"
+            echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh
+        fi
     fi
 }
 
@@ -406,26 +411,36 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
 
     elif [[ "\$SOFTWARE" == "modpack-"* ]] || [[ "\$DOWNLOAD_URL" == *.zip ]]; then
         echo "[Startup] Downloading raw Modpack/ZIP file..."
-        wget -O modpack.zip "\$DOWNLOAD_URL"
-        unzip -q -o modpack.zip || true
+        wget -q --show-progress -O modpack.zip "\$DOWNLOAD_URL"
+        
+        echo "[Startup] Extracting zip to temporary isolating directory..."
+        mkdir -p /tmp/modpack_extract
+        unzip -q -o modpack.zip -d /tmp/modpack_extract || true
         rm -f modpack.zip
         
-        COUNT=\$(ls -1 | grep -v 'modpack.zip' | wc -l || true)
-        if [ "\$COUNT" -eq 1 ]; then 
-            DIR_NAME=\$(ls -1 | head -n 1 || true)
-            if [ -n "\$DIR_NAME" ] && [ -d "\$DIR_NAME" ]; then 
-                mv "\$DIR_NAME"/* . 2>/dev/null || true
-                mv "\$DIR_NAME"/.* . 2>/dev/null || true
-                rmdir "\$DIR_NAME" || true
+        EXTRACTED_ITEMS=\$(ls -1A /tmp/modpack_extract | wc -l || true)
+        if [ "\$EXTRACTED_ITEMS" -eq 1 ]; then 
+            ROOT_DIR=\$(ls -1A /tmp/modpack_extract | head -n 1 || true)
+            if [ -d "/tmp/modpack_extract/\$ROOT_DIR" ]; then 
+                echo "[Startup] Moving files out of subfolder: \$ROOT_DIR"
+                mv /tmp/modpack_extract/"\$ROOT_DIR"/* . 2>/dev/null || true
+                mv /tmp/modpack_extract/"\$ROOT_DIR"/.* . 2>/dev/null || true
+            else
+                mv /tmp/modpack_extract/* . 2>/dev/null || true
+                mv /tmp/modpack_extract/.* . 2>/dev/null || true
             fi
+        else
+            mv /tmp/modpack_extract/* . 2>/dev/null || true
+            mv /tmp/modpack_extract/.* . 2>/dev/null || true
         fi
+        rm -rf /tmp/modpack_extract || true
         
         if [ -d "overrides" ]; then cp -R overrides/* . 2>/dev/null || true; rm -rf overrides; fi
         if [ -f "user_jvm_args.txt" ]; then rm -f user_jvm_args.txt; fi
         setup_generic_start_script
         
         HAS_EXECUTABLE="false"
-        if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)" ]; then 
+        if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)" ]; then 
             HAS_EXECUTABLE="true"
         fi
 
@@ -491,9 +506,9 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
             fi
             
             if [ -z "\$DETECTED_LOADER" ] && [ -d "mods" ]; then
-                if find mods/ -name "*.jar" | head -n 20 | xargs -I {} unzip -l {} "fabric.mod.json" 2>/dev/null | grep -q "fabric.mod.json"; then DETECTED_LOADER="fabric";
-                elif find mods/ -name "*.jar" | head -n 20 | xargs -I {} unzip -l {} "META-INF/mods.toml" 2>/dev/null | grep -q "META-INF/mods.toml"; then DETECTED_LOADER="forge";
-                elif find mods/ -name "*.jar" | head -n 20 | xargs -I {} unzip -l {} "META-INF/neoforge.mods.toml" 2>/dev/null | grep -q "neoforge"; then DETECTED_LOADER="neoforge"; fi
+                if ls mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "fabric.mod.json" 2>/dev/null | grep -q "fabric.mod.json"; then DETECTED_LOADER="fabric";
+                elif ls mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "META-INF/mods.toml" 2>/dev/null | grep -q "META-INF/mods.toml"; then DETECTED_LOADER="forge";
+                elif ls mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "META-INF/neoforge.mods.toml" 2>/dev/null | grep -q "neoforge"; then DETECTED_LOADER="neoforge"; fi
             fi
             [ -z "\$DETECTED_LOADER" ] && [ -d "mods" ] && DETECTED_LOADER="forge"
 
@@ -561,7 +576,7 @@ fi
 
 if [ -f "run.sh" ]; then
     sed -i "s|/usr/lib/jvm/java-[0-9]*-openjdk-[a-zA-Z0-9_-]*/bin/java|\$JAVA_BIN|g" run.sh || true
-    sed -i "s|^java |\$JAVA_BIN |g" run.sh || true
+    sed -i "s|^[[:space:]]*java |\$JAVA_BIN |g" run.sh || true
     sed -i 's/"\$@"/nogui/g' run.sh || true
     sed -i 's/\$@/nogui/g' run.sh || true
     if ! grep -q "nogui" run.sh; then sed -i '/\$JAVA_BIN/ s/$/ nogui/' run.sh || true; fi
