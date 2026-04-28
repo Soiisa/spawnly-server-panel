@@ -380,18 +380,18 @@ setup_generic_start_script() {
     if [ -f "Install.sh" ]; then chmod +x Install.sh; ./Install.sh || true; fi
     if [ -f "install.sh" ]; then chmod +x install.sh; ./install.sh || true; fi
 
-    INSTALLER=\$(find . -maxdepth 2 -name "*installer*.jar" | head -n 1 || true)
+    INSTALLER=\$(ls -1 *installer*.jar 2>/dev/null | head -n 1 || true)
     if [ -n "\$INSTALLER" ]; then
         run_installer "\$INSTALLER"
         rm -f "\$INSTALLER" installer.log || true
     fi
 
-    START_SCRIPT=\$(find . -maxdepth 3 -name "start.sh" -o -name "run.sh" -o -name "ServerStart.sh" | head -n 1 || true)
+    START_SCRIPT=\$(ls -1 start.sh run.sh ServerStart.sh 2>/dev/null | head -n 1 || true)
     if [ -n "\$START_SCRIPT" ]; then
         chmod +x "\$START_SCRIPT"
-        if [ "\$START_SCRIPT" != "./run.sh" ]; then cp "\$START_SCRIPT" run.sh && chmod +x run.sh; fi
+        if [ "\$START_SCRIPT" != "run.sh" ]; then cp "\$START_SCRIPT" run.sh && chmod +x run.sh; fi
     else
-        FORGE_JAR=\$(find . -maxdepth 1 \\( -name "forge-*.jar" -o -name "neoforge-*.jar" \\) ! -name "*installer*" | head -n 1 || true)
+        FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v installer | head -n 1 || true)
         if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
     fi
 }
@@ -426,7 +426,7 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
         setup_generic_start_script
         
         HAS_EXECUTABLE="false"
-        if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(find . -maxdepth 1 -name 'forge-*.jar' ! -name '*installer*' -print -quit || true)" ]; then 
+        if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)" ]; then 
             HAS_EXECUTABLE="true"
         fi
 
@@ -513,7 +513,7 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
                         run_installer forge-installer.jar
                         rm -f forge-installer.jar installer.log || true
                         if [ ! -f "run.sh" ]; then 
-                            FORGE_JAR=\$(find . -maxdepth 1 -name "forge-*.jar" ! -name "*installer*" | head -n 1 || true)
+                            FORGE_JAR=\$(ls -1 forge-*.jar 2>/dev/null | grep -v installer | head -n 1 || true)
                             if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
                         fi
                     fi
@@ -539,7 +539,7 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
        if [ -f "run.sh" ]; then 
            chmod +x run.sh
        else 
-           FORGE_JAR=\$(find . -maxdepth 1 \\( -name "forge-*.jar" -o -name "neoforge-*.jar" \\) ! -name "*installer*" | head -n 1 || true)
+           FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v installer | head -n 1 || true)
            if [ -n "\$FORGE_JAR" ]; then 
                mv "\$FORGE_JAR" server.jar
                echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
