@@ -313,7 +313,7 @@ if [ "${software.startsWith('modpack-')}" = "true" ]; then
   fi
 fi
 set -f
-sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 ${s5cmdOpt} sync --delete --exclude '*.js' --exclude 'node_modules/*' --exclude 'serverinstaller' --exclude 'crash-reports/*' --exclude 'debug/*' --exclude 'cache/*' --exclude 'backups/*' --exclude 'simplebackups/*' --exclude 'web/*' --exclude 'dynmap/*' --exclude 'bluemap/*' --exclude '*.zip' --exclude 'libraries/*' \$SYNC_EXCLUDES . "s3://${S3_BUCKET}/servers/${serverRow.id}/"
+sudo -u minecraft /usr/local/bin/s5cmd --numworkers 10 ${s5cmdOpt} sync --delete --exclude '*.js' --exclude 'node_modules/*' --exclude 'serverinstaller' --exclude 'crash-reports/*' --exclude 'debug/*' --exclude 'cache/*' --exclude 'backups/*' --exclude 'simplebackups/*' --exclude 'web/*' --exclude 'dynmap/*' --exclude 'bluemap/*' --exclude '*.zip' \$SYNC_EXCLUDES . "s3://${S3_BUCKET}/servers/${serverRow.id}/"
 EXIT_CODE=\$?
 set +f
 curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer ${escapedRconPassword}" -d "{\\"serverId\\": \\"${serverRow.id}\\", \\"sync_complete\\": \$([ \$EXIT_CODE -eq 0 ] && echo "true" || echo "false")}" "${APP_BASE_URL.replace(/\/+$/, '')}/api/servers/update-status" || true
@@ -361,22 +361,38 @@ else
     FORCE_INSTALL="${forceInstall}"
 fi
 
+run_installer() {
+    local inst="\$1"
+    echo "[Startup] Running installer: \$inst"
+    \$JAVA_BIN -Xmx1024M -Djava.awt.headless=true -jar "\$inst" --installServer || true
+    
+    # Modern Forge 1.17+ Verification
+    if [ -f "run.sh" ]; then
+        local af=\$(grep -o "libraries/net/[^ \"]*args.txt" run.sh || true)
+        if [ -n "\$af" ] && [ ! -f "\$af" ]; then
+            echo "[Startup] Missing args.txt (\$af). Installer failed. Retrying..."
+            \$JAVA_BIN -Xmx1024M -Djava.awt.headless=true -jar "\$inst" --installServer || true
+        fi
+    fi
+}
+
 setup_generic_start_script() {
+    if [ -f "Install.sh" ]; then chmod +x Install.sh; ./Install.sh || true; fi
+    if [ -f "install.sh" ]; then chmod +x install.sh; ./install.sh || true; fi
+
+    INSTALLER=\$(find . -maxdepth 2 -name "*installer*.jar" | head -n 1 || true)
+    if [ -n "\$INSTALLER" ]; then
+        run_installer "\$INSTALLER"
+        rm -f "\$INSTALLER" installer.log || true
+    fi
+
     START_SCRIPT=\$(find . -maxdepth 3 -name "start.sh" -o -name "run.sh" -o -name "ServerStart.sh" | head -n 1 || true)
     if [ -n "\$START_SCRIPT" ]; then
         chmod +x "\$START_SCRIPT"
         if [ "\$START_SCRIPT" != "./run.sh" ]; then cp "\$START_SCRIPT" run.sh && chmod +x run.sh; fi
     else
-        INSTALLER=\$(find . -maxdepth 2 -name "*installer*.jar" | head -n 1 || true)
-        if [ -n "\$INSTALLER" ]; then
-            \$JAVA_BIN -jar "\$INSTALLER" --installServer || true
-            if [ -f "run.sh" ]; then 
-                chmod +x run.sh
-            else
-                FORGE_JAR=\$(find . -maxdepth 1 \\( -name "forge-*.jar" -o -name "neoforge-*.jar" \\) ! -name "*installer*" | head -n 1 || true)
-                if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
-            fi
-        fi
+        FORGE_JAR=\$(find . -maxdepth 1 \\( -name "forge-*.jar" -o -name "neoforge-*.jar" \\) ! -name "*installer*" | head -n 1 || true)
+        if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
     fi
 }
 
@@ -410,12 +426,29 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
         setup_generic_start_script
         
         HAS_EXECUTABLE="false"
-        if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(find . -maxdepth 1 -name 'forge-*.jar' -print -quit || true)" ]; then 
+        if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(find . -maxdepth 1 -name 'forge-*.jar' ! -name '*installer*' -print -quit || true)" ]; then 
             HAS_EXECUTABLE="true"
         fi
 
+        # Repair mechanism for previously broken S3 backups
+        if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ] && [ ! -d "libraries" ]; then
+            if grep -q "libraries/net/minecraftforge" run.sh || grep -q "libraries/net/neoforged" run.sh; then
+                echo "[Startup] Missing libraries/ folder. Forcing repair..."
+                HAS_EXECUTABLE="false"
+                rm -f run.sh user_jvm_args.txt || true
+            fi
+        fi
+        if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ]; then
+            ARGS_FILE=\$(grep -o "libraries/net/[^ \"]*args.txt" run.sh || true)
+            if [ -n "\$ARGS_FILE" ] && [ ! -f "\$ARGS_FILE" ]; then
+                echo "[Startup] Missing args file. Forcing repair..."
+                HAS_EXECUTABLE="false"
+                rm -f run.sh user_jvm_args.txt || true
+            fi
+        fi
+
         if [ "\$HAS_EXECUTABLE" = "false" ]; then
-            echo "[Startup] No executable found. Proceeding with Auto-Serverify..."
+            echo "[Startup] Proceeding with Auto-Serverify..."
             DETECTED_MC_VER="\$MC_VERSION"
             DETECTED_LOADER=""
             LOADER_VER=""
@@ -475,10 +508,10 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
             elif [ "\$DETECTED_LOADER" = "forge" ]; then
                 [ -z "\$LOADER_VER" ] || [ "\$LOADER_VER" = "null" ] && LOADER_VER=\$(curl -s https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json | jq -r ".promos[\\"\${DETECTED_MC_VER}-latest\\"] // empty" || true)
                 if [ -n "\$LOADER_VER" ]; then
-                    wget -O forge-installer.jar "https://maven.minecraftforge.net/net/minecraftforge/forge/\${DETECTED_MC_VER}-\${LOADER_VER}/forge-\${DETECTED_MC_VER}-\${LOADER_VER}-installer.jar" || true
+                    wget -q --tries=3 -O forge-installer.jar "https://maven.minecraftforge.net/net/minecraftforge/forge/\${DETECTED_MC_VER}-\${LOADER_VER}/forge-\${DETECTED_MC_VER}-\${LOADER_VER}-installer.jar" || true
                     if [ -f "forge-installer.jar" ]; then
-                        \$JAVA_BIN -jar forge-installer.jar --installServer || true
-                        rm -f forge-installer.jar
+                        run_installer forge-installer.jar
+                        rm -f forge-installer.jar installer.log || true
                         if [ ! -f "run.sh" ]; then 
                             FORGE_JAR=\$(find . -maxdepth 1 -name "forge-*.jar" ! -name "*installer*" | head -n 1 || true)
                             if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
@@ -487,10 +520,10 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
                 fi
             elif [ "\$DETECTED_LOADER" = "neoforge" ]; then
                 if [ -n "\$LOADER_VER" ] && [ "\$LOADER_VER" != "null" ]; then
-                    wget -O neo-installer.jar "https://maven.neoforged.net/releases/net/neoforged/neoforge/\${LOADER_VER}/neoforge-\${LOADER_VER}-installer.jar" || true
+                    wget -q --tries=3 -O neo-installer.jar "https://maven.neoforged.net/releases/net/neoforged/neoforge/\${LOADER_VER}/neoforge-\${LOADER_VER}-installer.jar" || true
                     if [ -f "neo-installer.jar" ]; then
-                        \$JAVA_BIN -jar neo-installer.jar --installServer || true
-                        rm -f neo-installer.jar
+                        run_installer neo-installer.jar
+                        rm -f neo-installer.jar installer.log || true
                         if [ ! -f "run.sh" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS @libraries/net/neoforged/neoforge/\${LOADER_VER}/unix_args.txt nogui" > run.sh && chmod +x run.sh; fi
                     fi
                 fi
@@ -499,9 +532,9 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
         echo "\$AIKAR_FLAGS" >> user_jvm_args.txt
         
     elif [ "\$SOFTWARE" = "forge" ] || [ "\$SOFTWARE" = "neoforge" ]; then
-       wget -O server-installer.jar "\$DOWNLOAD_URL"
-       \$JAVA_BIN -jar server-installer.jar --installServer || true
-       rm -f server-installer.jar
+       wget -q --tries=3 -O server-installer.jar "\$DOWNLOAD_URL"
+       run_installer server-installer.jar
+       rm -f server-installer.jar installer.log || true
        echo "\$AIKAR_FLAGS" >> user_jvm_args.txt
        if [ -f "run.sh" ]; then 
            chmod +x run.sh
@@ -513,12 +546,12 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
            fi
        fi
     elif [ "\$SOFTWARE" = "quilt" ]; then
-       wget -O quilt-installer.jar "\$DOWNLOAD_URL"
+       wget -q --tries=3 -O quilt-installer.jar "\$DOWNLOAD_URL"
        \$JAVA_BIN -jar quilt-installer.jar install server "\$MC_VERSION" --download-server || true
        if [ -d "server" ]; then mv server/* . && mv server/.* . 2>/dev/null || true && rmdir server || true; fi
        if [ -f "quilt-server-launch.jar" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar quilt-server-launch.jar nogui" > run.sh && chmod +x run.sh; fi
     else
-        wget -O server.jar "\$DOWNLOAD_URL"
+        wget -q --tries=3 -O server.jar "\$DOWNLOAD_URL"
         echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
     fi
     
@@ -528,12 +561,11 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
 fi
 
 if [ -f "run.sh" ]; then
-    sed -i "s|/usr/lib/jvm/java-8-openjdk-[a-zA-Z0-9_-]*/bin/java|\$JAVA_BIN|g" run.sh || true
-    sed -i "s|/usr/lib/jvm/java-11-openjdk-[a-zA-Z0-9_-]*/bin/java|\$JAVA_BIN|g" run.sh || true
-    sed -i "s|/usr/lib/jvm/java-17-openjdk-[a-zA-Z0-9_-]*/bin/java|\$JAVA_BIN|g" run.sh || true
-    sed -i "s|/usr/lib/jvm/java-21-openjdk-[a-zA-Z0-9_-]*/bin/java|\$JAVA_BIN|g" run.sh || true
-    sed -i "s|/usr/lib/jvm/java-25-openjdk-[a-zA-Z0-9_-]*/bin/java|\$JAVA_BIN|g" run.sh || true
+    sed -i "s|/usr/lib/jvm/java-[0-9]*-openjdk-[a-zA-Z0-9_-]*/bin/java|\$JAVA_BIN|g" run.sh || true
     sed -i "s|^java |\$JAVA_BIN |g" run.sh || true
+    sed -i 's/"\$@"/nogui/g' run.sh || true
+    sed -i 's/\$@/nogui/g' run.sh || true
+    if ! grep -q "nogui" run.sh; then sed -i '/\$JAVA_BIN/ s/$/ nogui/' run.sh || true; fi
 fi
 
 chown -R minecraft:minecraft /opt/minecraft || true
