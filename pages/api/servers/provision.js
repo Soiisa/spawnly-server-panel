@@ -193,14 +193,11 @@ const deleteCloudflareRecords = async (subdomain) => {
 };
 
 const createARecord = async (subdomain, serverIp) => {
-  const cleanSub = subdomain.endsWith(DOMAIN_SUFFIX) ? subdomain.replace(DOMAIN_SUFFIX, '') : subdomain;
-  
-  // FIX: Create BOTH the main A record and the -api A record for the web console
+  let subdomainPrefix = subdomain.endsWith(DOMAIN_SUFFIX) ? subdomain.replace(DOMAIN_SUFFIX, '') : subdomain;
   const records = [
-      { type: 'A', name: cleanSub, content: serverIp, ttl: 60, proxied: false },
-      { type: 'A', name: `${cleanSub}-api`, content: serverIp, ttl: 60, proxied: false }
+    { type: 'A', name: subdomainPrefix, content: serverIp, ttl: 60, proxied: false },
+    { type: 'A', name: `${subdomainPrefix}-api`, content: serverIp, ttl: 60, proxied: false }
   ];
-  
   const recordIds = [];
   for (const data of records) {
     try {
@@ -212,9 +209,10 @@ const createARecord = async (subdomain, serverIp) => {
 };
 
 const createSRVRecord = async (subdomain, serverIp) => {
+  let subdomainPrefix = subdomain.endsWith(DOMAIN_SUFFIX) ? subdomain.replace(DOMAIN_SUFFIX, '') : subdomain;
   try {
     const response = await axios.post(`${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`, {
-      type: 'SRV', name: `_minecraft._tcp.${subdomain}`, data: { service: '_minecraft', proto: '_tcp', priority: 0, weight: 0, port: 25565, target: `${subdomain}.spawnly.net` }, ttl: 60
+      type: 'SRV', name: `_minecraft._tcp.${subdomainPrefix}`, data: { service: '_minecraft', proto: '_tcp', priority: 0, weight: 0, port: 25565, target: `${subdomainPrefix}.spawnly.net` }, ttl: 60
     }, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }});
     return response.data.result.id;
   } catch (error) { return null; }
@@ -266,16 +264,18 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     }
     if (software === 'arclight' && version.includes('::')) effectiveVersion = version.split('::')[0];
 
-    // FIX: Robust Java Version Parsing (Defaults to Java 21 for safety if unknown)
+    // Safely parse Java version even for modern snapshots
     let javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'; 
-    if (effectiveVersion) {
-        const mcVerMatch = effectiveVersion.match(/1\.(\d+)(\.(\d+))?/);
-        if (mcVerMatch) {
-            const minor = parseInt(mcVerMatch[1]);
-            const patch = parseInt(mcVerMatch[3] || '0');
-            if (minor >= 20 && patch >= 5) javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
-            else if (minor >= 17) javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
-            else javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
+    if (effectiveVersion && effectiveVersion !== 'latest') {
+        const match = effectiveVersion.match(/^1\.(\d+)(?:\.(\d+))?/);
+        if (match) {
+            const minor = parseInt(match[1], 10);
+            const patch = parseInt(match[2] || '0', 10);
+            if (minor < 17) {
+                javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
+            } else if (minor < 20 || (minor === 20 && patch < 5)) {
+                javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
+            }
         }
     }
 
@@ -297,7 +297,7 @@ echo "[\$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-sync.sh] Started script execution"
 cd /opt/minecraft
 if [ -f "/opt/tools/prune.php" ] && [ -d "world/region" ]; then php /opt/tools/prune.php "world" || true; fi
 SYNC_EXCLUDES=""
-WORLD_NAME=\$(grep "^level-name=" server.properties 2>/dev/null | cut -d'=' -f2 | tr -d '\\r' || true)
+WORLD_NAME=\$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\\r') || WORLD_NAME="world"
 [ -z "\$WORLD_NAME" ] && WORLD_NAME="world"
 if [ "${software.startsWith('modpack-')}" = "true" ]; then
   DIRS_TO_ZIP=""
@@ -350,8 +350,6 @@ echo "[\$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-startup.sh] Started script executi
 SOFTWARE='${software}'
 DOWNLOAD_URL='${escapedDl}'
 JAVA_BIN='${javaBin}'
-if [ ! -f "\$JAVA_BIN" ]; then JAVA_BIN="java"; fi
-
 MC_VERSION='${escapedVersion}'
 AIKAR_FLAGS="-XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Djava.awt.headless=true"
 
@@ -712,10 +710,10 @@ User=minecraft
 WantedBy=multi-user.target
 EOF_FILE
 
-apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ufw php-cli php-xml php-mbstring unzip jq openjdk-25-jre-headless openjdk-21-jre-headless openjdk-17-jre-headless openjdk-8-jre-headless
+apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ufw php-cli php-xml php-mbstring unzip jq openjdk-21-jre-headless openjdk-17-jre-headless openjdk-8-jre-headless
 mkdir -p /opt/tools && cd /opt/tools && curl -sS https://getcomposer.org/installer | COMPOSER_ALLOW_SUPERUSER=1 HOME=/root php -- --install-dir=/usr/local/bin --filename=composer && COMPOSER_ALLOW_SUPERUSER=1 HOME=/root composer require aternos/thanos
 
-ufw default deny incoming && ufw default allow outgoing && ufw allow 22 && ufw allow OpenSSH && ufw allow 25565 && ufw allow 25575
+ufw default deny incoming && ufw default allow outgoing && ufw allow 22 && ufw allow OpenSSH && ufw allow 25565 && ufw allow 25575 && ufw allow 3003:3007/tcp
 ${allocations && allocations.length > 0 ? allocations.map(a => `ufw allow ${a.port_number}`).join('\n') : ''}
 ufw --force enable
 
