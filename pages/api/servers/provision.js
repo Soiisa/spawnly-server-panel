@@ -195,15 +195,17 @@ const deleteCloudflareRecords = async (subdomain) => {
 const createARecord = async (subdomain, serverIp) => {
   let subdomainPrefix = subdomain.endsWith(DOMAIN_SUFFIX) ? subdomain.replace(DOMAIN_SUFFIX, '') : subdomain;
   const records = [
-    { type: 'A', name: subdomainPrefix, content: serverIp, ttl: 60, proxied: false },
-    { type: 'A', name: `${subdomainPrefix}-api`, content: serverIp, ttl: 60, proxied: false }
+    { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}`, content: serverIp, ttl: 60, proxied: false },
+    { type: 'A', name: `${subdomainPrefix}-api${DOMAIN_SUFFIX}`, content: serverIp, ttl: 60, proxied: false }
   ];
   const recordIds = [];
   for (const data of records) {
     try {
       const response = await axios.post(`${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`, data, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }});
       recordIds.push(response.data.result.id);
-    } catch (error) {}
+    } catch (error) {
+      console.error('[Cloudflare] Failed to create A record:', error.response ? error.response.data : error.message);
+    }
   }
   return recordIds;
 };
@@ -212,10 +214,13 @@ const createSRVRecord = async (subdomain, serverIp) => {
   let subdomainPrefix = subdomain.endsWith(DOMAIN_SUFFIX) ? subdomain.replace(DOMAIN_SUFFIX, '') : subdomain;
   try {
     const response = await axios.post(`${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`, {
-      type: 'SRV', name: `_minecraft._tcp.${subdomainPrefix}`, data: { service: '_minecraft', proto: '_tcp', priority: 0, weight: 0, port: 25565, target: `${subdomainPrefix}.spawnly.net` }, ttl: 60
+      type: 'SRV', name: `_minecraft._tcp.${subdomainPrefix}${DOMAIN_SUFFIX}`, data: { service: '_minecraft', proto: '_tcp', priority: 0, weight: 0, port: 25565, target: `${subdomainPrefix}${DOMAIN_SUFFIX}` }, ttl: 60
     }, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }});
     return response.data.result.id;
-  } catch (error) { return null; }
+  } catch (error) { 
+    console.error('[Cloudflare] Failed to create SRV record:', error.response ? error.response.data : error.message);
+    return null; 
+  }
 };
 
 const deleteS3Files = async (serverId, s3Config) => {
@@ -264,7 +269,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     }
     if (software === 'arclight' && version.includes('::')) effectiveVersion = version.split('::')[0];
 
-    // Safely parse Java version with support for bleeding-edge 2026+ Snapshots
     let javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java'; 
     if (effectiveVersion && effectiveVersion !== 'latest') {
         const match = effectiveVersion.match(/^1\.(\d+)(?:\.(\d+))?/);
@@ -281,7 +285,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
                 javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
             }
         } else {
-            // Snapshot handling (e.g. 24w14a, 26w05a)
             const snapMatch = effectiveVersion.match(/^(\d+)w/i);
             if (snapMatch) {
                 const year = parseInt(snapMatch[1], 10);
@@ -311,7 +314,7 @@ echo "[\$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-sync.sh] Started script execution"
 cd /opt/minecraft
 if [ -f "/opt/tools/prune.php" ] && [ -d "world/region" ]; then php /opt/tools/prune.php "world" || true; fi
 SYNC_EXCLUDES=""
-WORLD_NAME=\$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\\r') || WORLD_NAME="world"
+WORLD_NAME=\$(grep "^level-name=" server.properties 2>/dev/null | cut -d'=' -f2 | tr -d '\\r') || WORLD_NAME="world"
 [ -z "\$WORLD_NAME" ] && WORLD_NAME="world"
 if [ "${software.startsWith('modpack-')}" = "true" ]; then
   DIRS_TO_ZIP=""
@@ -377,28 +380,6 @@ if [ -f ".installed_version" ] && [ "\$(cat .installed_version)" != "\$SOFTWARE-
     FORCE_INSTALL="true"
 else
     FORCE_INSTALL="${forceInstall}"
-fi
-
-HAS_EXECUTABLE="false"
-if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -f "quilt-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -iv 'installer' | head -n 1 || true)" ]; then 
-    HAS_EXECUTABLE="true"
-fi
-
-# Repair mechanism for previously broken S3 backups
-if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ] && [ ! -d "libraries" ]; then
-    if grep -q "libraries/net/minecraftforge" run.sh || grep -q "libraries/net/neoforged" run.sh; then
-        echo "[Startup] Missing libraries/ folder. Forcing repair..."
-        HAS_EXECUTABLE="false"
-        rm -f run.sh user_jvm_args.txt || true
-    fi
-fi
-if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ]; then
-    ARGS_FILE=\$(grep -o 'libraries/net/[^ "]*args.txt' run.sh || true)
-    if [ -n "\$ARGS_FILE" ] && [ ! -f "\$ARGS_FILE" ]; then
-        echo "[Startup] Missing args file. Forcing repair..."
-        HAS_EXECUTABLE="false"
-        rm -f run.sh user_jvm_args.txt || true
-    fi
 fi
 
 run_installer() {
@@ -482,6 +463,23 @@ if [ "\$HAS_EXECUTABLE" = "false" ] || [ "${serverRow.needsFileDeletion}" = "tru
         HAS_EXECUTABLE="false"
         if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)" ]; then 
             HAS_EXECUTABLE="true"
+        fi
+
+        # Repair mechanism for previously broken S3 backups
+        if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ] && [ ! -d "libraries" ]; then
+            if grep -q "libraries/net/minecraftforge" run.sh || grep -q "libraries/net/neoforged" run.sh; then
+                echo "[Startup] Missing libraries/ folder. Forcing repair..."
+                HAS_EXECUTABLE="false"
+                rm -f run.sh user_jvm_args.txt || true
+            fi
+        fi
+        if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ]; then
+            ARGS_FILE=\$(grep -o 'libraries/net/[^ "]*args.txt' run.sh || true)
+            if [ -n "\$ARGS_FILE" ] && [ ! -f "\$ARGS_FILE" ]; then
+                echo "[Startup] Missing args file. Forcing repair..."
+                HAS_EXECUTABLE="false"
+                rm -f run.sh user_jvm_args.txt || true
+            fi
         fi
 
         if [ "\$HAS_EXECUTABLE" = "false" ]; then
@@ -591,10 +589,10 @@ if [ "\$HAS_EXECUTABLE" = "false" ] || [ "${serverRow.needsFileDeletion}" = "tru
         wget -q --tries=3 -O server.jar "\$DOWNLOAD_URL"
         echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
     fi
-fi
-
-if [ ! -f "server.properties" ]; then
-    echo -e "enable-rcon=true\\nrcon.port=25575\\nrcon.password=${escapedRconPassword}\\nbroadcast-rcon-to-ops=true\\nserver-port=25565\\nenable-query=true\\nquery.port=25565\\nonline-mode=false\\nmax-players=20\\ndifficulty=easy\\ngamemode=survival\\nspawn-protection=16\\nview-distance=10\\nsimulation-distance=10\\nmotd=A Spawnly Server\\npvp=true\\ngenerate-structures=true\\nmax-world-size=29999984\\nmax-tick-time=-1\\npause-when-empty-seconds=-1" > server.properties
+    
+    if [ ! -f "server.properties" ]; then
+        echo -e "enable-rcon=true\\nrcon.port=25575\\nrcon.password=${escapedRconPassword}\\nbroadcast-rcon-to-ops=true\\nserver-port=25565\\nenable-query=true\\nquery.port=25565\\nonline-mode=false\\nmax-players=20\\ndifficulty=easy\\ngamemode=survival\\nspawn-protection=16\\nview-distance=10\\nsimulation-distance=10\\nmotd=A Spawnly Server\\npvp=true\\ngenerate-structures=true\\nmax-world-size=29999984\\nmax-tick-time=-1\\npause-when-empty-seconds=-1" > server.properties
+    fi
 fi
 
 if [ -f "run.sh" ]; then
