@@ -264,8 +264,8 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     }
     if (software === 'arclight' && version.includes('::')) effectiveVersion = version.split('::')[0];
 
-    // Safely parse Java version even for modern snapshots
-    let javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'; 
+    // Safely parse Java version with support for bleeding-edge 2026+ Snapshots
+    let javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java'; 
     if (effectiveVersion && effectiveVersion !== 'latest') {
         const match = effectiveVersion.match(/^1\.(\d+)(?:\.(\d+))?/);
         if (match) {
@@ -275,6 +275,20 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
                 javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
             } else if (minor < 20 || (minor === 20 && patch < 5)) {
                 javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
+            } else if (minor < 22) {
+                javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
+            } else {
+                javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
+            }
+        } else {
+            // Snapshot handling (e.g. 24w14a, 26w05a)
+            const snapMatch = effectiveVersion.match(/^(\d+)w/i);
+            if (snapMatch) {
+                const year = parseInt(snapMatch[1], 10);
+                if (year <= 20) javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
+                else if (year <= 23) javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
+                else if (year === 24) javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
+                else javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
             }
         }
     }
@@ -710,7 +724,7 @@ User=minecraft
 WantedBy=multi-user.target
 EOF_FILE
 
-apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ufw php-cli php-xml php-mbstring unzip jq openjdk-21-jre-headless openjdk-17-jre-headless openjdk-8-jre-headless
+apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ufw php-cli php-xml php-mbstring unzip jq openjdk-25-jre-headless openjdk-21-jre-headless openjdk-17-jre-headless openjdk-8-jre-headless
 mkdir -p /opt/tools && cd /opt/tools && curl -sS https://getcomposer.org/installer | COMPOSER_ALLOW_SUPERUSER=1 HOME=/root php -- --install-dir=/usr/local/bin --filename=composer && COMPOSER_ALLOW_SUPERUSER=1 HOME=/root composer require aternos/thanos
 
 ufw default deny incoming && ufw default allow outgoing && ufw allow 22 && ufw allow OpenSSH && ufw allow 25565 && ufw allow 25575 && ufw allow 3003:3007/tcp
