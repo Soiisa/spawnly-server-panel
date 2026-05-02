@@ -379,6 +379,28 @@ else
     FORCE_INSTALL="${forceInstall}"
 fi
 
+HAS_EXECUTABLE="false"
+if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -f "quilt-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -iv 'installer' | head -n 1 || true)" ]; then 
+    HAS_EXECUTABLE="true"
+fi
+
+# Repair mechanism for previously broken S3 backups
+if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ] && [ ! -d "libraries" ]; then
+    if grep -q "libraries/net/minecraftforge" run.sh || grep -q "libraries/net/neoforged" run.sh; then
+        echo "[Startup] Missing libraries/ folder. Forcing repair..."
+        HAS_EXECUTABLE="false"
+        rm -f run.sh user_jvm_args.txt || true
+    fi
+fi
+if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ]; then
+    ARGS_FILE=\$(grep -o 'libraries/net/[^ "]*args.txt' run.sh || true)
+    if [ -n "\$ARGS_FILE" ] && [ ! -f "\$ARGS_FILE" ]; then
+        echo "[Startup] Missing args file. Forcing repair..."
+        HAS_EXECUTABLE="false"
+        rm -f run.sh user_jvm_args.txt || true
+    fi
+fi
+
 run_installer() {
     local inst="\$1"
     echo "[Startup] Running installer: \$inst"
@@ -418,7 +440,7 @@ setup_generic_start_script() {
     fi
 }
 
-if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FORCE_INSTALL" = "true" ]; then
+if [ "\$HAS_EXECUTABLE" = "false" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FORCE_INSTALL" = "true" ]; then
     if [ "${software.startsWith('modpack-')}" = "true" ] && [ -f "server.properties" ] && [ "${serverRow.needsFileDeletion}" != "true" ]; then rm -rf mods config scripts kubejs libraries defaultconfigs versions; fi
 
     if [ "\$SOFTWARE" = "modpack-ftb" ]; then
@@ -460,23 +482,6 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
         HAS_EXECUTABLE="false"
         if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)" ]; then 
             HAS_EXECUTABLE="true"
-        fi
-
-        # Repair mechanism for previously broken S3 backups
-        if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ] && [ ! -d "libraries" ]; then
-            if grep -q "libraries/net/minecraftforge" run.sh || grep -q "libraries/net/neoforged" run.sh; then
-                echo "[Startup] Missing libraries/ folder. Forcing repair..."
-                HAS_EXECUTABLE="false"
-                rm -f run.sh user_jvm_args.txt || true
-            fi
-        fi
-        if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ]; then
-            ARGS_FILE=\$(grep -o 'libraries/net/[^ "]*args.txt' run.sh || true)
-            if [ -n "\$ARGS_FILE" ] && [ ! -f "\$ARGS_FILE" ]; then
-                echo "[Startup] Missing args file. Forcing repair..."
-                HAS_EXECUTABLE="false"
-                rm -f run.sh user_jvm_args.txt || true
-            fi
         fi
 
         if [ "\$HAS_EXECUTABLE" = "false" ]; then
@@ -524,9 +529,9 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
             fi
             
             if [ -z "\$DETECTED_LOADER" ] && [ -d "mods" ]; then
-                if ls mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "fabric.mod.json" 2>/dev/null | grep -q "fabric.mod.json"; then DETECTED_LOADER="fabric";
-                elif ls mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "META-INF/mods.toml" 2>/dev/null | grep -q "META-INF/mods.toml"; then DETECTED_LOADER="forge";
-                elif ls mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "META-INF/neoforge.mods.toml" 2>/dev/null | grep -q "neoforge"; then DETECTED_LOADER="neoforge"; fi
+                if ls -1 mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "fabric.mod.json" 2>/dev/null | grep -q "fabric.mod.json"; then DETECTED_LOADER="fabric";
+                elif ls -1 mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "META-INF/mods.toml" 2>/dev/null | grep -q "META-INF/mods.toml"; then DETECTED_LOADER="forge";
+                elif ls -1 mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "META-INF/neoforge.mods.toml" 2>/dev/null | grep -q "neoforge"; then DETECTED_LOADER="neoforge"; fi
             fi
             [ -z "\$DETECTED_LOADER" ] && [ -d "mods" ] && DETECTED_LOADER="forge"
 
@@ -586,10 +591,10 @@ if [ ! -f "server.properties" ] || [ "${serverRow.needsFileDeletion}" = "true" ]
         wget -q --tries=3 -O server.jar "\$DOWNLOAD_URL"
         echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
     fi
-    
-    if [ ! -f "server.properties" ]; then
-        echo -e "enable-rcon=true\\nrcon.port=25575\\nrcon.password=${escapedRconPassword}\\nbroadcast-rcon-to-ops=true\\nserver-port=25565\\nenable-query=true\\nquery.port=25565\\nonline-mode=false\\nmax-players=20\\ndifficulty=easy\\ngamemode=survival\\nspawn-protection=16\\nview-distance=10\\nsimulation-distance=10\\nmotd=A Spawnly Server\\npvp=true\\ngenerate-structures=true\\nmax-world-size=29999984\\nmax-tick-time=-1\\npause-when-empty-seconds=-1" > server.properties
-    fi
+fi
+
+if [ ! -f "server.properties" ]; then
+    echo -e "enable-rcon=true\\nrcon.port=25575\\nrcon.password=${escapedRconPassword}\\nbroadcast-rcon-to-ops=true\\nserver-port=25565\\nenable-query=true\\nquery.port=25565\\nonline-mode=false\\nmax-players=20\\ndifficulty=easy\\ngamemode=survival\\nspawn-protection=16\\nview-distance=10\\nsimulation-distance=10\\nmotd=A Spawnly Server\\npvp=true\\ngenerate-structures=true\\nmax-world-size=29999984\\nmax-tick-time=-1\\npause-when-empty-seconds=-1" > server.properties
 fi
 
 if [ -f "run.sh" ]; then
