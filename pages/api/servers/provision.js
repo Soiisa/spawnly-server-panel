@@ -17,7 +17,7 @@ const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-
 const SLEEPER_SECRET = process.env.SLEEPER_SECRET;
 const DOMAIN_SUFFIX = '.spawnly.net';
 
-// Smarter API URL Resolution
+// Smarter API URL Resolution (Prevents VPS from pinging its own localhost)
 let appUrl = process.env.APP_BASE_URL || process.env.NEXTAUTH_URL;
 if (!appUrl && process.env.VERCEL_URL) appUrl = `https://${process.env.VERCEL_URL}`;
 if (!appUrl || appUrl.includes('localhost')) appUrl = 'https://spawnly.net';
@@ -193,7 +193,14 @@ const deleteCloudflareRecords = async (subdomain) => {
 };
 
 const createARecord = async (subdomain, serverIp) => {
-  const records = [{ type: 'A', name: subdomain, content: serverIp, ttl: 60, proxied: false }];
+  const cleanSub = subdomain.endsWith(DOMAIN_SUFFIX) ? subdomain.replace(DOMAIN_SUFFIX, '') : subdomain;
+  
+  // FIX: Create BOTH the main A record and the -api A record for the web console
+  const records = [
+      { type: 'A', name: cleanSub, content: serverIp, ttl: 60, proxied: false },
+      { type: 'A', name: `${cleanSub}-api`, content: serverIp, ttl: 60, proxied: false }
+  ];
+  
   const recordIds = [];
   for (const data of records) {
     try {
@@ -259,19 +266,16 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     }
     if (software === 'arclight' && version.includes('::')) effectiveVersion = version.split('::')[0];
 
-    let javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java'; 
-    if (effectiveVersion && effectiveVersion !== 'latest') {
-        const vClean = effectiveVersion.replace(/[^0-9.]/g, '');
-        const parts = vClean.split('.').map(Number);
-        if (parts.length > 0) {
-            const major = parts[0], minor = parts.length >= 2 ? parts[1] : 0, patch = parts.length >= 3 ? parts[2] : 0;
-            if (major >= 26) javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
-            else if (major === 1) {
-                if (minor >= 22) javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
-                else if (minor > 20 || (minor === 20 && patch >= 5)) javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
-                else if (minor >= 17) javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
-                else javaBin = (software.includes('arclight') || software.includes('mohist')) ? '/usr/lib/jvm/java-17-openjdk-amd64/bin/java' : '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
-            }
+    // FIX: Robust Java Version Parsing (Defaults to Java 21 for safety if unknown)
+    let javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java'; 
+    if (effectiveVersion) {
+        const mcVerMatch = effectiveVersion.match(/1\.(\d+)(\.(\d+))?/);
+        if (mcVerMatch) {
+            const minor = parseInt(mcVerMatch[1]);
+            const patch = parseInt(mcVerMatch[3] || '0');
+            if (minor >= 20 && patch >= 5) javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
+            else if (minor >= 17) javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
+            else javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
         }
     }
 
@@ -293,7 +297,7 @@ echo "[\$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-sync.sh] Started script execution"
 cd /opt/minecraft
 if [ -f "/opt/tools/prune.php" ] && [ -d "world/region" ]; then php /opt/tools/prune.php "world" || true; fi
 SYNC_EXCLUDES=""
-WORLD_NAME=\$(grep "^level-name=" server.properties | cut -d'=' -f2 | tr -d '\\r') || WORLD_NAME="world"
+WORLD_NAME=\$(grep "^level-name=" server.properties 2>/dev/null | cut -d'=' -f2 | tr -d '\\r' || true)
 [ -z "\$WORLD_NAME" ] && WORLD_NAME="world"
 if [ "${software.startsWith('modpack-')}" = "true" ]; then
   DIRS_TO_ZIP=""
@@ -346,6 +350,8 @@ echo "[\$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-startup.sh] Started script executi
 SOFTWARE='${software}'
 DOWNLOAD_URL='${escapedDl}'
 JAVA_BIN='${javaBin}'
+if [ ! -f "\$JAVA_BIN" ]; then JAVA_BIN="java"; fi
+
 MC_VERSION='${escapedVersion}'
 AIKAR_FLAGS="-XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Djava.awt.headless=true"
 
