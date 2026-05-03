@@ -179,7 +179,7 @@ const generateRconPassword = () => Array(16).fill('0123456789ABCDEFGHIJKLMNOPQRS
 const deleteCloudflareRecords = async (subdomain) => {
   let subdomainPrefix = subdomain.endsWith(DOMAIN_SUFFIX) ? subdomain.replace(DOMAIN_SUFFIX, '') : subdomain;
   if (!subdomainPrefix || !subdomainPrefix.match(/^[a-zA-Z0-9-]+$/)) return;
-  const recordTypes = [ { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}` }, { type: 'A', name: `${subdomainPrefix}-api${DOMAIN_SUFFIX}` }, { type: 'SRV', name: `_minecraft._tcp.${subdomainPrefix}${DOMAIN_SUFFIX}` } ];
+  const recordTypes = [ { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}` }, { type: 'SRV', name: `_minecraft._tcp.${subdomainPrefix}${DOMAIN_SUFFIX}` } ];
   for (const rt of recordTypes) {
     try {
         const response = await fetch(`${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?type=${rt.type}&name=${encodeURIComponent(rt.name)}`, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }});
@@ -195,8 +195,7 @@ const deleteCloudflareRecords = async (subdomain) => {
 const createARecord = async (subdomain, serverIp) => {
   let subdomainPrefix = subdomain.endsWith(DOMAIN_SUFFIX) ? subdomain.replace(DOMAIN_SUFFIX, '') : subdomain;
   const records = [
-    { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}`, content: serverIp, ttl: 60, proxied: false },
-    { type: 'A', name: `${subdomainPrefix}-api${DOMAIN_SUFFIX}`, content: serverIp, ttl: 60, proxied: false }
+    { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}`, content: serverIp, ttl: 60, proxied: false }
   ];
   const recordIds = [];
   for (const data of records) {
@@ -204,7 +203,9 @@ const createARecord = async (subdomain, serverIp) => {
       const response = await axios.post(`${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`, data, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }});
       recordIds.push(response.data.result.id);
     } catch (error) {
-      console.error('[Cloudflare] Failed to create A record:', error.response ? error.response.data : error.message);
+      const errMsg = error.response?.data?.errors?.[0]?.message || error.message;
+      console.error('[Cloudflare] Failed to create A record:', errMsg);
+      throw new Error(`DNS Creation Failed: ${errMsg}`);
     }
   }
   return recordIds;
@@ -218,8 +219,9 @@ const createSRVRecord = async (subdomain, serverIp) => {
     }, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }});
     return response.data.result.id;
   } catch (error) { 
-    console.error('[Cloudflare] Failed to create SRV record:', error.response ? error.response.data : error.message);
-    return null; 
+    const errMsg = error.response?.data?.errors?.[0]?.message || error.message;
+    console.error('[Cloudflare] Failed to create SRV record:', errMsg);
+    throw new Error(`DNS Creation Failed: ${errMsg}`);
   }
 };
 
@@ -269,6 +271,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     }
     if (software === 'arclight' && version.includes('::')) effectiveVersion = version.split('::')[0];
 
+    // Safely parse Java version with support for bleeding-edge 2026+ Snapshots
     let javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java'; 
     if (effectiveVersion && effectiveVersion !== 'latest') {
         const match = effectiveVersion.match(/^1\.(\d+)(?:\.(\d+))?/);
@@ -752,6 +755,10 @@ systemctl daemon-reload && systemctl enable --now minecraft mc-status-reporter m
 
     await uploadBootstrapScript(serverRow.id, s3Config, bootstrapContent);
 
+    let dnsWarning = null;
+    let subdomainResult = null;
+    let hetznerServer = null;
+
     const cloudInitPayload = `#cloud-config
 users:
   - name: minecraft
@@ -813,7 +820,7 @@ runcmd:
 
     if (!createRes) return res.status(502).json({ error: 'Hetzner create failed', detail: lastError.response?.data || lastError.message });
 
-    const hetznerServer = createRes.data.server || null;
+    hetznerServer = createRes.data.server || null;
     await supabaseAdmin.from('servers').update({ status: 'Initializing', started_at: new Date().toISOString() }).eq('id', serverRow.id);
 
     let finalServer = hetznerServer;
@@ -828,14 +835,25 @@ runcmd:
         await deleteCloudflareRecords(serverRow.subdomain);
         const aRecordIds = await createARecord(serverRow.subdomain, ipv4);
         let srvRecordId = await createSRVRecord(serverRow.subdomain, ipv4);
+        subdomainResult = `${serverRow.subdomain}.spawnly.net`;
         await supabaseAdmin.from('servers').update({ dns_record_ids: [...aRecordIds, ...(srvRecordId ? [srvRecordId] : [])] }).eq('id', serverRow.id);
-      } catch (e) {}
+      } catch (e) {
+        dnsWarning = e.message;
+        console.error('DNS Setup error:', e.message);
+      }
     }
 
     const { data: updatedRow, error: updateErr } = await supabaseAdmin.from('servers').update({ hetzner_id: finalServer?.id || null, ipv4: ipv4, status: finalServer?.status === 'running' ? 'Running' : 'Initializing', rcon_password: rconPassword, needs_file_deletion: false, pending_backup_restore: null, force_software_install: false, current_session_id: uuidv4() }).eq('id', serverRow.id).select().single();
 
     if (updateErr) return res.status(500).json({ error: 'Failed to update database' });
-    return res.status(200).json({ server: updatedRow, hetznerServer: finalServer, subdomain: `${serverRow.subdomain}.spawnly.net`, message: 'Server provisioned' });
+    
+    return res.status(200).json({ 
+        server: updatedRow, 
+        hetznerServer: finalServer, 
+        subdomain: subdomainResult, 
+        message: 'Server provisioned',
+        warning: dnsWarning 
+    });
 
   } catch (err) { return res.status(500).json({ error: 'Provisioning failed', detail: err.message }); }
 }
