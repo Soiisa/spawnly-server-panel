@@ -322,6 +322,7 @@ WORLD_NAME=\$(grep "^level-name=" server.properties 2>/dev/null | cut -d'=' -f2 
 if [ "${software.startsWith('modpack-')}" = "true" ]; then
   DIRS_TO_ZIP=""
   for d in */ ; do
+      [ -e "\$d" ] || continue
       if [ -L "\${d%/}" ]; then continue; fi
       dirname="\${d%/}"
       if [[ "\$dirname" == "\$WORLD_NAME" || "\$dirname" == "logs" || "\$dirname" == "crash-reports" || "\$dirname" == "backups" || "\$dirname" == "serverinstaller" || "\$dirname" == "node_modules" ]]; then continue; fi
@@ -424,7 +425,7 @@ setup_generic_start_script() {
     fi
 }
 
-if [ "\$HAS_EXECUTABLE" = "false" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FORCE_INSTALL" = "true" ]; then
+if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FORCE_INSTALL" = "true" ]; then
     if [ "${software.startsWith('modpack-')}" = "true" ] && [ -f "server.properties" ] && [ "${serverRow.needsFileDeletion}" != "true" ]; then rm -rf mods config scripts kubejs libraries defaultconfigs versions; fi
 
     if [ "\$SOFTWARE" = "modpack-ftb" ]; then
@@ -435,7 +436,7 @@ if [ "\$HAS_EXECUTABLE" = "false" ] || [ "${serverRow.needsFileDeletion}" = "tru
 
     elif [[ "\$SOFTWARE" == "modpack-"* ]] || [[ "\$DOWNLOAD_URL" == *.zip ]]; then
         echo "[Startup] Downloading raw Modpack/ZIP file..."
-        wget -q --show-progress -O modpack.zip "\$DOWNLOAD_URL"
+        wget -q -O modpack.zip "\$DOWNLOAD_URL"
         
         echo "[Startup] Extracting zip to temporary isolating directory..."
         mkdir -p /tmp/modpack_extract
@@ -592,10 +593,10 @@ if [ "\$HAS_EXECUTABLE" = "false" ] || [ "${serverRow.needsFileDeletion}" = "tru
         wget -q --tries=3 -O server.jar "\$DOWNLOAD_URL"
         echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
     fi
-    
-    if [ ! -f "server.properties" ]; then
-        echo -e "enable-rcon=true\\nrcon.port=25575\\nrcon.password=${escapedRconPassword}\\nbroadcast-rcon-to-ops=true\\nserver-port=25565\\nenable-query=true\\nquery.port=25565\\nonline-mode=false\\nmax-players=20\\ndifficulty=easy\\ngamemode=survival\\nspawn-protection=16\\nview-distance=10\\nsimulation-distance=10\\nmotd=A Spawnly Server\\npvp=true\\ngenerate-structures=true\\nmax-world-size=29999984\\nmax-tick-time=-1\\npause-when-empty-seconds=-1" > server.properties
-    fi
+fi
+
+if [ ! -f "server.properties" ]; then
+    echo -e "enable-rcon=true\\nrcon.port=25575\\nrcon.password=${escapedRconPassword}\\nbroadcast-rcon-to-ops=true\\nserver-port=25565\\nenable-query=true\\nquery.port=25565\\nonline-mode=false\\nmax-players=20\\ndifficulty=easy\\ngamemode=survival\\nspawn-protection=16\\nview-distance=10\\nsimulation-distance=10\\nmotd=A Spawnly Server\\npvp=true\\ngenerate-structures=true\\nmax-world-size=29999984\\nmax-tick-time=-1\\npause-when-empty-seconds=-1" > server.properties
 fi
 
 if [ -f "run.sh" ]; then
