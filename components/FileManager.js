@@ -41,7 +41,6 @@ const getFileIcon = (fileName, isDirectory) => {
   }
 };
 
-// --- CHANGED: Added isAdmin prop ---
 export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const { t } = useTranslation('server');
   
@@ -72,6 +71,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null); // Ref for folders
   const nameInputRef = useRef(null);
   const actionInputRef = useRef(null);
 
@@ -91,11 +91,8 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
 
   useEffect(() => {
     const applyFilter = (list) => {
-      // If not admin, always enforce filter
       if (!filterEnabled && !isAdmin) return list || []; 
-      
       if (!filterEnabled && isAdmin) return list || [];
-
       return (list || []).filter(file => {
         const name = file.name.toLowerCase().replace(/\/+$/, '');
         return !maskedItems.includes(name) && !maskedItems.some(masked => name.startsWith(masked + '/'));
@@ -129,11 +126,8 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
         return a.isDirectory ? -1 : 1;
       });
       setAllFiles(sorted);
-      
-      // FIX: Normalize backslashes to forward slashes to fix Breadcrumb issue
       const normalizedPath = (res.data.path || '').replace(/\\/g, '/');
       setCurrentPath(normalizedPath);
-      
     } catch (err) {
       setError(`${t('files.load_fail')}: ${err.response?.data?.error || err.message}`);
     } finally {
@@ -152,21 +146,14 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     download(file);
   };
 
-  const navigateToFolder = (folderName) => {
-    setCurrentPath(prev => prev ? `${prev}/${folderName}` : folderName);
-  };
+  const navigateToFolder = (folderName) => setCurrentPath(prev => prev ? `${prev}/${folderName}` : folderName);
 
   const openFileForEditing = async (file) => {
     try {
-      setLoading(true);
-      setError(null);
+      setLoading(true); setError(null);
       const relPath = currentPath ? `${currentPath}/${file.name}` : file.name;
       const responseType = isNbtFile(file.name) ? 'arraybuffer' : 'text';
-      const res = await axios.get(`${apiBase}/file`, {
-        params: { path: relPath },
-        headers: { Authorization: `Bearer ${token}` },
-        responseType,
-      });
+      const res = await axios.get(`${apiBase}/file`, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}` }, responseType });
       let content = res.data;
       if (isNbtFile(file.name)) {
         try {
@@ -178,11 +165,8 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       }
       setEditingFile(file);
       setFileContent(content);
-    } catch (err) {
-      setError(`Could not open file: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(`Could not open file: ${err.message}`); } 
+    finally { setLoading(false); }
   };
 
   const saveFile = async () => {
@@ -197,55 +181,35 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
         body = await write(parsed, { compression: 'gzip', endian: 'big', name: '' });
         contentType = 'application/octet-stream';
       }
-      await axios.put(`${apiBase}/files`, body, {
-        params: { path: relPath },
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType },
-      });
-      setEditingFile(null);
-      setFileContent('');
-    } catch (err) {
-      setError(`${t('files.save_fail')}: ${err.message}`);
-    } finally {
-      setIsSaving(false);
-    }
+      await axios.put(`${apiBase}/files`, body, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType } });
+      setEditingFile(null); setFileContent('');
+    } catch (err) { setError(`${t('files.save_fail')}: ${err.message}`); } 
+    finally { setIsSaving(false); }
   };
 
   const deleteFile = async (file) => {
     if (!window.confirm(t('files.delete_confirm', { name: file.name }))) return;
     try {
       const relPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-      await axios.delete(`${apiBase}/files`, {
-        params: { path: relPath },
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await axios.delete(`${apiBase}/files`, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}` } });
       fetchFiles(currentPath);
-    } catch (err) {
-      setError(`${t('files.delete_fail')}: ${err.message}`);
-    }
+    } catch (err) { setError(`${t('files.delete_fail')}: ${err.message}`); }
   };
 
   const download = async (file) => {
     try {
       const relPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-      const res = await axios.get(`${apiBase}/file`, {
-        params: { path: relPath },
-        responseType: 'blob',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await axios.get(`${apiBase}/file`, { params: { path: relPath }, responseType: 'blob', headers: { Authorization: `Bearer ${token}` } });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', file.name);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      link.href = url; link.setAttribute('download', file.name); document.body.appendChild(link);
+      link.click(); link.remove();
     } catch (err) { setError(t('files.download_fail')); }
   };
 
-  // --- External Upload Drag Handlers ---
+  // --- External Upload Drag Handlers (Multi-File & Folder Support) ---
   const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     if (e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes('application/x-spawnly-internal')) {
         if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
         else if (e.type === 'dragleave') setDragActive(false);
@@ -256,55 +220,116 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      await performUpload(file);
+
+    const items = e.dataTransfer.items;
+    if (items && items.length > 0) {
+      const filesList = [];
+
+      const readAllEntries = async (dirReader) => {
+          let entries = [];
+          let read;
+          do {
+              read = await new Promise(resolve => dirReader.readEntries(resolve));
+              entries = entries.concat(read);
+          } while (read.length > 0);
+          return entries;
+      };
+
+      const readEntry = async (entry, pathStr = '') => {
+          if (entry.isFile) {
+              const file = await new Promise(resolve => entry.file(resolve));
+              filesList.push({ file, relativePath: pathStr + file.name });
+          } else if (entry.isDirectory) {
+              const dirReader = entry.createReader();
+              const entries = await readAllEntries(dirReader);
+              for (const child of entries) {
+                  await readEntry(child, pathStr + entry.name + '/');
+              }
+          }
+      };
+
+      for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === 'file') {
+              const entry = item.webkitGetAsEntry();
+              if (entry) await readEntry(entry, '');
+          }
+      }
+      
+      if (filesList.length > 0) {
+          await performBatchUpload(filesList);
+      }
+    } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesList = Array.from(e.dataTransfer.files).map(f => ({ file: f, relativePath: f.name }));
+      await performBatchUpload(filesList);
     }
   };
 
-  const handleUploadClick = (e) => {
-    const file = e.target.files[0];
-    if (file) performUpload(file);
+  const handleUploadClick = async (e) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const filesList = Array.from(e.target.files).map(f => ({
+       // webkitRelativePath includes the folder structure if uploading a folder
+       relativePath: f.webkitRelativePath || f.name,
+       file: f
+    }));
+    await performBatchUpload(filesList);
   };
 
-  const performUpload = async (file) => {
-    setUploadProgress(1);
-    setSelectedFile(file);
-    const formData = new FormData();
-    formData.append('fileName', file.name);
-    formData.append('fileContent', file);
-    try {
-      await axios.post(`${apiBase}/files?path=${currentPath}`, formData, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (ev) => setUploadProgress(Math.round((ev.loaded * 100) / ev.total)),
-      });
+  const performBatchUpload = async (filesList) => {
+      setUploadProgress(1);
+      let totalBytes = filesList.reduce((acc, f) => acc + f.file.size, 0);
+      let uploadedBytes = 0;
+
+      if (filesList.length === 0) {
+          setUploadProgress(0);
+          return;
+      }
+
+      // Concurrency limit to not overwhelm the API
+      const concurrencyLimit = 3;
+      let i = 0;
+
+      const uploadNext = async () => {
+          while (i < filesList.length) {
+              const currentIndex = i++;
+              const { file, relativePath } = filesList[currentIndex];
+              const formData = new FormData();
+              formData.append('fileName', relativePath);
+              formData.append('fileContent', file);
+
+              try {
+                  await axios.post(`${apiBase}/files?path=${currentPath}`, formData, {
+                      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+                  });
+              } catch (err) {
+                  console.error("Failed to upload", relativePath, err);
+              }
+              uploadedBytes += file.size;
+              setUploadProgress(Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)));
+          }
+      };
+
+      const workers = [];
+      for (let j = 0; j < concurrencyLimit; j++) workers.push(uploadNext());
+      await Promise.all(workers);
+
       fetchFiles(currentPath);
-    } catch (err) { setError(t('files.upload_fail')); } 
-    finally { setSelectedFile(null); setUploadProgress(0); if (fileInputRef.current) fileInputRef.current.value = ''; }
+      setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (folderInputRef.current) folderInputRef.current.value = '';
   };
 
   // --- Internal Row Drag Handlers ---
   const handleRowDragStart = (e, file) => {
-      setInternalDragFile(file);
-      e.dataTransfer.setData('application/x-spawnly-internal', file.name);
-      e.dataTransfer.effectAllowed = 'move';
+      setInternalDragFile(file); e.dataTransfer.setData('application/x-spawnly-internal', file.name); e.dataTransfer.effectAllowed = 'move';
   };
-
   const handleRowDragOver = (e, targetFolder) => {
-      e.preventDefault();
-      if (internalDragFile && targetFolder.isDirectory && internalDragFile.name !== targetFolder.name) {
-          setDropTarget(targetFolder.name);
-          e.dataTransfer.dropEffect = 'move';
-      }
+      e.preventDefault(); if (internalDragFile && targetFolder.isDirectory && internalDragFile.name !== targetFolder.name) { setDropTarget(targetFolder.name); e.dataTransfer.dropEffect = 'move'; }
   };
-
   const handleRowDragLeave = () => setDropTarget(null);
-
   const handleRowDrop = async (e, targetFolder) => {
-      e.preventDefault(); e.stopPropagation();
-      setDropTarget(null);
+      e.preventDefault(); e.stopPropagation(); setDropTarget(null);
       if (!internalDragFile || !targetFolder.isDirectory || internalDragFile.name === targetFolder.name) return;
-      
       const oldPath = currentPath ? `${currentPath}/${internalDragFile.name}` : internalDragFile.name;
       const newPath = currentPath ? `${currentPath}/${targetFolder.name}/${internalDragFile.name}` : `${targetFolder.name}/${internalDragFile.name}`;
       await executeMove(oldPath, newPath);
@@ -312,20 +337,12 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
 
   // --- Breadcrumb Drag Handlers ---
   const handleBreadcrumbDragOver = (e, path) => {
-      e.preventDefault();
-      if (internalDragFile && path !== currentPath) {
-          setBreadcrumbDropTarget(path);
-          e.dataTransfer.dropEffect = 'move';
-      }
+      e.preventDefault(); if (internalDragFile && path !== currentPath) { setBreadcrumbDropTarget(path); e.dataTransfer.dropEffect = 'move'; }
   };
-
   const handleBreadcrumbDragLeave = () => setBreadcrumbDropTarget(null);
-
   const handleBreadcrumbDrop = async (e, targetPath) => {
-      e.preventDefault(); e.stopPropagation();
-      setBreadcrumbDropTarget(null);
+      e.preventDefault(); e.stopPropagation(); setBreadcrumbDropTarget(null);
       if (!internalDragFile || targetPath === currentPath) return;
-
       const oldPath = currentPath ? `${currentPath}/${internalDragFile.name}` : internalDragFile.name;
       const newPath = targetPath ? `${targetPath}/${internalDragFile.name}` : internalDragFile.name;
       await executeMove(oldPath, newPath);
@@ -334,8 +351,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const executeMove = async (oldPath, newPath) => {
       try {
           await axios.patch(`${apiBase}/files`, { oldPath, newPath }, { headers: { Authorization: `Bearer ${token}` } });
-          setInternalDragFile(null);
-          fetchFiles(currentPath);
+          setInternalDragFile(null); fetchFiles(currentPath);
       } catch (err) { setError(t('files.errors.move_fail', { defaultValue: 'Move failed' })); }
   };
 
@@ -370,7 +386,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  // FIX: Ensure breadcrumbs always use forward slashes for display splitting
   const breadcrumbs = currentPath.replace(/\\/g, '/').split('/').filter(Boolean);
 
   return (
@@ -394,34 +409,26 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       <div className="bg-white dark:bg-slate-800 rounded-t-2xl border border-gray-200 dark:border-slate-700 p-4 border-b-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-1 text-sm overflow-x-auto scrollbar-hide">
-            
-            {/* HOME BREADCRUMB (DROP TARGET) */}
             <button 
                 onClick={() => setCurrentPath('')} 
                 onDragOver={(e) => handleBreadcrumbDragOver(e, '')}
                 onDragLeave={handleBreadcrumbDragLeave}
                 onDrop={(e) => handleBreadcrumbDrop(e, '')}
-                className={`p-1.5 rounded-md transition-colors ${
-                    breadcrumbDropTarget === '' ? 'bg-indigo-200 dark:bg-indigo-700 ring-2 ring-indigo-500' : ''
-                } ${!currentPath ? 'text-indigo-600 bg-indigo-50 font-semibold' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
+                className={`p-1.5 rounded-md transition-colors ${breadcrumbDropTarget === '' ? 'bg-indigo-200 dark:bg-indigo-700 ring-2 ring-indigo-500' : ''} ${!currentPath ? 'text-indigo-600 bg-indigo-50 font-semibold' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
             >
                 <HomeIcon className="w-5 h-5" />
             </button>
-
             {breadcrumbs.map((part, index) => {
                const path = breadcrumbs.slice(0, index + 1).join('/');
                return (
                 <div key={index} className="flex items-center">
                     <ChevronRightIcon className="w-4 h-4 text-gray-300 dark:text-slate-500 flex-shrink-0" />
-                    {/* FOLDER BREADCRUMB (DROP TARGET) */}
                     <button 
                         onClick={() => setCurrentPath(path)} 
                         onDragOver={(e) => handleBreadcrumbDragOver(e, path)}
                         onDragLeave={handleBreadcrumbDragLeave}
                         onDrop={(e) => handleBreadcrumbDrop(e, path)}
-                        className={`px-2 py-1 rounded-md transition-colors whitespace-nowrap ${
-                           breadcrumbDropTarget === path ? 'bg-indigo-200 dark:bg-indigo-700 ring-2 ring-indigo-500' : ''
-                        } ${index === breadcrumbs.length - 1 ? 'text-indigo-600 bg-indigo-50 font-semibold' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
+                        className={`px-2 py-1 rounded-md transition-colors whitespace-nowrap ${breadcrumbDropTarget === path ? 'bg-indigo-200 dark:bg-indigo-700 ring-2 ring-indigo-500' : ''} ${index === breadcrumbs.length - 1 ? 'text-indigo-600 bg-indigo-50 font-semibold' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
                     >
                         {part}
                     </button>
@@ -429,17 +436,26 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
                );
             })}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center bg-gray-100 dark:bg-slate-700 rounded-lg p-1 mr-2"><button onClick={() => openCreateModal('file')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-600 rounded-md"><PlusIcon className="w-5 h-5" /></button><div className="w-px h-4 bg-gray-300 dark:bg-slate-600 mx-1"></div><button onClick={() => openCreateModal('folder')} className="p-1.5 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-600 rounded-md"><FolderPlusIcon className="w-5 h-5" /></button></div>
-            {/* --- CHANGED: Only show filter toggle if Admin --- */}
             {isAdmin && (
               <button onClick={() => setFilterEnabled(!filterEnabled)} className={`p-2 rounded-lg border ${filterEnabled ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-gray-200 text-gray-500'}`}><FunnelIcon className="w-5 h-5" /></button>
             )}
             <button onClick={() => fetchFiles(currentPath)} disabled={loading} className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"><ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} /></button>
-            <div className="relative group"><button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm"><ArrowUpTrayIcon className="w-4 h-4" />{t('files.upload')}</button><input type="file" ref={fileInputRef} className="hidden" onChange={handleUploadClick} /></div>
+            
+            <div className="relative group flex items-center gap-2">
+              <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm hover:bg-indigo-700 transition-colors">
+                <ArrowUpTrayIcon className="w-4 h-4" />{t('files.upload', {defaultValue: 'Files'})}
+              </button>
+              <button onClick={() => folderInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm hover:bg-indigo-700 transition-colors">
+                <FolderPlusIcon className="w-4 h-4" />{t('files.upload_folder', {defaultValue: 'Folder'})}
+              </button>
+              <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleUploadClick} />
+              <input type="file" ref={folderInputRef} className="hidden" webkitdirectory="" directory="" onChange={handleUploadClick} />
+            </div>
           </div>
         </div>
-        {uploadProgress > 0 && (<div className="h-1 w-full bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden mb-4"><motion.div initial={{ width: 0 }} animate={{ width: `${uploadProgress}%` }} className="h-full bg-indigo-500" /></div>)}
+        {uploadProgress > 0 && (<div className="h-1 w-full bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden mb-4"><motion.div initial={{ width: 0 }} animate={{ width: `${uploadProgress}%` }} className="h-full bg-indigo-500 transition-all duration-300" /></div>)}
         {error && (<div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-center gap-2"><ExclamationCircleIcon className="w-5 h-5" />{error}</div>)}
       </div>
 
