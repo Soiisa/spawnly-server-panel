@@ -99,7 +99,7 @@ export default async function handler(req, res) {
   let relPath = '';
   try { relPath = sanitizePath(req.query.path || ''); } catch (e) { return res.status(400).json({ error: 'Invalid path' }); }
   
-  const s3Path = relPath ? path.join(s3Prefix, relPath).replace(/\\/g, '/') + '/' : s3Prefix;
+  const s3Path = relPath ? path.posix.join(s3Prefix, relPath) + '/' : s3Prefix;
   if (!s3Path.startsWith(s3Prefix)) return res.status(400).json({ error: 'Access denied: Invalid path scope' });
 
   // GET: List Files
@@ -107,7 +107,6 @@ export default async function handler(req, res) {
     try {
       if (server.status === 'Running' && server.ipv4) {
         try {
-          // Note: Use server.rcon_password to talk to the agent
           const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/files?path=${encodeURIComponent(relPath)}`, { headers: { 'Authorization': `Bearer ${server.rcon_password}` }, timeout: 5000 });
           if (response.ok) return res.status(200).json(await response.json());
         } catch (fetchError) { console.warn('Agent fetch failed, S3 fallback'); }
@@ -139,20 +138,34 @@ export default async function handler(req, res) {
              return res.status(200).json({ success: true });
            } catch(e) {}
         }
-        await s3.putObject({ Bucket: S3_BUCKET, Key: path.join(s3Prefix, safeRelPath).replace(/\\/g, '/') + '/', Body: '' }).promise();
+        await s3.putObject({ Bucket: S3_BUCKET, Key: path.posix.join(s3Prefix, safeRelPath) + '/', Body: '' }).promise();
         return res.status(200).json({ success: true, path: safeRelPath });
       } catch (err) { return res.status(500).json({ error: 'Failed' }); }
     }
+    
+    // File Upload Handler
     const form = new formidable.IncomingForm();
     return new Promise((resolve, reject) => {
       form.parse(req, async (err, fields, files) => {
         if (err || !fields.fileName || !files.fileContent) return resolve(res.status(400).json({ error: 'Bad Request' }));
         try {
-          const s3Key = path.join(s3Prefix, relPath, fields.fileName).replace(/\\/g, '/');
+          // Normalize backslashes from Windows paths
+          let safeFileName = String(fields.fileName).replace(/\\/g, '/').replace(/^(\.\.\/)+/, '');
+          if (safeFileName.includes('..')) return resolve(res.status(400).json({ error: 'Invalid filename path' }));
+          
+          // Use path.posix to ensure S3 uses forward slashes
+          const s3Key = path.posix.join(s3Prefix, relPath, safeFileName);
+          
           const fs = require('fs').promises;
           const fileBuffer = await fs.readFile(files.fileContent.path);
-          await s3.putObject({ Bucket: S3_BUCKET, Key: s3Key, Body: fileBuffer, ContentType: files.fileContent.mimetype || 'application/octet-stream' }).promise();
-          resolve(res.status(200).json({ success: true, path: path.join(relPath, fields.fileName) }));
+          await s3.putObject({ 
+            Bucket: S3_BUCKET, 
+            Key: s3Key, 
+            Body: fileBuffer, 
+            ContentType: files.fileContent.mimetype || 'application/octet-stream' 
+          }).promise();
+          
+          resolve(res.status(200).json({ success: true, path: path.posix.join(relPath, safeFileName) }));
         } catch (s3Error) { resolve(res.status(500).json({ error: 'Upload failed' })); }
       });
     });
@@ -175,11 +188,10 @@ export default async function handler(req, res) {
                 body: JSON.stringify({ oldPath: safeOld, newPath: safeNew })
              });
              if (!response.ok) throw new Error(await response.text());
-             // Sync to S3 later or rely on restart
           } else {
              // S3 Rename (Copy + Delete)
-             const oldKey = path.join(s3Prefix, safeOld).replace(/\\/g, '/');
-             const newKey = path.join(s3Prefix, safeNew).replace(/\\/g, '/');
+             const oldKey = path.posix.join(s3Prefix, safeOld);
+             const newKey = path.posix.join(s3Prefix, safeNew);
              
              await s3.copyObject({ Bucket: S3_BUCKET, CopySource: `${S3_BUCKET}/${oldKey}`, Key: newKey }).promise();
              await s3.deleteObject({ Bucket: S3_BUCKET, Key: oldKey }).promise();
@@ -195,7 +207,7 @@ export default async function handler(req, res) {
   if (req.method === 'PUT') {
     try {
       const body = await getRawBody(req);
-      const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
+      const s3Key = path.posix.join(s3Prefix, relPath);
       await s3.putObject({ Bucket: S3_BUCKET, Key: s3Key, Body: body, ContentType: req.headers['content-type'] }).promise();
       if (server.status === 'Running' && server.ipv4) {
          try { await fetch(`http://${server.subdomain}.spawnly.net:3005/api/file?path=${encodeURIComponent(relPath)}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': req.headers['content-type'] }, body: body }); } catch(e) {}
@@ -207,7 +219,7 @@ export default async function handler(req, res) {
   // DELETE
   if (req.method === 'DELETE') {
     try {
-      const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
+      const s3Key = path.posix.join(s3Prefix, relPath);
       const list = await s3.listObjectsV2({ Bucket: S3_BUCKET, Prefix: s3Key + (s3Key.endsWith('/') ? '' : '/') }).promise();
       if (list.Contents?.length > 0) await s3.deleteObjects({ Bucket: S3_BUCKET, Delete: { Objects: list.Contents.map(o => ({ Key: o.Key })) } }).promise();
       else await s3.deleteObject({ Bucket: S3_BUCKET, Key: s3Key }).promise();
