@@ -17,14 +17,17 @@ const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-
 const SLEEPER_SECRET = process.env.SLEEPER_SECRET;
 const DOMAIN_SUFFIX = '.spawnly.net';
 
-// Smarter API URL Resolution
+// Smarter API URL Resolution (Prevents VPS from pinging its own localhost)
 let appUrl = process.env.APP_BASE_URL || process.env.NEXTAUTH_URL;
 if (!appUrl && process.env.VERCEL_URL) appUrl = `https://${process.env.VERCEL_URL}`;
 if (!appUrl || appUrl.includes('localhost')) appUrl = 'https://spawnly.net';
 const APP_BASE_URL = appUrl;
 
 const sanitizeYaml = (str) => str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, '');
-const compressToGzB64 = (str) => zlib.gzipSync(Buffer.from(str, 'utf-8')).toString('base64');
+
+const compressToGzB64 = (str) => {
+  return zlib.gzipSync(Buffer.from(str, 'utf-8')).toString('base64');
+};
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -54,17 +57,6 @@ const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
   }
   return null;
 };
-
-// --- S3 Client Config (Optimized for Coolify/MinIO) ---
-const getS3Client = (s3Config) => new AWS.S3({ 
-    accessKeyId: s3Config.AWS_ACCESS_KEY_ID, 
-    secretAccessKey: s3Config.AWS_SECRET_ACCESS_KEY, 
-    region: s3Config.AWS_REGION || 'eu-central-1', 
-    endpoint: s3Config.S3_ENDPOINT || undefined,
-    s3ForcePathStyle: !!s3Config.S3_ENDPOINT, // CRUCIAL FOR MINIO
-    httpOptions: { timeout: 15000, connectTimeout: 5000 },
-    maxRetries: 2
-});
 
 // --- Download URL Generators ---
 const getVanillaDownloadUrl = async (version) => {
@@ -202,14 +194,18 @@ const deleteCloudflareRecords = async (subdomain) => {
 
 const createARecord = async (subdomain, serverIp) => {
   let subdomainPrefix = subdomain.endsWith(DOMAIN_SUFFIX) ? subdomain.replace(DOMAIN_SUFFIX, '') : subdomain;
-  const records = [ { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}`, content: serverIp, ttl: 60, proxied: false } ];
+  const records = [
+    { type: 'A', name: `${subdomainPrefix}${DOMAIN_SUFFIX}`, content: serverIp, ttl: 60, proxied: false }
+  ];
   const recordIds = [];
   for (const data of records) {
     try {
       const response = await axios.post(`${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`, data, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }});
       recordIds.push(response.data.result.id);
     } catch (error) {
-      console.error('[Cloudflare] Failed to create A record:', error.response?.data?.errors?.[0]?.message || error.message);
+      const errMsg = error.response?.data?.errors?.[0]?.message || error.message;
+      console.error('[Cloudflare] Failed to create A record:', errMsg);
+      throw new Error(`DNS Creation Failed: ${errMsg}`);
     }
   }
   return recordIds;
@@ -223,14 +219,21 @@ const createSRVRecord = async (subdomain, serverIp) => {
     }, { headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }});
     return response.data.result.id;
   } catch (error) { 
-    console.error('[Cloudflare] Failed to create SRV record:', error.response?.data?.errors?.[0]?.message || error.message);
-    return null;
+    const errMsg = error.response?.data?.errors?.[0]?.message || error.message;
+    console.error('[Cloudflare] Failed to create SRV record:', errMsg);
+    throw new Error(`DNS Creation Failed: ${errMsg}`);
   }
 };
 
 const deleteS3Files = async (serverId, s3Config) => {
   try {
-    const s3 = getS3Client(s3Config);
+    const s3 = new AWS.S3({ 
+        accessKeyId: s3Config.AWS_ACCESS_KEY_ID, 
+        secretAccessKey: s3Config.AWS_SECRET_ACCESS_KEY, 
+        region: s3Config.AWS_REGION, 
+        endpoint: s3Config.S3_ENDPOINT || undefined,
+        s3ForcePathStyle: !!s3Config.S3_ENDPOINT // Fix for Coolify/MinIO
+    });
     const listParams = { Bucket: s3Config.S3_BUCKET, Prefix: `servers/${serverId}/` };
     const listedObjects = await s3.listObjectsV2(listParams).promise();
     if (!listedObjects.Contents || listedObjects.Contents.length === 0) return;
@@ -239,13 +242,19 @@ const deleteS3Files = async (serverId, s3Config) => {
 };
 
 const uploadBootstrapScript = async (serverId, s3Config, content) => {
-    const s3 = getS3Client(s3Config);
+    const s3 = new AWS.S3({ 
+        accessKeyId: s3Config.AWS_ACCESS_KEY_ID, 
+        secretAccessKey: s3Config.AWS_SECRET_ACCESS_KEY, 
+        region: s3Config.AWS_REGION, 
+        endpoint: s3Config.S3_ENDPOINT || undefined,
+        s3ForcePathStyle: !!s3Config.S3_ENDPOINT // Fix for Coolify/MinIO
+    });
     await s3.putObject({ Bucket: s3Config.S3_BUCKET, Key: `servers/${serverId}/bootstrap.sh`, Body: content, ContentType: 'text/x-shellscript' }).promise();
 };
 
 async function provisionServer(serverRow, version, ssh_keys, res) {
   try {
-    console.log(`\n[Provision] === STARTING PROVISION FOR ${serverRow.id} ===`);
+    console.log('provisionServer: Starting for serverId:', serverRow.id, 'software:', serverRow.type, 'version:', version);
     const serverType = ramToServerType(Number(serverRow.ram || 4));
     const software = serverRow.type || 'vanilla';
     const s3Config = { S3_BUCKET: process.env.S3_BUCKET, AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY, AWS_REGION: process.env.AWS_REGION, S3_ENDPOINT: process.env.S3_ENDPOINT };
@@ -253,27 +262,20 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const s5cmdOpt = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
 
     if (serverRow.needs_file_deletion) {
-      console.log(`[Provision] Passo 0: Deleting old S3 files...`);
-      try { await deleteS3Files(serverRow.id, s3Config); } catch (e) { console.error('Failed to delete S3 files', e); }
+      try { await deleteS3Files(serverRow.id, s3Config); } catch (e) { return res.status(500).json({ error: 'Failed to delete S3 files' }); }
     }
 
     try { await supabaseAdmin.from('server_console').delete().eq('server_id', serverRow.id); } catch (e) {}
 
     const { data: allocations } = await supabaseAdmin.from('allocations').select('port_number').eq('server_id', serverRow.id);
     
-    console.log(`[Provision] Passo 1: Resolving Download URL for ${software} ${version}...`);
     let downloadUrl = null;
-    try { downloadUrl = await getSoftwareDownloadUrl(software, version); } 
-    catch (e) { 
-        console.error('Failed to resolve URL:', e.message);
-        return res.status(400).json({ error: 'Failed to resolve download URL' }); 
-    }
+    try { downloadUrl = await getSoftwareDownloadUrl(software, version); } catch (e) { return res.status(400).json({ error: 'Failed to resolve download URL' }); }
 
     const rconPassword = serverRow.rcon_password || generateRconPassword();
     
-    // --- RAM ALLOCATION FIX ---
+    // --- RAM FIX (Prevent Linux OOM Killer) ---
     const serverRam = Number(serverRow.ram || 2);
-    // Reserve memory for OS/Node.js to prevent OOM Killer
     const heapGb = Math.max(1, serverRam > 2 ? serverRam - 1 : serverRam - 0.5);
     
     let effectiveVersion = version;
@@ -284,17 +286,22 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     }
     if (software === 'arclight' && version.includes('::')) effectiveVersion = version.split('::')[0];
 
-    // Java Version Resolution
+    // Safely parse Java version with support for bleeding-edge 2026+ Snapshots
     let javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java'; 
     if (effectiveVersion && effectiveVersion !== 'latest') {
         const match = effectiveVersion.match(/^1\.(\d+)(?:\.(\d+))?/);
         if (match) {
             const minor = parseInt(match[1], 10);
             const patch = parseInt(match[2] || '0', 10);
-            if (minor < 17) javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
-            else if (minor < 20 || (minor === 20 && patch < 5)) javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
-            else if (minor < 22) javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
-            else javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
+            if (minor < 17) {
+                javaBin = '/usr/lib/jvm/java-8-openjdk-amd64/bin/java';
+            } else if (minor < 20 || (minor === 20 && patch < 5)) {
+                javaBin = '/usr/lib/jvm/java-17-openjdk-amd64/bin/java';
+            } else if (minor < 22) {
+                javaBin = '/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
+            } else {
+                javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java';
+            }
         } else {
             const snapMatch = effectiveVersion.match(/^(\d+)w/i);
             if (snapMatch) {
@@ -398,22 +405,36 @@ run_installer() {
     local inst="\$1"
     echo "[Startup] Running installer: \$inst"
     \$JAVA_BIN -Xmx1024M -Djava.awt.headless=true -jar "\$inst" --installServer || true
+    
+    if [ -f "run.sh" ]; then
+        local af=\$(grep -o 'libraries/net/[^ "]*args.txt' run.sh || true)
+        if [ -n "\$af" ] && [ ! -f "\$af" ]; then
+            echo "[Startup] Missing args.txt (\$af). Installer failed. Retrying..."
+            \$JAVA_BIN -Xmx1024M -Djava.awt.headless=true -jar "\$inst" --installServer || true
+        fi
+    fi
 }
 
 setup_generic_start_script() {
     if [ -f "Install.sh" ]; then chmod +x Install.sh; ./Install.sh || true; fi
+    if [ -f "install.sh" ]; then chmod +x install.sh; ./install.sh || true; fi
+
     INSTALLER=\$(ls -1 *installer*.jar 2>/dev/null | head -n 1 || true)
     if [ -n "\$INSTALLER" ]; then
         run_installer "\$INSTALLER"
         rm -f "\$INSTALLER" installer.log || true
     fi
+
     START_SCRIPT=\$(ls -1 start.sh run.sh ServerStart.sh 2>/dev/null | head -n 1 || true)
     if [ -n "\$START_SCRIPT" ]; then
+        echo "[Startup] Found start script: \$START_SCRIPT"
         chmod +x "\$START_SCRIPT"
         if [ "\$START_SCRIPT" != "run.sh" ]; then cp "\$START_SCRIPT" run.sh && chmod +x run.sh; fi
     else
+        echo "[Startup] No start script found. Searching for server/loader jars..."
         FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar server.jar fabric-server-launch.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
         if [ -n "\$FORGE_JAR" ]; then 
+            echo "[Startup] Falling back to discovered JAR: \$FORGE_JAR"
             echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh
         fi
     fi
@@ -422,9 +443,17 @@ setup_generic_start_script() {
 if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FORCE_INSTALL" = "true" ]; then
     if [ "${software.startsWith('modpack-')}" = "true" ] && [ -f "server.properties" ] && [ "${serverRow.needsFileDeletion}" != "true" ]; then rm -rf mods config scripts kubejs libraries defaultconfigs versions; fi
 
-    if [[ "\$SOFTWARE" == "modpack-"* ]] || [[ "\$DOWNLOAD_URL" == *.zip ]]; then
-        echo "[Startup] Downloading Modpack/ZIP..."
+    if [ "\$SOFTWARE" = "modpack-ftb" ]; then
+        curl -L -o serverinstaller https://dist.creeper.host/FTB2/server-installer/serverinstaller_linux
+        chmod +x serverinstaller
+        ./serverinstaller -auto -pack '${modpackMeta.packId || ''}' -version '${modpackMeta.versionId || ''}' || true
+        setup_generic_start_script
+
+    elif [[ "\$SOFTWARE" == "modpack-"* ]] || [[ "\$DOWNLOAD_URL" == *.zip ]]; then
+        echo "[Startup] Downloading raw Modpack/ZIP file..."
         wget -q -O modpack.zip "\$DOWNLOAD_URL"
+        
+        echo "[Startup] Extracting zip to temporary isolating directory..."
         mkdir -p /tmp/modpack_extract
         unzip -q -o modpack.zip -d /tmp/modpack_extract || true
         rm -f modpack.zip
@@ -432,8 +461,14 @@ if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FO
         EXTRACTED_ITEMS=\$(ls -1A /tmp/modpack_extract | wc -l || true)
         if [ "\$EXTRACTED_ITEMS" -eq 1 ]; then 
             ROOT_DIR=\$(ls -1A /tmp/modpack_extract | head -n 1 || true)
-            mv /tmp/modpack_extract/"\$ROOT_DIR"/* . 2>/dev/null || true
-            mv /tmp/modpack_extract/"\$ROOT_DIR"/.* . 2>/dev/null || true
+            if [ -d "/tmp/modpack_extract/\$ROOT_DIR" ]; then 
+                echo "[Startup] Moving files out of subfolder: \$ROOT_DIR"
+                mv /tmp/modpack_extract/"\$ROOT_DIR"/* . 2>/dev/null || true
+                mv /tmp/modpack_extract/"\$ROOT_DIR"/.* . 2>/dev/null || true
+            else
+                mv /tmp/modpack_extract/* . 2>/dev/null || true
+                mv /tmp/modpack_extract/.* . 2>/dev/null || true
+            fi
         else
             mv /tmp/modpack_extract/* . 2>/dev/null || true
             mv /tmp/modpack_extract/.* . 2>/dev/null || true
@@ -444,11 +479,109 @@ if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FO
         if [ -f "user_jvm_args.txt" ]; then rm -f user_jvm_args.txt; fi
         setup_generic_start_script
         
-        # Simple fallback generation if no run.sh is found
-        if [ ! -f "run.sh" ]; then
-             echo "[Startup] No start script found after extraction. Falling back to default jar launch."
-             JAR_FILE=\$(ls -1 *.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
-             if [ -n "\$JAR_FILE" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$JAR_FILE nogui" > run.sh && chmod +x run.sh; fi
+        HAS_EXECUTABLE="false"
+        if [ -f "run.sh" ] || [ -f "server.jar" ] || [ -f "fabric-server-launch.jar" ] || [ -n "\$(ls -1 forge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)" ]; then 
+            HAS_EXECUTABLE="true"
+        fi
+
+        # Repair mechanism for previously broken S3 backups
+        if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ] && [ ! -d "libraries" ]; then
+            if grep -q "libraries/net/minecraftforge" run.sh || grep -q "libraries/net/neoforged" run.sh; then
+                echo "[Startup] Missing libraries/ folder. Forcing repair..."
+                HAS_EXECUTABLE="false"
+                rm -f run.sh user_jvm_args.txt || true
+            fi
+        fi
+        if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ]; then
+            ARGS_FILE=\$(grep -o 'libraries/net/[^ "]*args.txt' run.sh || true)
+            if [ -n "\$ARGS_FILE" ] && [ ! -f "\$ARGS_FILE" ]; then
+                echo "[Startup] Missing args file. Forcing repair..."
+                HAS_EXECUTABLE="false"
+                rm -f run.sh user_jvm_args.txt || true
+            fi
+        fi
+
+        if [ "\$HAS_EXECUTABLE" = "false" ]; then
+            echo "[Startup] Proceeding with Auto-Serverify..."
+            DETECTED_MC_VER="\$MC_VERSION"
+            DETECTED_LOADER=""
+            LOADER_VER=""
+
+            if [ -f "manifest.json" ]; then
+                MANIFEST_MC=\$(jq -r '.minecraft.version // empty' manifest.json || true)
+                if [ -n "\$MANIFEST_MC" ]; then DETECTED_MC_VER="\$MANIFEST_MC"; fi
+                LOADER_ID=\$(jq -r '.minecraft.modLoaders[0].id // empty' manifest.json || true)
+                if [[ "\$LOADER_ID" == forge-* ]]; then DETECTED_LOADER="forge"; LOADER_VER="\${LOADER_ID#forge-}";
+                elif [[ "\$LOADER_ID" == neoforge-* ]]; then DETECTED_LOADER="neoforge"; LOADER_VER="\${LOADER_ID#neoforge-}";
+                elif [[ "\$LOADER_ID" == fabric-* ]]; then DETECTED_LOADER="fabric"; LOADER_VER="\${LOADER_ID#fabric-}"; fi
+
+            elif [ -f "modrinth.index.json" ]; then
+                MANIFEST_MC=\$(jq -r '.dependencies.minecraft // empty' modrinth.index.json || true)
+                if [ -n "\$MANIFEST_MC" ]; then DETECTED_MC_VER="\$MANIFEST_MC"; fi
+                
+                if jq -e '.dependencies["fabric-loader"]' modrinth.index.json > /dev/null 2>&1; then 
+                    DETECTED_LOADER="fabric"
+                    LOADER_VER=\$(jq -r '.dependencies["fabric-loader"]' modrinth.index.json || true)
+                elif jq -e '.dependencies["forge"]' modrinth.index.json > /dev/null 2>&1; then 
+                    DETECTED_LOADER="forge"
+                    LOADER_VER=\$(jq -r '.dependencies.forge' modrinth.index.json || true)
+                elif jq -e '.dependencies["neoforge"]' modrinth.index.json > /dev/null 2>&1; then 
+                    DETECTED_LOADER="neoforge"
+                    LOADER_VER=\$(jq -r '.dependencies.neoforge' modrinth.index.json || true)
+                fi
+                
+                echo "[Startup] Downloading Modrinth Mods concurrently..."
+                jq -c '.files[] | select(.env == null or .env.server != "unsupported")' modrinth.index.json > /tmp/mr_mods.json || true
+                if [ -s /tmp/mr_mods.json ]; then
+                    cat /tmp/mr_mods.json | xargs -n 1 -P 10 -I {} bash -c '
+                        DL_URL=\$(echo "{}" | jq -r ".downloads[0]")
+                        FILE_PATH=\$(echo "{}" | jq -r ".path")
+                        if [ -n "\$DL_URL" ] && [ "\$DL_URL" != "null" ]; then
+                            mkdir -p "\$(dirname "\$FILE_PATH")"
+                            wget -q -O "\$FILE_PATH" "\$DL_URL" || true
+                        fi
+                    ' || true
+                    echo "[Startup] Modrinth downloads finished."
+                fi
+            fi
+            
+            if [ -z "\$DETECTED_LOADER" ] && [ -d "mods" ]; then
+                if ls -1 mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "fabric.mod.json" 2>/dev/null | grep -q "fabric.mod.json"; then DETECTED_LOADER="fabric";
+                elif ls -1 mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "META-INF/mods.toml" 2>/dev/null | grep -q "META-INF/mods.toml"; then DETECTED_LOADER="forge";
+                elif ls -1 mods/*.jar 2>/dev/null | head -n 20 | xargs -I {} unzip -l {} "META-INF/neoforge.mods.toml" 2>/dev/null | grep -q "neoforge"; then DETECTED_LOADER="neoforge"; fi
+            fi
+            [ -z "\$DETECTED_LOADER" ] && [ -d "mods" ] && DETECTED_LOADER="forge"
+
+            echo "[Startup] Resolved Environment: \$DETECTED_LOADER \$DETECTED_MC_VER"
+
+            if [ "\$DETECTED_LOADER" = "fabric" ]; then
+                [ -z "\$LOADER_VER" ] || [ "\$LOADER_VER" = "null" ] && LOADER_VER=\$(curl -s https://meta.fabricmc.net/v2/versions/loader | jq -r '.[0].version')
+                INSTALLER_VER=\$(curl -s https://meta.fabricmc.net/v2/versions/installer | jq -r '.[0].version')
+                curl -o fabric-server-launch.jar "https://meta.fabricmc.net/v2/versions/loader/\${DETECTED_MC_VER}/\${LOADER_VER}/\${INSTALLER_VER}/server/jar"
+                echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar fabric-server-launch.jar nogui" > run.sh && chmod +x run.sh
+            elif [ "\$DETECTED_LOADER" = "forge" ]; then
+                [ -z "\$LOADER_VER" ] || [ "\$LOADER_VER" = "null" ] && LOADER_VER=\$(curl -s https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json | jq -r ".promos[\\"\${DETECTED_MC_VER}-latest\\"] // empty" || true)
+                if [ -n "\$LOADER_VER" ]; then
+                    wget -q --tries=3 -O forge-installer.jar "https://maven.minecraftforge.net/net/minecraftforge/forge/\${DETECTED_MC_VER}-\${LOADER_VER}/forge-\${DETECTED_MC_VER}-\${LOADER_VER}-installer.jar" || true
+                    if [ -f "forge-installer.jar" ]; then
+                        run_installer forge-installer.jar
+                        rm -f forge-installer.jar installer.log || true
+                        if [ ! -f "run.sh" ]; then 
+                            FORGE_JAR=\$(ls -1 forge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
+                            if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
+                        fi
+                    fi
+                fi
+            elif [ "\$DETECTED_LOADER" = "neoforge" ]; then
+                if [ -n "\$LOADER_VER" ] && [ "\$LOADER_VER" != "null" ]; then
+                    wget -q --tries=3 -O neo-installer.jar "https://maven.neoforged.net/releases/net/neoforged/neoforge/\${LOADER_VER}/neoforge-\${LOADER_VER}-installer.jar" || true
+                    if [ -f "neo-installer.jar" ]; then
+                        run_installer neo-installer.jar
+                        rm -f neo-installer.jar installer.log || true
+                        if [ ! -f "run.sh" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS @libraries/net/neoforged/neoforge/\${LOADER_VER}/unix_args.txt nogui" > run.sh && chmod +x run.sh; fi
+                    fi
+                fi
+            fi
         fi
         echo "\$AIKAR_FLAGS" >> user_jvm_args.txt
         
@@ -672,13 +805,7 @@ chmod 0755 /opt/minecraft/*.js && chown minecraft:minecraft /opt/minecraft/*.js
 systemctl daemon-reload && systemctl enable --now minecraft mc-status-reporter mc-properties-api mc-metrics mc-file-api
 `;
 
-    console.log(`[Provision] Passo 2: Uploading Bootstrap script to S3...`);
-    try {
-        await uploadBootstrapScript(serverRow.id, s3Config, bootstrapContent);
-    } catch (s3Err) {
-        console.error(`[Provision] CRITICAL S3 FAIL:`, s3Err.message);
-        return res.status(500).json({ error: 'S3 Upload failed', detail: s3Err.message });
-    }
+    await uploadBootstrapScript(serverRow.id, s3Config, bootstrapContent);
 
     let dnsWarning = null;
     let subdomainResult = null;
@@ -721,7 +848,7 @@ write_files:
       ${s3Config.S3_ENDPOINT ? `endpoint_url = ${s3Config.S3_ENDPOINT}` : ''}
 runcmd:
   - curl -sL https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz | tar -xzf - -C /usr/local/bin/ s5cmd
-  - /usr/local/bin/s5cmd ${s5cmdOpt} cp s3://${S3_BUCKET}/servers/${serverRow.id}/bootstrap.sh /tmp/bootstrap.sh
+  - env AWS_ACCESS_KEY_ID="${s3Config.AWS_ACCESS_KEY_ID}" AWS_SECRET_ACCESS_KEY="${s3Config.AWS_SECRET_ACCESS_KEY}" AWS_REGION="${s3Config.AWS_REGION || 'eu-central-1'}" /usr/local/bin/s5cmd ${s5cmdOpt} cp s3://${S3_BUCKET}/servers/${serverRow.id}/bootstrap.sh /tmp/bootstrap.sh
   - chmod +x /tmp/bootstrap.sh
   - bash /tmp/bootstrap.sh
 `;
@@ -735,35 +862,26 @@ runcmd:
       } catch (e) {}
     }
 
-    console.log(`[Provision] Passo 3: Creating VM on Hetzner (${serverType})...`);
     let createRes = null, lastError = null;
     for (const loc of ['nbg1', 'fsn1', 'hel1']) {
       try {
         createRes = await axios.post(`${HETZNER_API_BASE}/servers`, { 
-          name: serverRow.name, 
-          server_type: serverType, 
-          image: 'ubuntu-22.04', 
-          user_data: cloudInitPayload, 
-          ssh_keys: sshKeysToUse, 
-          location: loc 
+            name: serverRow.name, 
+            server_type: serverType, 
+            image: '342669261', 
+            user_data: cloudInitPayload, 
+            ssh_keys: sshKeysToUse, 
+            location: loc 
         }, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' } });
-        console.log(`[Provision] OK: Hetzner server created in ${loc}`);
         break;
-      } catch (err) { 
-        lastError = err; 
-        console.warn(`[Provision] Hetzner failed in ${loc}:`, err.response?.data || err.message);
-      }
+      } catch (err) { lastError = err; }
     }
 
-    if (!createRes) {
-      console.error('[Provision] CRITICAL HETZNER FAIL:', lastError?.response?.data || lastError?.message);
-      return res.status(502).json({ error: 'Hetzner create failed', detail: lastError?.response?.data || lastError?.message });
-    }
+    if (!createRes) return res.status(502).json({ error: 'Hetzner create failed', detail: lastError.response?.data || lastError.message });
 
     hetznerServer = createRes.data.server || null;
     await supabaseAdmin.from('servers').update({ status: 'Initializing', started_at: new Date().toISOString() }).eq('id', serverRow.id);
 
-    console.log(`[Provision] Passo 4: Waiting for Hetzner action to complete...`);
     let finalServer = hetznerServer;
     if (createRes.data.action?.id) await waitForAction(createRes.data.action.id);
     if (hetznerServer?.id) {
@@ -771,10 +889,7 @@ runcmd:
     }
 
     const ipv4 = finalServer?.public_net?.ipv4?.ip || null;
-    console.log(`[Provision] OK: Server IP is ${ipv4}`);
-
     if (ipv4 && serverRow.subdomain) {
-      console.log(`[Provision] Passo 5: Setting up Cloudflare DNS...`);
       try {
         await deleteCloudflareRecords(serverRow.subdomain);
         const aRecordIds = await createARecord(serverRow.subdomain, ipv4);
@@ -787,24 +902,10 @@ runcmd:
       }
     }
 
-    console.log(`[Provision] Passo 6: Saving final state to DB...`);
-    const { data: updatedRow, error: updateErr } = await supabaseAdmin.from('servers').update({ 
-        hetzner_id: finalServer?.id || null, 
-        ipv4: ipv4, 
-        status: finalServer?.status === 'running' ? 'Running' : 'Initializing', 
-        rcon_password: rconPassword, 
-        needs_file_deletion: false, 
-        pending_backup_restore: null, 
-        force_software_install: false, 
-        current_session_id: uuidv4() 
-    }).eq('id', serverRow.id).select().single();
+    const { data: updatedRow, error: updateErr } = await supabaseAdmin.from('servers').update({ hetzner_id: finalServer?.id || null, ipv4: ipv4, status: finalServer?.status === 'running' ? 'Running' : 'Initializing', rcon_password: rconPassword, needs_file_deletion: false, pending_backup_restore: null, force_software_install: false, current_session_id: uuidv4() }).eq('id', serverRow.id).select().single();
 
-    if (updateErr) {
-        console.error(`[Provision] Database Update Error:`, updateErr.message);
-        return res.status(500).json({ error: 'Failed to update database' });
-    }
+    if (updateErr) return res.status(500).json({ error: 'Failed to update database' });
     
-    console.log(`[Provision] === SUCCESS! PROVISIONING COMPLETE ===\n`);
     return res.status(200).json({ 
         server: updatedRow, 
         hetznerServer: finalServer, 
@@ -813,10 +914,7 @@ runcmd:
         warning: dnsWarning 
     });
 
-  } catch (err) { 
-      console.error(`[Provision] FATAL ERROR:`, err);
-      return res.status(500).json({ error: 'Provisioning failed', detail: err.message }); 
-  }
+  } catch (err) { return res.status(500).json({ error: 'Provisioning failed', detail: err.message }); }
 }
 
 export default async function handler(req, res) {
