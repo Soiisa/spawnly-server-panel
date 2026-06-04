@@ -226,13 +226,17 @@ const server = net.createServer((socket) => {
         headers: { 
             'Content-Type': 'application/json',
             'x-sleeper-secret': SLEEPER_SECRET 
-        }
-      }).catch(err => {
-        // Log error secretly, user will just try again if it fails.
-        console.error(`[Sleeper] Wake API failed for ${serverInfo.id}:`, err.message);
+        },
+        timeout: 45000 // Adicionado Timeout de 45 seg para não prender a RAM
+      })
+      .then(res => {
+          console.log(`[Sleeper] OK: A API Next.js confirmou o Wake Up (${res.status})`);
+      })
+      .catch(err => {
+        console.error(`[Sleeper] AVISO: Falha na API Wake Up para ${serverInfo.id}:`, err.response?.data || err.message);
       });
 
-    // Immediate Kick
+    // Immediate Kick para o jogador não ficar "preso" no ecrã de "Logging in..."
     kickClient("§a§lWaking up Server!\n\n§7Request sent successfully.\n§7Server is starting now.\n\n§fPlease refresh in 1-2 minutes.");
   }
 
