@@ -583,13 +583,13 @@ if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FO
                 fi
             fi
         fi
-        echo "\$AIKAR_FLAGS" >> user_jvm_args.txt
+        echo "-Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS" >> user_jvm_args.txt
         
     elif [ "\$SOFTWARE" = "forge" ] || [ "\$SOFTWARE" = "neoforge" ]; then
        wget -q --tries=3 -O server-installer.jar "\$DOWNLOAD_URL"
        run_installer server-installer.jar
        rm -f server-installer.jar installer.log || true
-       echo "\$AIKAR_FLAGS" >> user_jvm_args.txt
+       echo "-Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS" >> user_jvm_args.txt
        if [ -f "run.sh" ]; then 
            chmod +x run.sh
        else 
