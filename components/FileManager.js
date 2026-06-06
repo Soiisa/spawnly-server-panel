@@ -23,7 +23,8 @@ import {
   FolderPlusIcon,
   XMarkIcon,
   PencilIcon,
-  ArrowRightOnRectangleIcon
+  ArrowRightOnRectangleIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
 const getFileIcon = (fileName, isDirectory) => {
@@ -49,7 +50,21 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  
+  // Upload State (Enhanced)
+  const [uploadState, setUploadState] = useState({
+    active: false,
+    progress: 0,
+    currentFileName: '',
+    uploadedCount: 0,
+    totalCount: 0
+  });
+  const [overwriteModal, setOverwriteModal] = useState({
+    open: false,
+    filesList: [],
+    conflicts: []
+  });
+
   const [selectedFile, setSelectedFile] = useState(null);
   const [editingFile, setEditingFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
@@ -71,7 +86,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const fileInputRef = useRef(null);
-  const folderInputRef = useRef(null); // Ref for folders
+  const folderInputRef = useRef(null);
   const nameInputRef = useRef(null);
   const actionInputRef = useRef(null);
 
@@ -129,7 +144,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       const normalizedPath = (res.data.path || '').replace(/\\/g, '/');
       setCurrentPath(normalizedPath);
     } catch (err) {
-      setError(`${t('files.load_fail')}: ${err.response?.data?.error || err.message}`);
+      setError(`${t('files.load_fail', { defaultValue: 'Failed to load files' })}: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(false);
     }
@@ -183,17 +198,17 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       }
       await axios.put(`${apiBase}/files`, body, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType } });
       setEditingFile(null); setFileContent('');
-    } catch (err) { setError(`${t('files.save_fail')}: ${err.message}`); } 
+    } catch (err) { setError(`${t('files.save_fail', { defaultValue: 'Failed to save file' })}: ${err.message}`); } 
     finally { setIsSaving(false); }
   };
 
   const deleteFile = async (file) => {
-    if (!window.confirm(t('files.delete_confirm', { name: file.name }))) return;
+    if (!window.confirm(t('files.delete_confirm', { name: file.name, defaultValue: `Are you sure you want to delete ${file.name}?` }))) return;
     try {
       const relPath = currentPath ? `${currentPath}/${file.name}` : file.name;
       await axios.delete(`${apiBase}/files`, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}` } });
       fetchFiles(currentPath);
-    } catch (err) { setError(`${t('files.delete_fail')}: ${err.message}`); }
+    } catch (err) { setError(`${t('files.delete_fail', { defaultValue: 'Failed to delete file' })}: ${err.message}`); }
   };
 
   const download = async (file) => {
@@ -204,10 +219,42 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       const link = document.createElement('a');
       link.href = url; link.setAttribute('download', file.name); document.body.appendChild(link);
       link.click(); link.remove();
-    } catch (err) { setError(t('files.download_fail')); }
+    } catch (err) { setError(t('files.download_fail', { defaultValue: 'Failed to download file' })); }
   };
 
-  // --- External Upload Drag Handlers (Multi-File & Folder Support) ---
+  // --- Overwrite check logic ---
+  const checkConflictsAndPrepareUpload = (filesList) => {
+    if (filesList.length === 0) return;
+
+    const existingNames = new Set(allFiles.map(f => f.name.toLowerCase()));
+    const conflictingNames = new Set();
+
+    filesList.forEach(({ relativePath }) => {
+      // Find the top-level entity name in the uploaded structure
+      const topLevelName = relativePath.split('/')[0].toLowerCase();
+      if (existingNames.has(topLevelName)) {
+        conflictingNames.add(relativePath.split('/')[0]); // Use original case for display
+      }
+    });
+
+    if (conflictingNames.size > 0) {
+      setOverwriteModal({
+        open: true,
+        filesList,
+        conflicts: Array.from(conflictingNames)
+      });
+    } else {
+      performBatchUpload(filesList);
+    }
+  };
+
+  const confirmOverwrite = () => {
+    const list = overwriteModal.filesList;
+    setOverwriteModal({ open: false, filesList: [], conflicts: [] });
+    performBatchUpload(list);
+  };
+
+  // --- External Upload Drag Handlers ---
   const handleDrag = (e) => {
     e.preventDefault(); e.stopPropagation();
     if (e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes('application/x-spawnly-internal')) {
@@ -257,31 +304,32 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       }
       
       if (filesList.length > 0) {
-          await performBatchUpload(filesList);
+          checkConflictsAndPrepareUpload(filesList);
       }
     } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const filesList = Array.from(e.dataTransfer.files).map(f => ({ file: f, relativePath: f.name }));
-      await performBatchUpload(filesList);
+      checkConflictsAndPrepareUpload(filesList);
     }
   };
 
   const handleUploadClick = async (e) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const filesList = Array.from(e.target.files).map(f => ({
-       // webkitRelativePath includes the folder structure if uploading a folder
        relativePath: f.webkitRelativePath || f.name,
        file: f
     }));
-    await performBatchUpload(filesList);
+    checkConflictsAndPrepareUpload(filesList);
   };
 
   const performBatchUpload = async (filesList) => {
-      setUploadProgress(1);
+      setUploadState({ active: true, progress: 0, currentFileName: '', uploadedCount: 0, totalCount: filesList.length });
+      
       let totalBytes = filesList.reduce((acc, f) => acc + f.file.size, 0);
       let uploadedBytes = 0;
+      let completedFiles = 0;
 
       if (filesList.length === 0) {
-          setUploadProgress(0);
+          setUploadState(prev => ({ ...prev, active: false }));
           return;
       }
 
@@ -293,6 +341,9 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
           while (i < filesList.length) {
               const currentIndex = i++;
               const { file, relativePath } = filesList[currentIndex];
+              
+              setUploadState(prev => ({ ...prev, currentFileName: file.name }));
+              
               const formData = new FormData();
               formData.append('fileName', relativePath);
               formData.append('fileContent', file);
@@ -304,8 +355,17 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
               } catch (err) {
                   console.error("Failed to upload", relativePath, err);
               }
+              
               uploadedBytes += file.size;
-              setUploadProgress(Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)));
+              completedFiles++;
+              
+              const currentProgress = totalBytes === 0 ? 100 : Math.min(100, Math.round((uploadedBytes / totalBytes) * 100));
+              
+              setUploadState(prev => ({
+                  ...prev,
+                  progress: currentProgress,
+                  uploadedCount: completedFiles
+              }));
           }
       };
 
@@ -314,7 +374,12 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       await Promise.all(workers);
 
       fetchFiles(currentPath);
-      setUploadProgress(0);
+      
+      // Keep complete message for 2 seconds before hiding
+      setTimeout(() => {
+          setUploadState({ active: false, progress: 0, currentFileName: '', uploadedCount: 0, totalCount: 0 });
+      }, 2000);
+
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (folderInputRef.current) folderInputRef.current.value = '';
   };
@@ -364,7 +429,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       if (createModal.type === 'folder') await axios.post(`${apiBase}/files`, { type: 'directory', path: currentPath ? `${currentPath}/${name}` : name }, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
       else await axios.put(`${apiBase}/files`, '', { params: { path: currentPath ? `${currentPath}/${name}` : name }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' } });
       setCreateModal({ open: false, type: 'file' }); setNewItemName(''); fetchFiles(currentPath);
-    } catch (err) { setError(t('files.errors.create_fail')); } finally { setIsProcessing(false); }
+    } catch (err) { setError(t('files.errors.create_fail', { defaultValue: 'Failed to create item' })); } finally { setIsProcessing(false); }
   };
 
   const openActionModal = (file, type, e) => {
@@ -390,21 +455,96 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
 
   return (
     <div className="min-h-[500px] flex flex-col relative" onDragEnter={handleDrag}>
-      {dragActive && (<div className="absolute inset-0 z-50 bg-indigo-500/10 backdrop-blur-sm border-2 border-indigo-500 border-dashed rounded-xl flex flex-col items-center justify-center pointer-events-none"><ArrowUpTrayIcon className="w-16 h-16 text-indigo-600 animate-bounce" /><p className="text-xl font-bold text-indigo-700 mt-4">{t('files.drop_to_upload')}</p></div>)}
+      {dragActive && (<div className="absolute inset-0 z-50 bg-indigo-500/10 backdrop-blur-sm border-2 border-indigo-500 border-dashed rounded-xl flex flex-col items-center justify-center pointer-events-none"><ArrowUpTrayIcon className="w-16 h-16 text-indigo-600 animate-bounce" /><p className="text-xl font-bold text-indigo-700 mt-4">{t('files.drop_to_upload', { defaultValue: 'Drop files to upload' })}</p></div>)}
       {dragActive && (<div className="absolute inset-0 z-50" onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop} />)}
+
+      {/* Overwrite Confirmation Modal */}
+      <AnimatePresence>
+        {overwriteModal.open && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 10 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-red-50 dark:bg-red-900/20">
+                <h3 className="font-bold text-red-600 dark:text-red-400 flex items-center gap-2">
+                  <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
+                  {t('files.overwrite.title', { defaultValue: 'Confirm Overwrite' })}
+                </h3>
+                <button onClick={() => setOverwriteModal({ open: false, filesList: [], conflicts: [] })}>
+                  <XMarkIcon className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
+              <div className="p-6">
+                <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">
+                  {t('files.overwrite.message', { defaultValue: 'The following items already exist in this directory. Uploading will overwrite or merge them:' })}
+                </p>
+                <div className="max-h-40 overflow-y-auto bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg p-3 mb-4">
+                  <ul className="list-disc list-inside text-sm text-gray-700 dark:text-gray-300">
+                    {overwriteModal.conflicts.map(name => (
+                      <li key={name} className="truncate">{name}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setOverwriteModal({ open: false, filesList: [], conflicts: [] })} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg font-medium">
+                    {t('actions.cancel', { defaultValue: 'Cancel' })}
+                  </button>
+                  <button type="button" onClick={confirmOverwrite} className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg font-medium">
+                    {t('files.overwrite.confirm_btn', { defaultValue: 'Yes, Overwrite' })}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {actionModal.open && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 10 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center"><h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">{actionModal.type === 'rename' ? <PencilIcon className="w-5 h-5 text-indigo-500" /> : <ArrowRightOnRectangleIcon className="w-5 h-5 text-indigo-500" />}{actionModal.type === 'rename' ? t('files.actions.rename', {defaultValue: 'Rename'}) : t('files.actions.move', {defaultValue: 'Move'})}</h3><button onClick={() => setActionModal({ ...actionModal, open: false })}><XMarkIcon className="w-5 h-5 text-gray-400" /></button></div>
-              <form onSubmit={handleActionSubmit} className="p-6"><input ref={actionInputRef} type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg dark:text-white mb-4" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setActionModal({ ...actionModal, open: false })} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg">{t('actions.cancel')}</button><button type="submit" disabled={isProcessing} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('actions.save')}</button></div></form>
+              <form onSubmit={handleActionSubmit} className="p-6"><input ref={actionInputRef} type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg dark:text-white mb-4" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setActionModal({ ...actionModal, open: false })} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button><button type="submit" disabled={isProcessing} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('actions.save', { defaultValue: 'Save' })}</button></div></form>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-      <AnimatePresence>{createModal.open && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"><motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 10 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm overflow-hidden"><div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center"><h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">{createModal.type === 'folder' ? <FolderPlusIcon className="w-5 h-5 text-indigo-500" /> : <PlusIcon className="w-5 h-5 text-indigo-500" />}{createModal.type === 'folder' ? t('files.create_folder') : t('files.create_file')}</h3><button onClick={() => setCreateModal({ ...createModal, open: false })}><XMarkIcon className="w-5 h-5 text-gray-400" /></button></div><form onSubmit={handleCreateSubmit} className="p-6"><input ref={nameInputRef} type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg dark:text-white mb-4" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setCreateModal({ ...createModal, open: false })} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg">{t('actions.cancel')}</button><button type="submit" disabled={isProcessing} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('actions.create')}</button></div></form></motion.div></motion.div>)}</AnimatePresence>
-      <AnimatePresence>{editingFile && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"><motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"><div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center"><div className="flex items-center gap-3"><div className="p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-600 shadow-sm">{getFileIcon(editingFile.name, false)}</div><div><h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{editingFile.name}</h3><p className="text-xs text-gray-500 dark:text-gray-300 font-mono">{currentPath}/{editingFile.name}</p></div></div><div className="flex gap-3"><button onClick={() => { setEditingFile(null); setFileContent(''); }} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-600 rounded-lg">{t('actions.cancel')}</button><button onClick={saveFile} disabled={isSaving} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('files.editor.save_changes')}</button></div></div><div className="flex-1 relative bg-slate-900"><textarea value={fileContent} onChange={(e) => setFileContent(e.target.value)} className="w-full h-full p-6 font-mono text-sm bg-transparent text-slate-300 border-none outline-none resize-none" spellCheck="false" /></div></motion.div></motion.div>)}</AnimatePresence>
+      <AnimatePresence>{createModal.open && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"><motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 10 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm overflow-hidden"><div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center"><h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">{createModal.type === 'folder' ? <FolderPlusIcon className="w-5 h-5 text-indigo-500" /> : <PlusIcon className="w-5 h-5 text-indigo-500" />}{createModal.type === 'folder' ? t('files.create_folder', { defaultValue: 'Create Folder' }) : t('files.create_file', { defaultValue: 'Create File' })}</h3><button onClick={() => setCreateModal({ ...createModal, open: false })}><XMarkIcon className="w-5 h-5 text-gray-400" /></button></div><form onSubmit={handleCreateSubmit} className="p-6"><input ref={nameInputRef} type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg dark:text-white mb-4" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setCreateModal({ ...createModal, open: false })} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button><button type="submit" disabled={isProcessing} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('actions.create', { defaultValue: 'Create' })}</button></div></form></motion.div></motion.div>)}</AnimatePresence>
+      <AnimatePresence>{editingFile && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"><motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"><div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center"><div className="flex items-center gap-3"><div className="p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-600 shadow-sm">{getFileIcon(editingFile.name, false)}</div><div><h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{editingFile.name}</h3><p className="text-xs text-gray-500 dark:text-gray-300 font-mono">{currentPath}/{editingFile.name}</p></div></div><div className="flex gap-3"><button onClick={() => { setEditingFile(null); setFileContent(''); }} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-600 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button><button onClick={saveFile} disabled={isSaving} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('files.editor.save_changes', { defaultValue: 'Save Changes' })}</button></div></div><div className="flex-1 relative bg-slate-900"><textarea value={fileContent} onChange={(e) => setFileContent(e.target.value)} className="w-full h-full p-6 font-mono text-sm bg-transparent text-slate-300 border-none outline-none resize-none" spellCheck="false" /></div></motion.div></motion.div>)}</AnimatePresence>
+
+      {/* Floating Upload Progress Widget */}
+      <AnimatePresence>
+        {uploadState.active && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.95 }}
+            className="fixed bottom-6 right-6 w-80 bg-white dark:bg-slate-800 shadow-2xl rounded-xl overflow-hidden z-[60] border border-gray-200 dark:border-slate-700 pointer-events-auto"
+          >
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  {uploadState.progress === 100 ? (
+                    <><CheckCircleIcon className="w-5 h-5 text-emerald-500" /> {t('files.upload.complete', { defaultValue: 'Upload Complete' })}</>
+                  ) : (
+                    <><ArrowUpTrayIcon className="w-5 h-5 text-indigo-500 animate-bounce" /> {t('files.upload.uploading', { defaultValue: 'Uploading...' })}</>
+                  )}
+                </span>
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                  {uploadState.uploadedCount} / {uploadState.totalCount}
+                </span>
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-3 truncate" title={uploadState.currentFileName}>
+                {uploadState.progress < 100 ? uploadState.currentFileName : t('files.upload.finishing', { defaultValue: 'Finishing up...' })}
+              </div>
+              <div className="h-2 w-full bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                <motion.div
+                  className={`h-full transition-all duration-300 ${uploadState.progress === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                  style={{ width: `${uploadState.progress}%` }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="bg-white dark:bg-slate-800 rounded-t-2xl border border-gray-200 dark:border-slate-700 p-4 border-b-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
@@ -455,26 +595,25 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
             </div>
           </div>
         </div>
-        {uploadProgress > 0 && (<div className="h-1 w-full bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden mb-4"><motion.div initial={{ width: 0 }} animate={{ width: `${uploadProgress}%` }} className="h-full bg-indigo-500 transition-all duration-300" /></div>)}
         {error && (<div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg flex items-center gap-2"><ExclamationCircleIcon className="w-5 h-5" />{error}</div>)}
       </div>
 
       <div className="flex-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 border-t-0 rounded-b-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead><tr className="bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-700 text-xs uppercase text-gray-500 dark:text-gray-300 font-semibold tracking-wider"><th className="px-6 py-4 w-1/2">{t('files.columns.name')}</th><th className="px-6 py-4 w-1/6">{t('files.columns.size')}</th><th className="px-6 py-4 w-1/6">{t('files.columns.modified')}</th><th className="px-6 py-4 w-1/6 text-right">{t('files.columns.actions')}</th></tr></thead>
+            <thead><tr className="bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-700 text-xs uppercase text-gray-500 dark:text-gray-300 font-semibold tracking-wider"><th className="px-6 py-4 w-1/2">{t('files.columns.name', { defaultValue: 'Name' })}</th><th className="px-6 py-4 w-1/6">{t('files.columns.size', { defaultValue: 'Size' })}</th><th className="px-6 py-4 w-1/6">{t('files.columns.modified', { defaultValue: 'Last Modified' })}</th><th className="px-6 py-4 w-1/6 text-right">{t('files.columns.actions', { defaultValue: 'Actions' })}</th></tr></thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-              {loading && files.length === 0 ? ([...Array(5)].map((_, i) => (<tr key={i} className="animate-pulse"><td className="px-6 py-4"><div className="h-4 bg-gray-200 w-3/4"></div></td><td className="px-6 py-4"><div className="h-4 bg-gray-200 w-1/2"></div></td><td className="px-6 py-4"><div className="h-4 bg-gray-200 w-1/2"></div></td><td className="px-6 py-4"></td></tr>))) : files.length === 0 ? (<tr><td colSpan="4" className="px-6 py-12 text-center"><FolderIcon className="w-6 h-6 text-gray-400 mx-auto mb-3" /><p className="text-gray-500">{t('files.empty')}</p></td></tr>) : (
+              {loading && files.length === 0 ? ([...Array(5)].map((_, i) => (<tr key={i} className="animate-pulse"><td className="px-6 py-4"><div className="h-4 bg-gray-200 w-3/4"></div></td><td className="px-6 py-4"><div className="h-4 bg-gray-200 w-1/2"></div></td><td className="px-6 py-4"><div className="h-4 bg-gray-200 w-1/2"></div></td><td className="px-6 py-4"></td></tr>))) : files.length === 0 ? (<tr><td colSpan="4" className="px-6 py-12 text-center"><FolderIcon className="w-6 h-6 text-gray-400 mx-auto mb-3" /><p className="text-gray-500">{t('files.empty', { defaultValue: 'This folder is empty' })}</p></td></tr>) : (
                 files.map((file) => (
                   <tr key={file.name} draggable={!file.isDirectory || true} onDragStart={(e) => handleRowDragStart(e, file)} onDragOver={(e) => file.isDirectory ? handleRowDragOver(e, file) : null} onDragLeave={handleRowDragLeave} onDrop={(e) => file.isDirectory ? handleRowDrop(e, file) : null} className={`group hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer ${dropTarget === file.name ? 'bg-indigo-50 dark:bg-indigo-900/20 border-2 border-indigo-500' : ''}`} onClick={(e) => { if (e.target.closest('button')) return; handleFileClick(file); }}>
                     <td className="px-6 py-3"><div className="flex items-center gap-3"><div className="flex-shrink-0 transition-transform group-hover:scale-110">{getFileIcon(file.name, file.isDirectory)}</div><span className="text-sm font-medium text-gray-900 dark:text-gray-100">{file.name}</span></div></td>
                     <td className="px-6 py-3 text-sm text-gray-500 font-mono">{file.isDirectory ? '—' : formatSize(file.size)}</td>
                     <td className="px-6 py-3 text-sm text-gray-500">{new Date(file.modified).toLocaleDateString()}</td>
                     <td className="px-6 py-3 text-right"><div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {!file.isDirectory && !specialFiles.includes(file.name.toLowerCase()) && !maskedItems.includes(file.name.toLowerCase()) && (<button onClick={() => download(file)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md"><ArrowDownTrayIcon className="w-4 h-4" /></button>)}
-                        {!specialFiles.includes(file.name.toLowerCase()) && !maskedItems.includes(file.name.toLowerCase()) && (<><button onClick={(e) => openActionModal(file, 'rename', e)} className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-md"><PencilIcon className="w-4 h-4" /></button><button onClick={(e) => openActionModal(file, 'move', e)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md"><ArrowRightOnRectangleIcon className="w-4 h-4" /></button></>)}
-                        {isTextFile(file.name) && (<button onClick={() => openFileForEditing(file)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md"><PencilSquareIcon className="w-4 h-4" /></button>)}
-                        <button onClick={() => deleteFile(file)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md"><TrashIcon className="w-4 h-4" /></button>
+                        {!file.isDirectory && !specialFiles.includes(file.name.toLowerCase()) && !maskedItems.includes(file.name.toLowerCase()) && (<button onClick={() => download(file)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md" title={t('actions.download', { defaultValue: 'Download' })}><ArrowDownTrayIcon className="w-4 h-4" /></button>)}
+                        {!specialFiles.includes(file.name.toLowerCase()) && !maskedItems.includes(file.name.toLowerCase()) && (<><button onClick={(e) => openActionModal(file, 'rename', e)} className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-md" title={t('actions.rename', { defaultValue: 'Rename' })}><PencilIcon className="w-4 h-4" /></button><button onClick={(e) => openActionModal(file, 'move', e)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md" title={t('actions.move', { defaultValue: 'Move' })}><ArrowRightOnRectangleIcon className="w-4 h-4" /></button></>)}
+                        {isTextFile(file.name) && (<button onClick={() => openFileForEditing(file)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md" title={t('actions.edit', { defaultValue: 'Edit' })}><PencilSquareIcon className="w-4 h-4" /></button>)}
+                        <button onClick={() => deleteFile(file)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md" title={t('actions.delete', { defaultValue: 'Delete' })}><TrashIcon className="w-4 h-4" /></button>
                     </div></td>
                   </tr>
                 ))
