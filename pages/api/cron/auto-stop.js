@@ -8,7 +8,6 @@ const HETZNER_API_TOKEN = process.env.HETZNER_API_TOKEN;
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 const DOMAIN_SUFFIX = '.spawnly.net';
-const SLEEPER_PROXY_IP = process.env.SLEEPER_PROXY_IP || '91.99.130.49';
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -167,14 +166,8 @@ export default async function handler(req, res) {
         }
 
         if (server.subdomain) {
+          // Reverting to wildcard logic - only delete existing specific records
           await deleteCloudflareRecords(server.subdomain);
-          await fetch(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'A', name: `${server.subdomain}${DOMAIN_SUFFIX}`, content: SLEEPER_PROXY_IP, ttl: 60, proxied: false
-            })
-          });
         }
 
         await supabaseAdmin.from('servers').update({

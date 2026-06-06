@@ -26,9 +26,6 @@ const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
 const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 const DOMAIN_SUFFIX = '.spawnly.net';
 
-// The IP of the Sleeper Proxy Server
-const SLEEPER_PROXY_IP = process.env.SLEEPER_PROXY_IP || '91.99.130.49'; 
-
 const s3Client = new S3Client({
   endpoint: S3_ENDPOINT,
   region: S3_REGION,
@@ -307,8 +304,6 @@ async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessio
 
 // --- MODIFIED: ADDED ROUTING BETWEEN POOL WALLET AND PERSONAL WALLET ---
 async function billRemainingTime(supabaseAdmin, server) {
-  // We check for Running, but if we are KILLING a stuck server (Initializing/Starting), 
-  // we might check if billing started (last_billed_at exists).
   if (server.status !== 'Running' && !server.last_billed_at) return;
 
   const now = new Date();
@@ -328,7 +323,6 @@ async function billRemainingTime(supabaseAdmin, server) {
   const hours = elapsedSeconds / 3600;
   const cost = Number((hours * server.cost_per_hour).toFixed(4));
 
-  // Determine which wallet to bill based on pool_id
   if (server.pool_id) {
       try {
           await deductPoolCredits(supabaseAdmin, server.pool_id, cost, server.id, server.current_session_id, elapsedSeconds);
@@ -403,10 +397,8 @@ const performAutoBackup = async (server, supabaseAdmin) => {
     const data = await res.json();
     
     // 3. Rename/Tag as Auto (Agent usually names it backup-timestamp.zip)
-    // We copy it to a "auto-" prefix so UI can identify it and rotation logic works.
     const originalKey = data.s3Path.replace(`s3://${S3_BUCKET}/`, '');
     
-    // Only rename if it doesn't already have 'auto-' (Agent currently generates 'backup-XYZ.zip')
     if (originalKey && !originalKey.includes('auto-')) {
         const fileName = originalKey.split('/').pop();
         const autoFileName = fileName.replace('backup-', 'auto-backup-');
@@ -414,14 +406,12 @@ const performAutoBackup = async (server, supabaseAdmin) => {
 
         console.log(`[AutoBackup] Renaming ${originalKey} to ${autoKey}`);
 
-        // Copy
         await s3Client.send(new CopyObjectCommand({
             Bucket: S3_BUCKET,
             CopySource: `${S3_BUCKET}/${originalKey}`,
             Key: autoKey
         }));
 
-        // Delete Original
         await s3Client.send(new DeleteObjectCommand({
             Bucket: S3_BUCKET,
             Key: originalKey
@@ -487,12 +477,11 @@ export default async function handler(req, res) {
       stop: 'control',
       restart: 'control',
       kill: 'control',
-      delete: 'admin' // Effectively only Owner or specifically 'admin' permission
+      delete: 'admin'
     };
     
     const requiredPerm = permissionMap[action];
 
-    // Use verifyServerAccess helper to check owner OR permissions table
     const access = await verifyServerAccess(supabaseAdmin, serverId, user.id, requiredPerm);
     
     if (!access.allowed) {
@@ -501,21 +490,12 @@ export default async function handler(req, res) {
     }
     // --- SHARED OWNERSHIP PERMISSION CHECK END ---
 
-    // Fetch Owner's profile for billing (WE ALWAYS BILL THE OWNER)
     const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
     if (profileErr || !profile) return res.status(500).json({ error: 'Failed to fetch server owner profile' });
 
-    // MODIFIED: Removed the credit check block for start/restart here
-
-    // --- UPDATED: Handle STOP, DELETE, and KILL ---
     if (action === 'delete' || action === 'stop' || action === 'kill') {
       await billRemainingTime(supabaseAdmin, server);
 
-      // --- AUTO BACKUP LOGIC START ---
-      // We only attempt backup if: 
-      // 1. Action is STOP (not delete/kill)
-      // 2. Feature is enabled
-      // 3. Server is actually running/provisioned (has Hetzner ID)
       if (action === 'stop' && server.auto_backup_enabled && server.hetzner_id) {
           try {
              await performAutoBackup(server, supabaseAdmin);
@@ -523,10 +503,8 @@ export default async function handler(req, res) {
              console.error('[API:action] Auto-backup failed, proceeding with stop:', backupErr.message);
           }
       }
-      // --- AUTO BACKUP LOGIC END ---
 
       if (server.hetzner_id) {
-        // [UPDATED] Graceful Shutdown Loop only if NOT killing
         if (action !== 'kill') {
             try {
               console.log(`[API:action] Shutting down Hetzner server: ${server.hetzner_id}`);
@@ -544,7 +522,6 @@ export default async function handler(req, res) {
         }
 
         try {
-          // [UPDATED] Robust Deletion
           await hetznerDeleteServer(server.hetzner_id);
         } catch (hetznerErr) {
           console.error('[API:action] Failed to delete server from Hetzner:', hetznerErr.message);
@@ -555,24 +532,8 @@ export default async function handler(req, res) {
       if (server.subdomain) {
         try {
           console.log(`[API:action] Cleaning up DNS records for subdomain: ${server.subdomain}`);
+          // Relies on wildcard setup in Cloudflare to automatically route to Sleeper
           await deleteCloudflareRecords(server.subdomain);
-
-          // For STOP or KILL, redirect DNS to Sleeper Proxy
-          if (action === 'stop' || action === 'kill') {
-            console.log(`[API:action] Pointing ${server.subdomain} to Sleeper Proxy (${SLEEPER_PROXY_IP})`);
-            const dnsUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
-            await fetch(dnsUrl, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                type: 'A',
-                name: `${server.subdomain}${DOMAIN_SUFFIX}`,
-                content: SLEEPER_PROXY_IP,
-                ttl: 60, 
-                proxied: false 
-              })
-            });
-          }
         } catch (dnsErr) {
           console.error('[API:action] Failed to update Cloudflare DNS records:', dnsErr.message);
         }
@@ -581,7 +542,6 @@ export default async function handler(req, res) {
       if (action === 'delete') {
         console.log(`[API:action] Cleaning up dependent records for server ${serverId}...`);
         
-        // [AUDIT LOG] Record deletion before the record is potentially lost
         await supabaseAdmin.from('server_audit_logs').insert({
             server_id: serverId,
             user_id: user.id,
@@ -590,8 +550,6 @@ export default async function handler(req, res) {
             created_at: new Date().toISOString()
         });
         
-        // --- 1. Manually cleanup related tables to satisfy foreign keys ---
-        // (pool_transactions, server_permissions, allocations, etc.)
         try {
             await supabaseAdmin.from('pool_transactions').delete().eq('server_id', serverId);
             await supabaseAdmin.from('server_permissions').delete().eq('server_id', serverId);
@@ -602,7 +560,6 @@ export default async function handler(req, res) {
             console.error('[API:action] Warning: Pre-delete cleanup failed (some records might remain):', cleanupErr.message);
         }
 
-        // --- 2. Delete from Supabase ---
         console.log(`[API:action] Deleting server ${serverId} from Supabase...`);
         const { error: delErr } = await supabaseAdmin
           .from('servers')
@@ -614,8 +571,6 @@ export default async function handler(req, res) {
           return res.status(500).json({ error: 'Failed to delete server from Supabase', detail: delErr.message });
         }
 
-        // --- 3. Delete S3 Folder (Fast w/ Fallback) ---
-        // We do this LAST so that if it fails, the server is at least gone from the dashboard.
         try {
           await deleteS3ServerFolderFast(server.id);
         } catch (s3Err) {
@@ -623,7 +578,6 @@ export default async function handler(req, res) {
         }
 
       } else {
-        // STOP or KILL -> Set status to 'Stopped'
         console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped'`);
         const nowIso = new Date().toISOString();
         const { error: updateErr } = await supabaseAdmin
@@ -638,7 +592,7 @@ export default async function handler(req, res) {
             current_session_id: null, 
             last_heartbeat_at: nowIso,
             last_empty_at: null,
-            started_at: null // --- CLEAN UP STARTED_AT ON STOP/KILL ---
+            started_at: null
           })
           .eq('id', serverId);
         if (updateErr) {
@@ -646,7 +600,6 @@ export default async function handler(req, res) {
           return res.status(502).json({ error: 'Failed to update Supabase after shutdown', detail: updateErr.message });
         }
 
-        // [AUDIT LOG] Stop/Kill
         await supabaseAdmin.from('server_audit_logs').insert({
             server_id: serverId,
             user_id: user.id,
@@ -660,33 +613,22 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // [MODIFIED] If action is kill, we might proceed even without Hetzner ID to clean up DB/DNS
     if (!server.hetzner_id) {
-      // If the user wants to KILL a stuck initializing server that has no hetzner_id yet
       if (action === 'kill') {
            console.log('[API:action] Force killing unprovisioned server (cleaning up DB/DNS only).');
-           // DNS Cleaning
+           
            if (server.subdomain) {
+             // Relies on wildcard setup in Cloudflare to automatically route to Sleeper
              await deleteCloudflareRecords(server.subdomain);
-             // Sleeper redirect
-             try {
-                const dnsUrl = `${CLOUDFLARE_API_BASE}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`;
-                await fetch(dnsUrl, {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ type: 'A', name: `${server.subdomain}${DOMAIN_SUFFIX}`, content: SLEEPER_PROXY_IP, ttl: 60, proxied: false })
-                });
-             } catch(e) {}
            }
            
            await supabaseAdmin.from('servers').update({
              status: 'Stopped', hetzner_id: null, ipv4: null, 
              last_billed_at: null, runtime_accumulated_seconds: 0, 
              running_since: null, current_session_id: null,
-             started_at: null // --- CLEAN UP STARTED_AT ---
+             started_at: null
            }).eq('id', serverId);
            
-           // [AUDIT LOG] Force Kill Unprovisioned
            await supabaseAdmin.from('server_audit_logs').insert({
                 server_id: serverId,
                 user_id: user.id,
@@ -734,7 +676,7 @@ export default async function handler(req, res) {
       last_billed_at: now,
       runtime_accumulated_seconds: 0,
       last_empty_at: null,
-      started_at: now // --- SET STARTED_AT ON START/RESTART ---
+      started_at: now 
     };
     if (action === 'start' && sessionId && sessionId !== server.current_session_id) {
       updateFields.current_session_id = sessionId; 
@@ -768,7 +710,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to update final server status', detail: finalStatusErr.message });
     }
 
-    // [AUDIT LOG] Start/Restart
     await supabaseAdmin.from('server_audit_logs').insert({
         server_id: serverId,
         user_id: user.id,
