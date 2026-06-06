@@ -782,6 +782,7 @@ User=minecraft
 WantedBy=multi-user.target
 EOF_FILE
 
+apt-get remove -y unattended-upgrades needrestart
 apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ufw php-cli php-xml php-mbstring unzip jq openjdk-25-jre-headless openjdk-21-jre-headless openjdk-17-jre-headless openjdk-8-jre-headless
 mkdir -p /opt/tools && cd /opt/tools && curl -sS https://getcomposer.org/installer | COMPOSER_ALLOW_SUPERUSER=1 HOME=/root php -- --install-dir=/usr/local/bin --filename=composer && COMPOSER_ALLOW_SUPERUSER=1 HOME=/root composer require aternos/thanos
 
