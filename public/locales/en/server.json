@@ -223,7 +223,6 @@
     }
   },
   "files": {
-    "upload": "Upload",
     "empty": "This folder is empty",
     "filter_tooltip": "Toggle masked files",
     "refresh": "Refresh",
@@ -233,6 +232,17 @@
     "save_fail": "Failed to save",
     "delete_fail": "Delete failed",
     "delete_confirm": "Delete {{name}}? This cannot be undone.",
+    "drop_to_upload": "Drop files to upload",
+    "overwrite": {
+      "title": "Confirm Overwrite",
+      "message": "The following items already exist in this directory. Uploading will overwrite or merge them:",
+      "confirm_btn": "Yes, Overwrite"
+    },
+    "upload": {
+      "uploading": "Uploading...",
+      "finishing": "Finishing up...",
+      "complete": "Upload Complete"
+    },
     "columns": {
       "name": "Name",
       "size": "Size",
