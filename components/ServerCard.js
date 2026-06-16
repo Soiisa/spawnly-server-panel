@@ -1,3 +1,4 @@
+// components/ServerCard.js
 import Link from 'next/link';
 import { 
   SignalIcon, 
@@ -6,22 +7,16 @@ import {
   ClipboardDocumentIcon 
 } from '@heroicons/react/24/outline';
 import ServerStatusIndicator from './ServerStatusIndicator';
-import { useTranslation } from 'next-i18next'; // <--- IMPORTED
+import { useTranslation } from 'next-i18next';
 
 export default function ServerCard({ server }) {
-  const { t } = useTranslation('dashboard'); // <--- INITIALIZED
+  const { t } = useTranslation('dashboard'); 
   
-  // --- FIX START ---
-  // 1. Get the raw status (e.g., "Stopped")
-  // 2. Convert to lowercase (e.g., "stopped")
-  // 3. Look up the key 'status.stopped' in dashboard.json
   const rawStatus = server.status || 'unknown';
   const status = t(`status.${rawStatus.toLowerCase()}`, { defaultValue: rawStatus }); 
-  // --- FIX END ---
 
   const isRunning = rawStatus === 'Running';
   
-  // Helper to translate software type (e.g. 'paper' -> 'Paper')
   const softwareKey = server.type || 'vanilla';
   const displaySoftware = t(`software_names.${softwareKey}`, { 
     defaultValue: server.type ? server.type.charAt(0).toUpperCase() + server.type.slice(1) : 'Unknown' 
@@ -37,15 +32,29 @@ export default function ServerCard({ server }) {
   return (
     <Link 
       href={`/server/${server.id}`} 
-      className="block bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+      className="block bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 relative overflow-hidden"
     >
       <div className="p-6">
         {/* Header */}
         <div className="flex justify-between items-start mb-4">
-          <div className="flex items-center gap-3">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate max-w-[200px]">{server.name}</h3>
-            <ServerStatusIndicator server={server} />
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-3">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate max-w-[200px]">{server.name}</h3>
+              <ServerStatusIndicator server={server} />
+            </div>
+            
+            {/* ---> NEW: Billing Type Badge <--- */}
+            <div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${
+                server.billing_type === 'monthly' 
+                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800' 
+                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+              }`}>
+                {server.billing_type === 'monthly' ? t('billing.monthly', 'Reserved (Monthly)') : t('billing.hourly', 'Flex (Hourly)')}
+              </span>
+            </div>
           </div>
+
           <button 
             onClick={handleCopyIp}
             className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
@@ -68,7 +77,6 @@ export default function ServerCard({ server }) {
               <SignalIcon className="w-4 h-4" />
               {t('server_card.connection')} 
             </div>
-            {/* Display the TRANSLATED status here */}
             <span className="font-bold text-sm capitalize">{status}</span>
           </div>
 

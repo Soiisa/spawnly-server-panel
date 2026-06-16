@@ -1,7 +1,9 @@
+// scripts/server-wrapper.js
 require('dotenv').config();
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -26,6 +28,13 @@ console.error = function (...args) {
   logStream.write(`[${ts}] [server-wrapper] [ERROR] ${msg}\n`);
   originalConsoleError.apply(console, args);
 };
+
+// Diagnostic helper specifically for tracking crashes
+function logDiag(message) {
+    const ts = new Date().toISOString();
+    logStream.write(`[${ts}] [Wrapper-Diag] ${message}\n`);
+    originalConsoleLog.apply(console, [`[Wrapper-Diag] ${message}`]);
+}
 // -------------------------
 
 // --- Configuration ---
@@ -33,7 +42,7 @@ const PORT = 3006;
 const SERVER_ID = process.env.SERVER_ID;
 const NEXTJS_API_URL = process.env.NEXTJS_API_URL;
 const RCON_PASSWORD = process.env.RCON_PASSWORD;
-const HEAP_GB = process.env.HEAP_GB || '2';
+const HEAP_MB = process.env.HEAP_MB || '2048';
 const USE_RUN_SH = fs.existsSync(path.join(process.cwd(), 'run.sh'));
 
 const STATE_FILE = path.join(process.cwd(), '.server_status');
@@ -54,6 +63,21 @@ const updateState = (status) => {
 
 console.log('[Wrapper] Initializing...');
 updateState('Starting');
+
+// --- Diagnostic Memory Profiler ---
+setInterval(() => {
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+    const processMem = process.memoryUsage();
+
+    const pctUsed = ((usedMem / totalMem) * 100).toFixed(1);
+    const freeMB = (freeMem / 1024 / 1024).toFixed(0);
+    const totalMB = (totalMem / 1024 / 1024).toFixed(0);
+    const wrapperRSS = (processMem.rss / 1024 / 1024).toFixed(0);
+
+    logDiag(`MEMORY PROFILE -> System RAM Used: ${pctUsed}% (${freeMB}MB free of ${totalMB}MB) | Wrapper Node RSS: ${wrapperRSS}MB`);
+}, 60000); // Logs every 60 seconds
 
 // --- Log Buffer & Sync ---
 const MAX_LOG_LINES = 500;
@@ -103,8 +127,8 @@ const startServer = () => {
     mcProcess = spawn('./run.sh', [], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'] });
   } else {
     const args = [
-      `-Xmx${HEAP_GB}G`,
-      `-Xms1G`,
+      `-Xmx${HEAP_MB}M`,
+      `-Xms1024M`,
       '-XX:+ExitOnOutOfMemoryError',
       '-XX:+UseG1GC',
       '-XX:+ParallelRefProcEnabled',
@@ -132,9 +156,18 @@ const startServer = () => {
   mcProcess.stdout.on('data', (data) => processLog(data, false));
   mcProcess.stderr.on('data', (data) => processLog(data, true));
 
-  mcProcess.on('close', async (code) => {
-    console.log(`[Wrapper] Process exited with code ${code}`);
+  mcProcess.on('close', async (code, signal) => {
+    logDiag(`Process exited with code ${code} | OS Signal: ${signal}`);
     
+    if (code === null) {
+        logDiag(`WARNING: Process exited with a NULL code.`);
+        if (signal === 'SIGKILL') {
+            logDiag(`SIGNAL IDENTIFIED: SIGKILL. The process was killed immediately. Likely causes: Linux Kernel OOM-Killer due to memory exhaustion.`);
+        } else if (signal === 'SIGTERM') {
+            logDiag(`SIGNAL IDENTIFIED: SIGTERM. Termination request received from the operating system or systemd.`);
+        }
+    }
+
     const finalStatus = (code !== 0 && code !== null && !isShuttingDown) ? 'Crashed' : 'Stopped';
 
     updateState(finalStatus);
@@ -154,10 +187,10 @@ const processLog = (data, isError) => {
   if (logBuffer.length > MAX_LOG_LINES) logBuffer.shift();
 
   if (line.includes('java.lang.OutOfMemoryError')) {
-    console.error('[Wrapper] CRITICAL: OutOfMemoryError detected. Executing aggressive kill...');
+    logDiag('CRITICAL: java.lang.OutOfMemoryError detected inside child stdout. Executing aggressive kill...');
     if (mcProcess) mcProcess.kill('SIGKILL');
     exec('pkill -9 -u minecraft java', (err) => {
-        if (err) console.error('[Wrapper] pkill failed (might already be dead):', err.message);
+        if (err) logDiag(`pkill failed (might already be dead): ${err.message}`);
     });
     return;
   }
@@ -209,6 +242,7 @@ app.post('/api/command', authenticate, (req, res) => {
 app.listen(PORT, () => console.log(`[Wrapper] API listening on port ${PORT}`));
 
 process.on('SIGTERM', () => {
+  logDiag('Wrapper parent context intercepted system OS SIGTERM shutdown signal.');
   isShuttingDown = true;
   updateState('Stopping');
   sendUpdate('Stopping');
@@ -216,6 +250,7 @@ process.on('SIGTERM', () => {
     mcProcess.stdin.write('stop\n');
     setTimeout(() => {
       if (mcProcess && !mcProcess.killed) {
+          logDiag('30-second shutdown timeout reached. Forcing SIGKILL.');
           mcProcess.kill('SIGKILL');
           exec('pkill -9 -u minecraft java'); 
       }
@@ -223,6 +258,11 @@ process.on('SIGTERM', () => {
   } else {
     process.exit(0);
   }
+});
+
+process.on('SIGINT', () => {
+    logDiag('Wrapper parent context intercepted manual SIGINT (Ctrl+C).');
+    process.exit(0);
 });
 
 startServer();

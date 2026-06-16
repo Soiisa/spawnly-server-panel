@@ -1,3 +1,4 @@
+// components/BackupsTab.js
 import { useState, useEffect } from 'react';
 import { 
   ArrowDownTrayIcon, 
@@ -18,7 +19,7 @@ export default function BackupsTab({ server }) {
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [message, setMessage] = useState(null); // Added for Toast
+  const [message, setMessage] = useState(null); 
   
   // Settings State
   const [showSettings, setShowSettings] = useState(false);
@@ -147,7 +148,10 @@ export default function BackupsTab({ server }) {
         throw new Error(err.error || 'Failed');
       }
       
-      showToast(t('backups.alerts.queued'));
+      const data = await res.json();
+      
+      // Use dynamic message because Steam applies instantly, Minecraft queues
+      showToast(data.message || t('backups.alerts.queued'));
     } catch (e) {
       alert(t('backups.errors.restore_failed') + ": " + e.message);
     } finally {
