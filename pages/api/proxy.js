@@ -17,6 +17,7 @@ const ALLOWED_HOSTS = [
   'api.spiget.org',
   'api.github.com',
   'ci.md-5.net',
+  'api.ficsit.app'
 ];
 
 export default async function handler(req, res) {
@@ -58,8 +59,27 @@ export default async function handler(req, res) {
       headers['User-Agent'] = 'Spawnly-Panel/1.0';
     }
 
-    // 3. Fetch using targetUrl.toString() to ensure spaces/params are percent-encoded
-    const response = await fetch(targetUrl.toString(), { headers });
+    // 3. Prepare Fetch Options (Crucial for FICSIT GraphQL POST requests)
+    const fetchOptions = {
+        method: req.method || 'GET',
+        headers: headers
+    };
+
+    // If the request has a body (like a POST request for GraphQL), forward it
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+        // Next.js automatically parses JSON bodies, so we must stringify it before forwarding
+        fetchOptions.body = typeof req.body === 'object' ? JSON.stringify(req.body) : req.body;
+        
+        // Ensure Content-Type is set for the payload
+        if (req.headers['content-type']) {
+            headers['Content-Type'] = req.headers['content-type'];
+        } else {
+            headers['Content-Type'] = 'application/json';
+        }
+    }
+
+    // 4. Fetch using targetUrl.toString() to ensure spaces/params are percent-encoded
+    const response = await fetch(targetUrl.toString(), fetchOptions);
     
     // FTB empty search handling
     if (!response.ok && response.status === 404 && decodedUrlString.includes('feed-the-beast')) {

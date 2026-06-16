@@ -1,13 +1,13 @@
 // pages/api/cron/bill-servers.js
 
 import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CRON_SECRET = process.env.CRON_SECRET;
 const HETZNER_API_TOKEN = process.env.HETZNER_API_TOKEN;
 
-// Helper: Reuse Hetzner Action Logic locally
 const hetznerShutdown = async (hetznerId) => {
     if(!hetznerId) return;
     try {
@@ -23,9 +23,30 @@ const hetznerShutdown = async (hetznerId) => {
     }
 };
 
-// Logic: Deduct from User Profile (Standard)
-async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds) { 
-  // 1. Update User Balance
+// --- EMAIL ALERT HELPER ---
+async function sendSuspensionEmail(supabaseAdmin, userId, serverName) {
+    try {
+        const { data: authData } = await supabaseAdmin.auth.admin.getUserById(userId);
+        const email = authData?.user?.email;
+        if (!email) return;
+
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: parseInt(process.env.SMTP_PORT || '587', 10),
+            secure: parseInt(process.env.SMTP_PORT, 10) === 465, 
+            auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+        });
+
+        await transporter.sendMail({
+            from: `"Spawnly Alerts" <${process.env.SMTP_FROM_EMAIL}>`,
+            to: email,
+            subject: `Action Required: Server Paused (${serverName})`,
+            html: `<p>Your server <strong>${serverName}</strong> has been paused because your account has run out of credits.</p><p>Please log in and add credits to restart your server!</p>`,
+        });
+    } catch (e) { console.warn('Email failed:', e.message); }
+}
+
+async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds, customDescription = null) { 
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
   if (error || profile.credits < amount) {
     throw new Error('Insufficient credits');
@@ -34,7 +55,6 @@ async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId,
   const newCredits = profile.credits - amount;
   await supabaseAdmin.from('profiles').update({ credits: newCredits }).eq('id', userId);
 
-  // 2. Update Transaction History (Aggregated)
   let existingTx = null;
 
   if (sessionId) {
@@ -57,7 +77,7 @@ async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId,
           totalSeconds += parseInt(timeMatch[1], 10);
       }
 
-      const newDescription = `Runtime charge for server ${serverId} (${totalSeconds} seconds)`;
+      const newDescription = customDescription || `Runtime charge for server ${serverId} (${totalSeconds} seconds)`;
 
       await supabaseAdmin.from('credit_transactions').update({
         amount: newAmount,
@@ -69,26 +89,22 @@ async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId,
         user_id: userId,
         amount: -amount,
         type: 'usage',
-        description: `Runtime charge for server ${serverId} (${billableSeconds} seconds)`,
+        description: customDescription || `Runtime charge for server ${serverId} (${billableSeconds} seconds)`,
         created_at: new Date().toISOString(),
         session_id: sessionId
       });
   }
 }
 
-// Logic: Deduct from Credit Pool
-async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessionId, billableSeconds) {
-    // 1. Check Pool Balance
+async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessionId, billableSeconds, customDescription = null) {
     const { data: pool, error } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', poolId).single();
     if (error || pool.balance < amount) {
         throw new Error('Insufficient pool credits');
     }
 
-    // 2. Deduct from Pool
     const newBalance = pool.balance - amount;
     await supabaseAdmin.from('credit_pools').update({ balance: newBalance }).eq('id', poolId);
 
-    // 3. Update Pool Transaction History (Aggregated)
     let existingTx = null;
 
     if (sessionId) {
@@ -112,7 +128,7 @@ async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessio
              totalSeconds += parseInt(timeMatch[1], 10);
          }
 
-         const newDescription = `Runtime charge for server ${serverId} (${totalSeconds} seconds)`;
+         const newDescription = customDescription || `Runtime charge for server ${serverId} (${totalSeconds} seconds)`;
          
          await supabaseAdmin.from('pool_transactions').update({
              amount: newAmount,
@@ -124,7 +140,7 @@ async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessio
             server_id: serverId,
             amount: -amount,
             type: 'usage',
-            description: `Runtime charge for server ${serverId} (${billableSeconds} seconds)`,
+            description: customDescription || `Runtime charge for server ${serverId} (${billableSeconds} seconds)`,
             session_id: sessionId
         });
     }
@@ -139,32 +155,65 @@ export default async function handler(req, res) {
 
   const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // Fetch all running servers
-  // Ensure pool_id is fetched
   const { data: runningServers, error } = await supabaseAdmin.from('servers').select('*, current_session_id').eq('status', 'Running');
   if (error) return res.status(500).json({ error: 'Failed to fetch running servers' });
-
-  console.log('Cron bill-servers triggered; running servers count:', (runningServers || []).length);
 
   let processedCount = 0;
 
   for (const server of runningServers || []) {
     try {
-      // Initialize timestamps if missing
+      const now = new Date();
+
+      // ------------------------------------------------------------------
+      // 1. MONTHLY SERVER LOGIC (Macro-Billing with Grace Period)
+      // ------------------------------------------------------------------
+      if (server.billing_type === 'monthly') {
+          const lastBilled = new Date(server.last_billed_at || server.created_at);
+          const daysSinceBilled = (now - lastBilled) / (1000 * 60 * 60 * 24);
+
+          if (daysSinceBilled >= 30) {
+              const monthlyCost = Math.round(server.cost_per_hour * 720);
+              const desc = `Monthly Reserved Fee: Server ${server.id}`;
+              
+              try {
+                  if (server.pool_id) {
+                      await deductPoolCredits(supabaseAdmin, server.pool_id, monthlyCost, server.id, null, 0, desc);
+                  } else {
+                      await deductCredits(supabaseAdmin, server.user_id, monthlyCost, server.id, null, 0, desc);
+                  }
+                  
+                  // Update the billing anchor to today
+                  await supabaseAdmin.from('servers').update({ last_billed_at: now.toISOString() }).eq('id', server.id);
+                  processedCount++;
+              } catch (e) {
+                  // Insufficient Funds! Check if 24-hour grace period expired (31 days)
+                  if (daysSinceBilled >= 31) {
+                      console.log(`[Billing] Grace period expired for server ${server.id}. Shutting down.`);
+                      await hetznerShutdown(server.hetzner_id);
+                      await supabaseAdmin.from('servers').update({ status: 'Stopped' }).eq('id', server.id);
+                      await sendSuspensionEmail(supabaseAdmin, server.user_id, server.name);
+                  } else {
+                      console.log(`[Billing] Server ${server.id} pending payment. Grace period active for ${(31 - daysSinceBilled).toFixed(2)} more days.`);
+                  }
+              }
+          }
+          continue; 
+      }
+
+      // ------------------------------------------------------------------
+      // 2. HOURLY SERVER LOGIC (Micro-Billing with Session Rows)
+      // ------------------------------------------------------------------
       if (!server.last_billed_at) {
-        const initial = server.running_since || new Date().toISOString();
+        const initial = server.running_since || now.toISOString();
         try {
           await supabaseAdmin.from('servers').update({ 
               last_billed_at: initial, 
               runtime_accumulated_seconds: server.runtime_accumulated_seconds || 0 
           }).eq('id', server.id);
-        } catch (e) {
-          console.error('Failed to initialize last_billed_at for server', server.id, e && e.message);
-        }
+        } catch (e) {}
         continue;
       }
 
-      const now = new Date();
       const lastBilled = new Date(server.last_billed_at);
       const elapsedSeconds = Math.floor((now - lastBilled) / 1000);
       const totalAccumulated = elapsedSeconds + (server.runtime_accumulated_seconds || 0);
@@ -180,47 +229,32 @@ export default async function handler(req, res) {
       const cost = Number((hours * server.cost_per_hour).toFixed(4));
 
       let billSuccess = false;
-
-      // ----------------------------------------------------
-      // EXCLUSIVE BILLING LOGIC
-      // ----------------------------------------------------
       
       if (server.pool_id) {
-          // CASE A: Server uses a Pool
-          // We ONLY charge the pool. If it fails, we stop. We do NOT touch the owner.
           try {
               await deductPoolCredits(supabaseAdmin, server.pool_id, cost, server.id, server.current_session_id, billableSeconds);
               billSuccess = true;
           } catch (poolErr) {
-              console.warn(`Pool ${server.pool_id} insufficient/error. Server ${server.id} will stop. Error:`, poolErr.message);
-              billSuccess = false; // Explicit failure
+              billSuccess = false; 
           }
       } else {
-          // CASE B: Server uses Personal Wallet (No Pool)
           try {
               await deductCredits(supabaseAdmin, server.user_id, cost, server.id, server.current_session_id, billableSeconds);
               billSuccess = true;
           } catch (deductErr) {
-              console.error(`Failed to deduct credits for user ${server.user_id} server ${server.id}:`, deductErr && deductErr.message);
               billSuccess = false;
           }
       }
 
-      // ----------------------------------------------------
-      // HANDLE FAILURE (STOP SERVER)
-      // ----------------------------------------------------
       if (!billSuccess) {
         try {
           await hetznerShutdown(server.hetzner_id);
           await supabaseAdmin.from('servers').update({ status: 'Stopping' }).eq('id', server.id);
-          console.log(`Auto-stopped server ${server.id} due to insufficient funds (Source: ${server.pool_id ? 'Pool' : 'User Wallet'})`);
-        } catch (autoStopErr) {
-          console.error(`Failed to auto-stop server ${server.id}:`, autoStopErr.message);
-        }
-        continue; // Skip updating timestamps since billing failed
+          await sendSuspensionEmail(supabaseAdmin, server.user_id, server.name);
+        } catch (autoStopErr) {}
+        continue; 
       }
 
-      // Update server billing timestamps if successful
       if (billSuccess) {
           processedCount++;
           await supabaseAdmin.from('servers').update({
@@ -229,10 +263,7 @@ export default async function handler(req, res) {
           }).eq('id', server.id);
       }
       
-    } catch(err) {
-      console.error(`Unexpected error processing server ${server && server.id}:`, err && err.message);
-      continue;
-    }
+    } catch(err) { continue; }
   }
 
   res.status(200).json({ ok: true, processed: processedCount, total_running: (runningServers || []).length });

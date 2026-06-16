@@ -15,7 +15,10 @@ import {
   ServerIcon,
   CreditCardIcon,
   ShieldCheckIcon,
-  InformationCircleIcon
+  ArrowPathIcon,
+  CheckCircleIcon,
+  CalendarIcon,
+  PencilIcon
 } from '@heroicons/react/24/outline';
 import { useTranslation } from "next-i18next"; 
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
@@ -33,7 +36,7 @@ import {
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
-// --- INTERNAL COMPONENT: CHECKOUT FORM ---
+// --- INTERNAL COMPONENT: ONE-TIME CHECKOUT FORM ---
 const CheckoutForm = ({ amount, onSuccess, onError, t }) => {
   const stripe = useStripe();
   const elements = useElements();
@@ -91,7 +94,6 @@ const CheckoutForm = ({ amount, onSuccess, onError, t }) => {
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-       
        <div className="mb-6">
           <ExpressCheckoutElement 
             onClick={onExpressClick} 
@@ -148,13 +150,26 @@ export default function CreditsPage() {
   const [credits, setCredits] = useState(0);
   const [transactions, setTransactions] = useState([]);
   
+  // Subscription State
+  const [recurringAmount, setRecurringAmount] = useState(0);
+  const [subscriptionId, setSubscriptionId] = useState(null);
+  const [selectedSubAmount, setSelectedSubAmount] = useState(20.00);
+  const [subCheckoutLoading, setSubCheckoutLoading] = useState(false);
+  const [subCancelLoading, setSubCancelLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  
+  // EDIT SUBSCRIPTION STATE
+  const [isEditingSub, setIsEditingSub] = useState(false);
+  const [editSubAmount, setEditSubAmount] = useState(0);
+  const [subUpdateLoading, setSubUpdateLoading] = useState(false);
+
   // Loading State
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState(null);
 
   // Payment UI State
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
-  const [depositAmount, setDepositAmount] = useState(10); 
+  const [depositAmount, setDepositAmount] = useState(10.00); 
   const [clientSecret, setClientSecret] = useState(null); 
   const [agreedToRefundWaiver, setAgreedToRefundWaiver] = useState(false);
 
@@ -164,7 +179,7 @@ export default function CreditsPage() {
   };
 
   const calculateTotalCredits = (euro) => {
-    const base = euro * 100;
+    const base = Math.round(euro * 100); 
     const bonusTier = getBonusInfo(euro);
     const bonus = bonusTier ? Math.floor(base * (bonusTier.bonus_percent / 100)) : 0;
     return { 
@@ -177,6 +192,8 @@ export default function CreditsPage() {
   const { total: totalGet, bonus: bonusGet, percent: activePercent } = calculateTotalCredits(depositAmount);
 
   useEffect(() => {
+    if (!router.isReady) return;
+
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -186,19 +203,48 @@ export default function CreditsPage() {
 
       setUser(session.user);
 
-      if (router.query.payment_success) {
-        router.replace('/credits', undefined, { shallow: true });
-      }
-
       try {
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("credits")
+          .select("credits, recurring_purchase_amount, recurring_stripe_subscription_id")
           .eq("id", session.user.id)
           .single();
         
         if (profileError) throw profileError;
         setCredits(profile?.credits || 0);
+        
+        const currentRecurring = profile?.recurring_purchase_amount || 0;
+        const currentSubId = profile?.recurring_stripe_subscription_id || null;
+        
+        setRecurringAmount(currentRecurring);
+        setSubscriptionId(currentSubId);
+
+        // Logic for handling ?auto_add and ?payment_success
+        let urlCleaned = false;
+        if (router.query.payment_success) {
+            urlCleaned = true;
+        }
+
+        if (router.query.auto_add) {
+            const addAmountCredits = Number(router.query.auto_add);
+            if (!isNaN(addAmountCredits) && addAmountCredits > 0) {
+                const addAmountEuros = addAmountCredits / 100;
+                
+                if (currentSubId) {
+                    const newTotal = Math.min(200, currentRecurring + addAmountEuros);
+                    setEditSubAmount(Number(newTotal.toFixed(2)));
+                    setIsEditingSub(true); 
+                } else {
+                    const validStartingAmount = Math.max(5, Math.min(200, addAmountEuros));
+                    setSelectedSubAmount(Number(validStartingAmount.toFixed(2)));
+                }
+                urlCleaned = true;
+            }
+        }
+
+        if (urlCleaned) {
+            router.replace('/credits', undefined, { shallow: true });
+        }
 
         const { data: txs, error: txError } = await supabase
           .from("credit_transactions")
@@ -218,16 +264,16 @@ export default function CreditsPage() {
       }
     };
 
-    if (router.isReady) {
-        init();
-    }
-  }, [router, router.isReady]);
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady]); 
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
 
+  // ONE-TIME PAYMENT INTENT
   const handleInitiatePayment = async () => {
     if (depositAmount < 3 || depositAmount > 50) return;
     if (!agreedToRefundWaiver) return;
@@ -242,7 +288,6 @@ export default function CreditsPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        // We now send the waiver state in the payload
         body: JSON.stringify({ 
           amount: depositAmount, 
           refund_waiver_agreed: agreedToRefundWaiver 
@@ -251,20 +296,126 @@ export default function CreditsPage() {
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to initiate payment");
-      }
-
-      if (data.clientSecret) {
-        setClientSecret(data.clientSecret);
-      } else {
-        throw new Error("No client secret returned.");
-      }
+      if (!response.ok) throw new Error(data.error || "Failed to initiate payment");
+      if (data.clientSecret) setClientSecret(data.clientSecret);
+      else throw new Error("No client secret returned.");
 
     } catch (err) {
       console.error("Payment Init Error:", err);
-      alert(t('errors.payment_init_failed') + ": " + err.message);
+      alert(t('errors.payment_init_failed', { defaultValue: 'Payment initialization failed' }) + ": " + err.message);
     }
+  };
+
+  // SUBSCRIPTION HANDLERS
+  const handleSubscribe = async () => {
+    if (selectedSubAmount < 5 || selectedSubAmount > 200) return;
+    setSubCheckoutLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const res = await fetch('/api/stripe/checkout_sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ amount: selectedSubAmount, isSubscription: true })
+      });
+      
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url; 
+      } else {
+        throw new Error(data.error || "Failed to create subscription session");
+      }
+    } catch (e) {
+      alert(e.message);
+      setSubCheckoutLoading(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!confirm(t('subscription.confirm_cancel', { defaultValue: 'Are you sure you want to cancel your monthly auto-refill?' }))) return;
+    setSubCancelLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const res = await fetch('/api/stripe/cancel_subscription', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` }
+      });
+      
+      if (!res.ok) throw new Error("Failed to cancel subscription");
+      
+      setSubscriptionId(null);
+      setRecurringAmount(0);
+      setIsEditingSub(false);
+      alert(t('subscription.cancel_success', { defaultValue: 'Subscription cancelled successfully.' }));
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSubCancelLoading(false);
+    }
+  };
+
+  // EDIT SUBSCRIPTION HANDLER
+  const handleUpdateSubscription = async () => {
+    if (editSubAmount < 5 || editSubAmount > 200) return;
+    setSubUpdateLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const res = await fetch('/api/stripe/update_subscription', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ amount: editSubAmount })
+      });
+      
+      if (!res.ok) throw new Error((await res.json()).error || "Failed to update subscription");
+      
+      setRecurringAmount(editSubAmount);
+      setIsEditingSub(false);
+      alert(t('subscription.update_success', { defaultValue: 'Subscription updated successfully! The new amount will be charged on your next billing date.' }));
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSubUpdateLoading(false);
+    }
+  };
+
+  // OPEN BILLING PORTAL HANDLER
+  const handleOpenPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const res = await fetch('/api/stripe/customer_portal', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` }
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to open billing portal");
+      
+      window.location.href = data.url; 
+    } catch (e) {
+      alert(e.message);
+      setPortalLoading(false);
+    }
+  };
+
+  const getNextBillingDate = () => {
+    const latestDeposit = transactions.find(t => t.type === 'deposit' && t.description.includes('Auto-Refill'));
+    const created = latestDeposit ? new Date(latestDeposit.created_at) : new Date();
+    const now = new Date();
+    let next = new Date(created);
+    
+    if (!latestDeposit) {
+        next.setMonth(next.getMonth() + 1);
+    } else {
+        while (next <= now) {
+            next.setMonth(next.getMonth() + 1);
+        }
+    }
+    
+    return next.toLocaleDateString(router.locale || 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   useEffect(() => {
@@ -280,29 +431,37 @@ export default function CreditsPage() {
 
   // --- HELPERS ---
   const formatDate = (dateString) => new Date(dateString).toLocaleString(router.locale || "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  
   const parseUsage = (description) => {
     if (!description) return {};
     const serverMatch = description.match(/server\s+([a-f0-9-]{36}|[a-f0-9-]{8})/i);
     const secondsMatch = description.match(/(\d+)\s*seconds/i);
     return { serverId: serverMatch ? serverMatch[1] : null, seconds: secondsMatch ? parseInt(secondsMatch[1], 10) : null };
   };
+
   const fmtSeconds = (s) => {
     if (s == null) return null;
     const hrs = Math.floor(s / 3600);
     const mins = Math.floor((s % 3600) / 60);
-    if (hrs > 0) return `${hrs}${t('units.h')} ${mins}${t('units.m')}`;
-    return `${mins}${t('units.m')} ${s % 60}${t('units.s')}`;
+    if (hrs > 0) return `${hrs}${t('units.h', {defaultValue: 'h'})} ${mins}${t('units.m', {defaultValue: 'm'})}`;
+    return `${mins}${t('units.m', {defaultValue: 'm'})} ${s % 60}${t('units.s', {defaultValue: 's'})}`;
   };
+  
+  // --- TRANSACTION GROUPING LOGIC ---
   const groupedTransactions = () => {
     const groups = [];
     const sessionMap = new Map();
     const singles = [];
     
     transactions.forEach((tx) => {
-      if (tx.session_id && tx.type === 'usage') {
+      const isMonthlyFee = tx.type === 'monthly_fee' || (tx.description && (tx.description.includes('First Month') || tx.description.includes('Monthly')));
+      
+      if (tx.session_id && tx.type === 'usage' && !isMonthlyFee) {
         if (!sessionMap.has(tx.session_id)) sessionMap.set(tx.session_id, []);
         sessionMap.get(tx.session_id).push(tx);
-      } else singles.push(tx);
+      } else {
+        singles.push(tx);
+      }
     });
     
     sessionMap.forEach((txs, sessionId) => {
@@ -310,10 +469,6 @@ export default function CreditsPage() {
       const totalAmount = txs.reduce((sum, t) => sum + t.amount, 0);
       const totalSeconds = txs.reduce((sum, t) => sum + (parseUsage(t.description).seconds || 0), 0);
       const { serverId } = parseUsage(txs[0].description);
-      
-      // --- BUG FIX ---
-      // Add the total elapsed runtime (totalSeconds) to the start date 
-      // to calculate the actual visual end date.
       const startDateStr = txs[0].created_at;
       const calculatedEndDate = new Date(new Date(startDateStr).getTime() + (totalSeconds * 1000)).toISOString();
 
@@ -331,7 +486,15 @@ export default function CreditsPage() {
     
     singles.forEach(tx => {
       const { serverId, seconds } = parseUsage(tx.description);
-      groups.push({ id: tx.id, isSession: false, date: tx.created_at, amount: tx.amount, type: tx.type, description: tx.description, meta: { serverId, seconds } });
+      groups.push({ 
+          id: tx.id, 
+          isSession: false, 
+          date: tx.created_at, 
+          amount: tx.amount, 
+          type: tx.type, 
+          description: tx.description, 
+          meta: { serverId, seconds } 
+      });
     });
     
     return groups.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -340,6 +503,7 @@ export default function CreditsPage() {
   const HistoryItem = ({ item }) => {
     const [isOpen, setIsOpen] = useState(false);
     const isNegative = item.amount < 0;
+    
     if (item.isSession) {
       return (
         <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden hover:shadow-sm transition-shadow">
@@ -374,13 +538,36 @@ export default function CreditsPage() {
         </div>
       );
     }
+
+    const isMonthlyFee = item.type === 'monthly_fee' || (item.description && (item.description.includes('First Month') || item.description.includes('Monthly')));
+    
+    let label = item.type === 'usage' ? t('history.manual_deduction', { defaultValue: 'Runtime Deduction' }) : item.type;
+    if (item.type === 'deposit') label = t('history.deposit', { defaultValue: 'Credit Deposit' });
+    if (isMonthlyFee) label = t('history.monthly_fee', { defaultValue: 'Monthly Server Fee' });
+    
+    let descText = item.description;
+    if (isMonthlyFee && descText) {
+        const srvMatch = descText.match(/Server ([a-f0-9-]+)/i);
+        if (srvMatch) {
+            descText = `Server: ${srvMatch[1]}`;
+        }
+    }
+
     return (
       <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 flex items-center justify-between hover:shadow-sm transition-shadow">
         <div className="flex items-center gap-4">
-          <div className={`p-2 rounded-lg ${!isNegative ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400'}`}>{!isNegative ? <CurrencyDollarIcon className="w-6 h-6" /> : <ReceiptRefundIcon className="w-6 h-6" />}</div>
-          <div><h4 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{item.type === 'usage' ? t('history.manual_deduction') : item.type}</h4><p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(item.date)}</p><p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{item.description}</p></div>
+          <div className={`p-2 rounded-lg ${!isNegative ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : (isMonthlyFee ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-400')}`}>
+            {!isNegative ? <CurrencyDollarIcon className="w-6 h-6" /> : (isMonthlyFee ? <CalendarIcon className="w-6 h-6" /> : <ReceiptRefundIcon className="w-6 h-6" />)}
+          </div>
+          <div>
+            <h4 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{label}</h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(item.date)}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{descText}</p>
+          </div>
         </div>
-        <span className={`font-bold ${!isNegative ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}>{item.amount > 0 ? '+' : ''}{item.amount.toFixed(2)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits')}</span></span>
+        <span className={`font-bold ${!isNegative ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}>
+            {item.amount > 0 ? '+' : ''}{item.amount.toFixed(2)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits')}</span>
+        </span>
       </div>
     );
   };
@@ -395,14 +582,162 @@ export default function CreditsPage() {
           <button onClick={() => setIsBuyModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all flex items-center gap-2 transform active:scale-95"><CurrencyDollarIcon className="w-5 h-5" />{t('buy_credits')}</button>
         </div>
 
-        {/* CREDITS CARD */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-200 dark:border-slate-700 p-5 md:p-8 mb-10 flex flex-col sm:flex-row items-center justify-between gap-8 relative overflow-hidden">
+        {/* 1. CREDITS CARD */}
+        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-200 dark:border-slate-700 p-5 md:p-8 mb-6 flex flex-col sm:flex-row items-center justify-between gap-8 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><CurrencyDollarIcon className="w-64 h-64 text-indigo-900 dark:text-indigo-400" /></div>
           <div className="relative z-10">
             <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{t('card.title')}</p>
             <p className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mt-2">{loadingData ? "..." : credits.toLocaleString()} <span className="text-lg font-medium text-gray-400 dark:text-gray-500 ml-3">Credits</span></p>
           </div>
           <div className="relative z-10 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 rounded-2xl p-5 max-w-xs"><div className="flex items-start gap-4"><SparklesIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400 mt-1 shrink-0" /><div><h4 className="text-sm font-bold text-indigo-900 dark:text-indigo-200">{t('card.info_title')}</h4><p className="text-xs text-indigo-700 dark:text-indigo-400 mt-1.5 leading-relaxed">{t('card.info_desc')}</p></div></div></div>
+        </div>
+
+        {/* 2. RECURRING SUBSCRIPTION CARD */}
+        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 md:p-8 mb-10 flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+          <div className="flex items-start gap-4 flex-1">
+            <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl shrink-0">
+              <ArrowPathIcon className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1">
+                {t('subscription.title', { defaultValue: 'Monthly Auto-Refill' })}
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-lg">
+                {t('subscription.description', { defaultValue: 'Never worry about your reserved servers pausing. Automatically add credits to your balance every 30 days.' })}
+              </p>
+            </div>
+          </div>
+
+          <div className="w-full xl:w-auto flex flex-col bg-gray-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-gray-100 dark:border-slate-700 transition-all">
+            {subscriptionId ? (
+              <>
+                {/* --- EDIT MODE --- */}
+                {isEditingSub ? (
+                  <div className="flex flex-col w-full xl:w-auto">
+                    <div className="flex flex-col sm:flex-row items-center gap-3 animate-in fade-in duration-200 w-full xl:w-auto">
+                        <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-500">Amount (€):</span>
+                        <input
+                            type="number"
+                            min="5" max="200" step="0.01" 
+                            value={editSubAmount}
+                            onChange={(e) => setEditSubAmount(Number(e.target.value))}
+                            className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg text-sm font-bold py-2 px-3 focus:ring-indigo-500 dark:text-white w-24 text-center shadow-inner"
+                        />
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                            onClick={handleUpdateSubscription}
+                            disabled={subUpdateLoading || editSubAmount < 5 || editSubAmount > 200}
+                            className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-md transition-all disabled:opacity-50 flex justify-center items-center"
+                        >
+                            {subUpdateLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : t('actions.save', { defaultValue: 'Save' })}
+                        </button>
+                        <button
+                            onClick={() => setIsEditingSub(false)}
+                            disabled={subUpdateLoading}
+                            className="flex-1 sm:flex-none px-4 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                        >
+                            {t('actions.cancel', { defaultValue: 'Cancel' })}
+                        </button>
+                        </div>
+                    </div>
+                    {/* CONVERSION RATE HELPER */}
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 w-full text-center sm:text-left flex items-center justify-center sm:justify-start gap-1.5">
+                        <SparklesIcon className="w-3.5 h-3.5 text-indigo-500" />
+                        {t('subscription.conversion_rate', { defaultValue: '1€ = 100 Credits. You will receive' })} <strong className="text-indigo-600 dark:text-indigo-400">{(editSubAmount * 100).toLocaleString()} Credits</strong> / month.
+                    </p>
+                  </div>
+                ) : (
+                  /* --- VIEW MODE --- */
+                  <div className="flex flex-col sm:flex-row items-center w-full justify-between xl:justify-end gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="text-center sm:text-left">
+                        <p className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1 mb-1">
+                            <CheckCircleIcon className="w-4 h-4" /> {t('subscription.active', { defaultValue: 'Active' })}
+                        </p>
+                        <p className="font-bold text-slate-900 dark:text-white">
+                            €{Number(recurringAmount).toFixed(2)} / month
+                            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold ml-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 px-2 py-0.5 rounded-full inline-block mt-1 sm:mt-0">
+                                {(recurringAmount * 100).toLocaleString()} Credits
+                            </span>
+                        </p>
+                        </div>
+                        
+                        <div className="w-px h-10 bg-gray-200 dark:bg-slate-700 hidden sm:block"></div>
+                        
+                        <div className="text-center sm:text-left pr-2">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1 mb-1">
+                            <CalendarIcon className="w-4 h-4" /> {t('subscription.next_billing', { defaultValue: 'Next Due' })}
+                        </p>
+                        <p className="font-bold text-slate-900 dark:text-white">{getNextBillingDate()}</p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                      <button
+                        onClick={handleOpenPortal}
+                        disabled={portalLoading}
+                        className="flex-1 sm:flex-none px-3 py-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-1.5 shadow-sm disabled:opacity-50"
+                      >
+                        {portalLoading ? <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /> : <CreditCardIcon className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{t('subscription.manage_billing', { defaultValue: 'Manage Billing' })}</span>
+                        <span className="sm:hidden">{t('actions.manage', { defaultValue: 'Manage' })}</span>
+                      </button>
+
+                      <button
+                        onClick={() => { setEditSubAmount(recurringAmount); setIsEditingSub(true); }}
+                        className="flex-1 sm:flex-none px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-xl text-sm font-bold transition-all flex justify-center items-center gap-1.5 shadow-sm"
+                      >
+                        <PencilIcon className="w-4 h-4" />
+                        <span className="hidden sm:inline">{t('actions.edit', { defaultValue: 'Edit' })}</span>
+                      </button>
+
+                      <button
+                        onClick={handleCancelSubscription}
+                        disabled={subCancelLoading}
+                        className="flex-1 sm:flex-none px-3 py-2 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl text-sm font-bold transition-all disabled:opacity-50 shadow-sm"
+                      >
+                        {subCancelLoading ? '...' : <span className="hidden sm:inline">{t('subscription.cancel', { defaultValue: 'Cancel' })}</span>}
+                        {subCancelLoading ? '' : <span className="sm:hidden">{t('actions.cancel', { defaultValue: 'Cancel' })}</span>}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col w-full xl:w-auto">
+                  <div className="flex flex-col sm:flex-row gap-3 w-full items-center">
+                    <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-500">Amount (€):</span>
+                    <input
+                        type="number"
+                        min="5" max="200" step="0.01" 
+                        value={selectedSubAmount}
+                        onChange={(e) => setSelectedSubAmount(Number(e.target.value))}
+                        className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg text-sm font-bold py-2 px-3 focus:ring-indigo-500 dark:text-white w-24 text-center"
+                    />
+                    </div>
+                    {selectedSubAmount < 5 || selectedSubAmount > 200 ? (
+                    <span className="text-xs text-red-500 text-center">Must be between €5 and €200</span>
+                    ) : null}
+                    <button
+                    onClick={handleSubscribe}
+                    disabled={subCheckoutLoading || selectedSubAmount < 5 || selectedSubAmount > 200}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-indigo-50 rounded-xl text-sm font-bold shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                    {subCheckoutLoading ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : null}
+                    {t('subscription.subscribe', { defaultValue: 'Subscribe' })}
+                    </button>
+                  </div>
+                  {/* CONVERSION RATE HELPER */}
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 w-full text-center sm:text-left flex items-center justify-center sm:justify-start gap-1.5">
+                    <SparklesIcon className="w-3.5 h-3.5 text-indigo-500" />
+                    {t('subscription.conversion_rate', { defaultValue: '1€ = 100 Credits. You will receive' })} <strong className="text-indigo-600 dark:text-indigo-400">{(selectedSubAmount * 100).toLocaleString()} Credits</strong> / month.
+                  </p>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -413,7 +748,7 @@ export default function CreditsPage() {
 
       <Footer />
 
-      {/* --- BUY MODAL --- */}
+      {/* --- BUY MODAL (ONE TIME) --- */}
       {isBuyModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-md transition-all">
           <div className="bg-white dark:bg-slate-900 sm:rounded-[2.5rem] shadow-2xl w-full sm:max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[95vh] overflow-y-auto sm:overflow-hidden border-0 sm:border border-gray-100 dark:border-slate-800 relative animate-in fade-in zoom-in duration-300 flex flex-col md:flex-row">
@@ -439,14 +774,14 @@ export default function CreditsPage() {
                     {bonusGet > 0 && (
                         <div className="mt-4 text-xs font-medium text-green-600 dark:text-green-400 flex items-center justify-center gap-1">
                             <SparklesIcon className="w-4 h-4" />
-                            <span>{t('modal.bonus_breakdown', { base: depositAmount * 100, bonus: bonusGet })}</span>
+                            <span>{t('modal.bonus_breakdown', { base: Math.round(depositAmount * 100), bonus: bonusGet })}</span>
                         </div>
                     )}
                 </div>
 
                 <div className="mb-8">
                     <div className="flex justify-between text-xs font-bold text-gray-400 uppercase mb-4 tracking-widest"><span>3€</span><span>{t('modal.drag_adjust')}</span><span>50€</span></div>
-                    <input type="range" min="3" max="50" step="1" value={depositAmount} onChange={(e) => setDepositAmount(Number(e.target.value))} className="w-full h-6 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500 transition-all touch-action-manipulation" />
+                    <input type="range" min="3" max="50" step="0.01" value={depositAmount} onChange={(e) => setDepositAmount(Number(e.target.value))} className="w-full h-6 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500 transition-all touch-action-manipulation" />
                 </div>
 
                 <div>

@@ -89,6 +89,10 @@ async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessio
 }
 
 async function billFinalTime(server, now) {
+  // --> FIX: Protect Monthly servers from being billed hourly runtime here as well
+  const billingType = (server.billing_type || '').toLowerCase().trim();
+  if (billingType === 'monthly') return;
+
   if (server.status !== 'Running' && server.status !== 'Starting') return;
   let baseTime = server.last_billed_at ? new Date(server.last_billed_at) : (server.running_since ? new Date(server.running_since) : null);
   if (!baseTime) return;
@@ -133,21 +137,37 @@ export default async function handler(req, res) {
       }
 
       await billFinalTime(server, now);
-      await pointToSleeper(server.subdomain);
       
-      if (server.hetzner_id) {
-        try {
-            await fetch(`https://api.hetzner.cloud/v1/servers/${server.hetzner_id}`, {
-            method: 'DELETE', headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
-            });
-        } catch (e) {}
+      // ---> FIX: Determine if the server should actually be destroyed
+      const billingType = (server.billing_type || '').toLowerCase().trim();
+      const isHourly = billingType === 'hourly';
+
+      if (isHourly) {
+          console.log(`[Webhook] Sync complete. Destroying Hourly VPS for server ${serverId}`);
+          await pointToSleeper(server.subdomain);
+          
+          if (server.hetzner_id) {
+            try {
+                await fetch(`https://api.hetzner.cloud/v1/servers/${server.hetzner_id}`, {
+                  method: 'DELETE', headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
+                });
+            } catch (e) {}
+          }
+          
+          await supabaseAdmin.from('servers').update({
+            status: 'Stopped', hetzner_id: null, ipv4: null, running_since: null,
+            last_billed_at: null, runtime_accumulated_seconds: 0, current_session_id: null, last_empty_at: null,
+            started_at: null 
+          }).eq('id', serverId);
+      } else {
+          console.log(`[Webhook] Sync complete. Preserving Monthly VPS for server ${serverId}`);
+          // For Monthly servers, we only mark it as Stopped. We do NOT clear the hetzner_id, ipv4, or last_billed_at.
+          await supabaseAdmin.from('servers').update({
+            status: 'Stopped', running_since: null,
+            current_session_id: null, last_empty_at: null,
+            started_at: null 
+          }).eq('id', serverId);
       }
-      
-      await supabaseAdmin.from('servers').update({
-        status: 'Stopped', hetzner_id: null, ipv4: null, running_since: null,
-        last_billed_at: null, runtime_accumulated_seconds: 0, current_session_id: null, last_empty_at: null,
-        started_at: null 
-      }).eq('id', serverId);
       
       return res.status(200).json({ success: true });
     }

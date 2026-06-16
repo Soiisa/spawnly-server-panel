@@ -15,17 +15,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 1. Destructure status (The Fix)
-  const { serverId, console_log, status } = req.body;
+  // 1. Destructure status and NEW hardware metrics
+  const { serverId, console_log, status, cpu, memory, disk } = req.body;
   const authHeader = req.headers.authorization;
 
-  // Allow empty log if status is provided (e.g. crash with no new logs)
-  if (!serverId || (console_log === undefined && !status)) {
+  // Allow empty log if status OR metrics are provided
+  if (!serverId || (console_log === undefined && !status && cpu === undefined && memory === undefined)) {
     return res.status(400).json({ error: 'Missing serverId or data' });
   }
 
   try {
-    // 2. Authenticate & Fetch Stats (Added stats fields for billing logic)
+    // 2. Authenticate & Fetch Stats
     const { data: server, error: dbErr } = await supabaseAdmin
       .from('servers')
       .select('rcon_password, running_since, runtime_accumulated_seconds')
@@ -41,10 +41,14 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // 3. Handle Status Update (The Fix)
+    // 3. Handle Server Table Updates (Status + Metrics)
+    const updates = {};
+    let shouldUpdateServerTable = false;
+
     if (status) {
+      updates.status = status;
+      shouldUpdateServerTable = true;
       const now = new Date();
-      const updates = { status };
 
       // --- CLEAN UP STARTED_AT IF RUNNING, STOPPED, OR CRASHED ---
       if (status === 'Running' || status === 'Stopped' || status === 'Crashed') {
@@ -52,19 +56,40 @@ export default async function handler(req, res) {
       }
 
       // Stop the billing clock if it was running
-      if (server.running_since) {
+      if (server.running_since && (status === 'Stopped' || status === 'Crashed')) {
         const start = new Date(server.running_since);
         const seconds = Math.max(0, Math.floor((now - start) / 1000));
         updates.runtime_accumulated_seconds = (server.runtime_accumulated_seconds || 0) + seconds;
         updates.running_since = null;
       }
+    }
 
+    // Inject hardware metrics into the update payload
+    if (cpu !== undefined) {
+      updates.cpu = cpu;
+      shouldUpdateServerTable = true;
+    }
+    if (memory !== undefined) {
+      updates.memory = memory;
+      shouldUpdateServerTable = true;
+    }
+    if (disk !== undefined) {
+      updates.disk = disk;
+      shouldUpdateServerTable = true;
+    }
+
+    // Always update last_heartbeat_at if we are receiving metrics
+    if (shouldUpdateServerTable) {
+      updates.last_heartbeat_at = new Date().toISOString();
       await supabaseAdmin.from('servers').update(updates).eq('id', serverId);
-      console.log(`[Log Ingest] Status updated to '${status}' for server ${serverId}`);
+      
+      if (status) {
+         console.log(`[Log Ingest] Status updated to '${status}' for server ${serverId}`);
+      }
     }
 
     // 4. Process Logs (Only if content exists)
-    if (console_log) {
+    if (console_log && console_log.trim().length > 0) {
       // Fetch Existing Log
       const { data: currentData } = await supabaseAdmin
         .from('server_console')
@@ -75,7 +100,7 @@ export default async function handler(req, res) {
       let existingLog = currentData?.console_log || '';
 
       // Append & Trim
-      const separator = existingLog.endsWith('\n') ? '' : '\n';
+      const separator = existingLog.endsWith('\n') || existingLog === '' ? '' : '\n';
       let newFullLog = existingLog + separator + console_log;
 
       if (newFullLog.length > MAX_LOG_SIZE) {

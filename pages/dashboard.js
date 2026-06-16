@@ -98,13 +98,13 @@ export default function Dashboard() {
             .from('profiles')
             .select('credits, tutorial_completed, username')
             .eq('id', data.session.user.id)
-            .maybeSingle(); // Changed from single() to maybeSingle() to prevent 406 Errors
+            .maybeSingle(); 
 
         if (profile) {
             setCredits(profile.credits || 0);
         }
 
-        // --- NEW: Verify Username Exists ---
+        // --- Verify Username Exists ---
         const hasUsername = data.session.user.user_metadata?.username || profile?.username;
         
         if (!hasUsername) {
@@ -272,14 +272,13 @@ export default function Dashboard() {
     router.push("/login");
   };
 
-  // --- NEW: Handle Saving the Username with Uniqueness Check ---
+  // Handle Saving the Username with Uniqueness Check
   const handleSaveUsername = async (e) => {
     e.preventDefault();
     setSavingUsername(true);
     setUsernameError("");
 
     try {
-      // 1. Check if username is already taken by another user
       const { data: existingUser } = await supabase
         .from('profiles')
         .select('id')
@@ -290,21 +289,18 @@ export default function Dashboard() {
         throw new Error(t('setup.username_taken', 'This username is already taken. Please choose another.'));
       }
 
-      // 2. Update Supabase Auth Metadata
       const { data: authData, error: authError } = await supabase.auth.updateUser({
         data: { username: usernameInput }
       });
 
       if (authError) throw authError;
 
-      // 3. Update Public Profile Table
       if (user?.id) {
         const { error: dbError } = await supabase
           .from('profiles')
           .update({ username: usernameInput })
           .eq('id', user.id);
           
-        // Handle constraint violation just in case they snuck past the check
         if (dbError) {
           if (dbError.code === '23505') {
             throw new Error(t('setup.username_taken', 'This username is already taken. Please choose another.'));
@@ -316,7 +312,6 @@ export default function Dashboard() {
       setUser(authData.user);
       setShowUsernameModal(false);
 
-      // Trigger tour if it was waiting for them to set a username
       if (tourPending) {
         setRunTour(true);
         setTourPending(false);
@@ -347,6 +342,7 @@ export default function Dashboard() {
       created_at: new Date().toISOString(),
       hetzner_id: null,
       ipv4: null,
+      billing_type: serverData.billing_type // Track it optimistically 
     };
 
     setServers((prev) => [optimisticServer, ...prev]);
@@ -545,8 +541,11 @@ export default function Dashboard() {
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><CurrencyDollarIcon className="w-6 h-6" /></div>
             <div>
+              {/* --- FIXED: Exclude Monthly servers from Hourly Cost metric --- */}
               <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.hourly_cost')}</p> 
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.reduce((a, b) => a + b.cost_per_hour, 0).toFixed(2)}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {servers.filter(s => s.billing_type !== 'monthly').reduce((a, b) => a + (b.cost_per_hour || 0), 0).toFixed(2)}
+              </p>
             </div>
           </div>
         </div>
@@ -589,7 +588,8 @@ export default function Dashboard() {
                         {server.game === 'minecraft' ? <div className="font-bold">M</div> : <ServerIcon className="w-6 h-6" />}
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        {/* --- FIXED: Add Billing Type Badge below name --- */}
+                        <div className="flex items-center gap-2 mb-1">
                             <h3 className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => !server.id.startsWith('temp') && router.push(`/server/${server.id}`)}>
                             {server.name}
                             </h3>
@@ -598,6 +598,13 @@ export default function Dashboard() {
                                     <UsersIcon className="w-3 h-3" /> Shared
                                 </span>
                             )}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${
+                              server.billing_type === 'monthly' 
+                                ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800' 
+                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                            }`}>
+                              {server.billing_type === 'monthly' ? t('billing.monthly', {defaultValue: 'Monthly'}) : t('billing.hourly', {defaultValue: 'Hourly'})}
+                            </span>
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 capitalize truncate max-w-[180px]" title={software}>
                             {software} <span className="text-gray-400 dark:text-gray-500">{version}</span>

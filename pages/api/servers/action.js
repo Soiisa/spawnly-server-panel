@@ -216,7 +216,6 @@ const deleteS3ServerFolder = async (serverId) => {
     return true;
   } catch (err) {
     console.error(`[deleteS3ServerFolder] Failed to delete S3 folder servers/${serverId}:`, err);
-    // Don't throw, just log, so DB deletion persists
     return false;
   }
 };
@@ -240,7 +239,6 @@ const deleteS3ServerFolderFast = async (serverId) => {
   }
 };
 
-// --- MODIFIED: ADDED DEDUCT CREDITS AGGREGATION FOR USERS ---
 async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds) {
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
   if (error || profile.credits < amount) {
@@ -272,7 +270,6 @@ async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId,
   }
 }
 
-// --- NEW: ADDED POOL DEDUCTION LOGIC ---
 async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessionId, billableSeconds) {
     const { data: pool, error } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', poolId).single();
     if (error || pool.balance < amount) throw new Error('Insufficient pool credits');
@@ -302,8 +299,10 @@ async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessio
     }
 }
 
-// --- MODIFIED: ADDED ROUTING BETWEEN POOL WALLET AND PERSONAL WALLET ---
 async function billRemainingTime(supabaseAdmin, server) {
+  const billingType = (server.billing_type || '').toLowerCase().trim();
+  if (billingType === 'monthly') return;
+
   if (server.status !== 'Running' && !server.last_billed_at) return;
 
   const now = new Date();
@@ -340,7 +339,6 @@ async function billRemainingTime(supabaseAdmin, server) {
   }
 }
 
-// --- NEW HELPER: Rotate Auto Backups ---
 const rotateAutoBackups = async (serverId, maxKeep) => {
     try {
         const command = new ListObjectsV2Command({
@@ -349,7 +347,7 @@ const rotateAutoBackups = async (serverId, maxKeep) => {
         });
         const response = await s3Client.send(command);
         const backups = (response.Contents || [])
-            .sort((a, b) => new Date(a.LastModified) - new Date(b.LastModified)); // Ascending (Oldest first)
+            .sort((a, b) => new Date(a.LastModified) - new Date(b.LastModified));
 
         if (backups.length > maxKeep) {
             const toDelete = backups.slice(0, backups.length - maxKeep);
@@ -367,11 +365,9 @@ const rotateAutoBackups = async (serverId, maxKeep) => {
     }
 };
 
-// --- NEW HELPER: Perform Auto Backup ---
 const performAutoBackup = async (server, supabaseAdmin) => {
     console.log(`[AutoBackup] Checking criteria for server ${server.id}`);
     
-    // 1. Check Interval
     const lastBackupTime = server.last_backup_at ? new Date(server.last_backup_at).getTime() : 0;
     const intervalMs = (server.auto_backup_interval_hours || 24) * 60 * 60 * 1000;
     const now = Date.now();
@@ -382,21 +378,19 @@ const performAutoBackup = async (server, supabaseAdmin) => {
     console.log(`[AutoBackup] Starting auto-backup for ${server.id}`);
     const fileApiUrl = `http://${server.subdomain}.spawnly.net:3005/api/backups`;
     
-    // 2. Trigger Backup on VPS
     const res = await fetch(fileApiUrl, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${server.rcon_password}`,
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({}) // Empty body implies default behavior
+        body: JSON.stringify({})
     });
 
     if (!res.ok) throw new Error(`Agent returned ${res.status}: ${await res.text()}`);
     
     const data = await res.json();
     
-    // 3. Rename/Tag as Auto (Agent usually names it backup-timestamp.zip)
     const originalKey = data.s3Path.replace(`s3://${S3_BUCKET}/`, '');
     
     if (originalKey && !originalKey.includes('auto-')) {
@@ -404,27 +398,35 @@ const performAutoBackup = async (server, supabaseAdmin) => {
         const autoFileName = fileName.replace('backup-', 'auto-backup-');
         const autoKey = originalKey.replace(fileName, autoFileName);
 
-        console.log(`[AutoBackup] Renaming ${originalKey} to ${autoKey}`);
-
         await s3Client.send(new CopyObjectCommand({
-            Bucket: S3_BUCKET,
-            CopySource: `${S3_BUCKET}/${originalKey}`,
-            Key: autoKey
+            Bucket: S3_BUCKET, CopySource: `${S3_BUCKET}/${originalKey}`, Key: autoKey
         }));
-
         await s3Client.send(new DeleteObjectCommand({
-            Bucket: S3_BUCKET,
-            Key: originalKey
+            Bucket: S3_BUCKET, Key: originalKey
         }));
     }
 
-    console.log(`[AutoBackup] Success`);
-    
-    // 4. Update DB
     await supabaseAdmin.from('servers').update({ last_backup_at: new Date().toISOString() }).eq('id', server.id);
-
-    // 5. Rotation (Delete Oldest)
     await rotateAutoBackups(server.id, server.max_auto_backups || 5);
+};
+
+// --- NEW: Daemon Power Intercept Helper ---
+const callDaemonPower = async (server, daemonAction) => {
+    console.log(`[callDaemonPower] Dispatching ${daemonAction} to http://${server.ipv4}:3005/api/power`);
+    const response = await fetch(`http://${server.ipv4}:3005/api/power`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${server.rcon_password}`
+        },
+        body: JSON.stringify({ action: daemonAction })
+    });
+
+    if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Daemon returned ${response.status}: ${errText}`);
+    }
+    return await response.json();
 };
 
 export default async function handler(req, res) {
@@ -436,7 +438,6 @@ export default async function handler(req, res) {
     const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
     const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!HETZNER_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('[API:action] Missing environment variables');
       return res.status(500).json({ error: 'Missing env vars' });
     }
 
@@ -455,11 +456,9 @@ export default async function handler(req, res) {
 
     const { serverId, action } = req.body || {};
     if (!serverId || !action) {
-      console.error('[API:action] Missing serverId or action in request body');
       return res.status(400).json({ error: 'Missing serverId or action' });
     }
 
-    console.log(`[API:action] Fetching server data for serverId: ${serverId}, action: ${action}`);
     const { data: server, error: serverErr } = await supabaseAdmin
       .from('servers')
       .select('*')
@@ -467,88 +466,80 @@ export default async function handler(req, res) {
       .single();
 
     if (serverErr || !server) {
-      console.error('[API:action] Server not found or error:', serverErr?.message);
       return res.status(404).json({ error: 'Server not found', detail: serverErr?.message || null });
     }
     
-    // --- SHARED OWNERSHIP PERMISSION CHECK START ---
+    // Support the new hard_restart payload
     const permissionMap = {
       start: 'control',
       stop: 'control',
       restart: 'control',
+      hard_restart: 'control',
       kill: 'control',
       delete: 'admin'
     };
     
     const requiredPerm = permissionMap[action];
-
     const access = await verifyServerAccess(supabaseAdmin, serverId, user.id, requiredPerm);
     
     if (!access.allowed) {
-      console.warn(`[Security] User ${user.id} denied ${action} on server ${server.id}`);
-      return res.status(403).json({ error: 'Forbidden', detail: access.error || 'You do not have permission to perform this action' });
+      return res.status(403).json({ error: 'Forbidden', detail: access.error || 'You do not have permission' });
     }
-    // --- SHARED OWNERSHIP PERMISSION CHECK END ---
 
-    const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('credits').eq('id', server.user_id).single();
-    if (profileErr || !profile) return res.status(500).json({ error: 'Failed to fetch server owner profile' });
+    // Determine target route: Daemon soft-restart vs Hetzner hard-restart
+    const isSteamGame = server.game && server.game !== 'minecraft';
+    let targetRoute = 'hetzner'; 
+    if (isSteamGame && ['start', 'stop', 'restart', 'kill'].includes(action)) {
+        targetRoute = 'daemon'; // Soft actions handled by the VPS daemon
+    }
 
+    // ========================================================================
+    // STOP / KILL / DELETE ACTIONS
+    // ========================================================================
     if (action === 'delete' || action === 'stop' || action === 'kill') {
       await billRemainingTime(supabaseAdmin, server);
 
       if (action === 'stop' && server.auto_backup_enabled && server.hetzner_id) {
+          try { await performAutoBackup(server, supabaseAdmin); } catch (backupErr) {}
+      }
+
+      const billingType = (server.billing_type || '').toLowerCase().trim();
+      const isHourly = billingType === 'hourly';
+      let shouldDeleteVps = action === 'delete' || (isHourly && (action === 'stop' || action === 'kill'));
+
+      // If we are soft-stopping via the daemon, NEVER delete the VPS hardware.
+      if (targetRoute === 'daemon') {
+          shouldDeleteVps = false;
           try {
-             await performAutoBackup(server, supabaseAdmin);
-          } catch (backupErr) {
-             console.error('[API:action] Auto-backup failed, proceeding with stop:', backupErr.message);
+              const daemonAction = action === 'kill' ? 'stop' : 'stop';
+              await callDaemonPower(server, daemonAction);
+          } catch (e) {
+              console.error('[API:action] Daemon stop failed (non-fatal):', e.message);
           }
-      }
-
-      if (server.hetzner_id) {
-        if (action !== 'kill') {
+      } 
+      // Hardware-level actions
+      else if (server.hetzner_id) {
+        if (action === 'stop' || action === 'delete') {
             try {
-              console.log(`[API:action] Shutting down Hetzner server: ${server.hetzner_id}`);
               await hetznerDoAction(server.hetzner_id, 'shutdown');
-              
-              const isOff = await waitForServerStatus(server.hetzner_id, 'off', 30, 5000);
-              if (!isOff) {
-                console.warn(`[API:action] Server ${server.hetzner_id} did not reach 'off' status (or is still running), proceeding with force deletion`);
-              }
-            } catch (stopErr) {
-              console.error('[API:action] Stop sequence warning (likely non-fatal):', stopErr.message);
-            }
-        } else {
-             console.log(`[API:action] FORCE KILL requested. Skipping graceful shutdown for server ${server.hetzner_id}.`);
+              await waitForServerStatus(server.hetzner_id, 'off', 30, 5000);
+            } catch (stopErr) {}
+        } else if (action === 'kill') {
+            try { await hetznerDoAction(server.hetzner_id, 'poweroff'); } catch (killErr) {}
         }
 
-        try {
-          await hetznerDeleteServer(server.hetzner_id);
-        } catch (hetznerErr) {
-          console.error('[API:action] Failed to delete server from Hetzner:', hetznerErr.message);
-          return res.status(502).json({ error: 'Failed to delete server from Hetzner', detail: hetznerErr.message });
+        if (shouldDeleteVps) {
+            try { await hetznerDeleteServer(server.hetzner_id); } 
+            catch (hetznerErr) { return res.status(502).json({ error: 'Failed to delete server from Hetzner' }); }
         }
       }
 
-      if (server.subdomain) {
-        try {
-          console.log(`[API:action] Cleaning up DNS records for subdomain: ${server.subdomain}`);
-          // Relies on wildcard setup in Cloudflare to automatically route to Sleeper
-          await deleteCloudflareRecords(server.subdomain);
-        } catch (dnsErr) {
-          console.error('[API:action] Failed to update Cloudflare DNS records:', dnsErr.message);
-        }
+      if (server.subdomain && shouldDeleteVps) {
+        try { await deleteCloudflareRecords(server.subdomain); } catch (dnsErr) {}
       }
 
       if (action === 'delete') {
-        console.log(`[API:action] Cleaning up dependent records for server ${serverId}...`);
-        
-        await supabaseAdmin.from('server_audit_logs').insert({
-            server_id: serverId,
-            user_id: user.id,
-            action_type: 'server_delete',
-            details: 'Server deleted permanently',
-            created_at: new Date().toISOString()
-        });
+        await supabaseAdmin.from('server_audit_logs').insert({ server_id: serverId, user_id: user.id, action_type: 'server_delete', details: 'Server deleted permanently', created_at: new Date().toISOString() });
         
         try {
             await supabaseAdmin.from('pool_transactions').delete().eq('server_id', serverId);
@@ -556,172 +547,103 @@ export default async function handler(req, res) {
             await supabaseAdmin.from('allocations').delete().eq('server_id', serverId);
             await supabaseAdmin.from('server_console').delete().eq('server_id', serverId);
             await supabaseAdmin.from('installed_software').delete().eq('server_id', serverId);
-        } catch (cleanupErr) {
-            console.error('[API:action] Warning: Pre-delete cleanup failed (some records might remain):', cleanupErr.message);
-        }
+        } catch (cleanupErr) {}
 
-        console.log(`[API:action] Deleting server ${serverId} from Supabase...`);
-        const { error: delErr } = await supabaseAdmin
-          .from('servers')
-          .delete()
-          .eq('id', serverId);
+        const { error: delErr } = await supabaseAdmin.from('servers').delete().eq('id', serverId);
+        if (delErr) return res.status(500).json({ error: 'Failed to delete server from Supabase', detail: delErr.message });
         
-        if (delErr) {
-          console.error('[API:action] Supabase delete error:', delErr);
-          return res.status(500).json({ error: 'Failed to delete server from Supabase', detail: delErr.message });
-        }
-
-        try {
-          await deleteS3ServerFolderFast(server.id);
-        } catch (s3Err) {
-          console.error('[API:action] Failed to delete S3 folder (non-fatal):', s3Err.message);
-        }
-
+        try { await deleteS3ServerFolderFast(server.id); } catch (s3Err) {}
       } else {
-        console.log(`[API:action] Updating Supabase for server ${serverId}: setting status to 'Stopped'`);
         const nowIso = new Date().toISOString();
-        const { error: updateErr } = await supabaseAdmin
-          .from('servers')
-          .update({
-            status: 'Stopped',
-            hetzner_id: null,
-            ipv4: null,
-            last_billed_at: null,
-            runtime_accumulated_seconds: 0,
-            running_since: null,
-            current_session_id: null, 
-            last_heartbeat_at: nowIso,
-            last_empty_at: null,
-            started_at: null
-          })
-          .eq('id', serverId);
-        if (updateErr) {
-          console.error('[API:action] Failed to update Supabase after stop:', updateErr.message);
-          return res.status(502).json({ error: 'Failed to update Supabase after shutdown', detail: updateErr.message });
+        const updatePayload = {
+            status: 'Stopped', running_since: null, current_session_id: null, last_heartbeat_at: nowIso, last_empty_at: null, started_at: null
+        };
+        
+        if (shouldDeleteVps) {
+            updatePayload.hetzner_id = null;
+            updatePayload.ipv4 = null;
         }
 
-        await supabaseAdmin.from('server_audit_logs').insert({
-            server_id: serverId,
-            user_id: user.id,
-            action_type: `server_${action}`,
-            details: `Action ${action} executed successfully`,
-            created_at: new Date().toISOString()
-        });
+        if (billingType !== 'monthly') {
+            updatePayload.last_billed_at = null;
+            updatePayload.runtime_accumulated_seconds = 0;
+        }
+
+        await supabaseAdmin.from('servers').update(updatePayload).eq('id', serverId);
+        await supabaseAdmin.from('server_audit_logs').insert({ server_id: serverId, user_id: user.id, action_type: `server_${action}`, details: `Action ${action} executed successfully`, created_at: nowIso });
       }
 
-      console.log(`[API:action] Action ${action} completed successfully for server ${serverId}`);
       return res.status(200).json({ ok: true });
     }
 
+    // ========================================================================
+    // START / RESTART ACTIONS
+    // ========================================================================
     if (!server.hetzner_id) {
-      if (action === 'kill') {
-           console.log('[API:action] Force killing unprovisioned server (cleaning up DB/DNS only).');
-           
-           if (server.subdomain) {
-             // Relies on wildcard setup in Cloudflare to automatically route to Sleeper
-             await deleteCloudflareRecords(server.subdomain);
-           }
-           
-           await supabaseAdmin.from('servers').update({
-             status: 'Stopped', hetzner_id: null, ipv4: null, 
-             last_billed_at: null, runtime_accumulated_seconds: 0, 
-             running_since: null, current_session_id: null,
-             started_at: null
-           }).eq('id', serverId);
-           
-           await supabaseAdmin.from('server_audit_logs').insert({
-                server_id: serverId,
-                user_id: user.id,
-                action_type: 'server_kill',
-                details: 'Force killed unprovisioned/stuck server',
-                created_at: new Date().toISOString()
-           });
-
-           return res.status(200).json({ ok: true, message: 'Force killed unprovisioned server.' });
-      }
-
-      console.error('[API:action] Server not provisioned on Hetzner, cannot perform action:', action);
       return res.status(400).json({ error: 'Server not provisioned on Hetzner' });
     }
 
+    const billingType = (server.billing_type || '').toLowerCase().trim();
+    const nowIso = new Date().toISOString();
+    let sessionId = server.current_session_id;
+
+    if (action === 'start' && !sessionId) sessionId = uuidv4();
+
+    // 1. Soft-Start via VPS Daemon
+    if (targetRoute === 'daemon') {
+        const daemonAction = action === 'start' ? 'start' : 'restart';
+        
+        try {
+            await callDaemonPower(server, daemonAction);
+        } catch (err) {
+            return res.status(502).json({ error: 'VPS Daemon failed to process command', detail: err.message });
+        }
+
+        const updateFields = { 
+            status: 'Running', runtime_accumulated_seconds: 0, last_empty_at: null, started_at: nowIso, running_since: nowIso 
+        };
+        if (billingType !== 'monthly') updateFields.last_billed_at = nowIso;
+        if (action === 'start') updateFields.current_session_id = sessionId;
+
+        await supabaseAdmin.from('servers').update(updateFields).eq('id', serverId);
+        await supabaseAdmin.from('server_audit_logs').insert({ server_id: serverId, user_id: user.id, action_type: `server_${action}`, details: `Daemon ${daemonAction} executed`, created_at: nowIso });
+        
+        return res.status(200).json({ ok: true, status: 'Running' });
+    }
+
+    // 2. Hard-Start via Hetzner Hardware
     let hetAction;
     let newStatus;
     switch (action) {
-      case 'start':
-        hetAction = 'poweron';
-        newStatus = 'Starting';
-        break;
-      case 'restart':
-        hetAction = 'reboot';
-        newStatus = 'Restarting';
-        break;
-      default:
-        console.error('[API:action] Unknown action:', action);
-        return res.status(400).json({ error: 'Unknown action' });
+      case 'start': hetAction = 'poweron'; newStatus = 'Starting'; break;
+      case 'restart': 
+      case 'hard_restart': hetAction = 'reboot'; newStatus = 'Restarting'; break;
+      default: return res.status(400).json({ error: 'Unknown action' });
     }
 
-    let sessionId = server.current_session_id;
-    if (action === 'start' && !sessionId) { 
-      sessionId = uuidv4(); 
-      console.log(`[API:action] Generating new session_id: ${sessionId}`);
-    }
-
-    console.log(`[API:action] Performing Hetzner action: ${hetAction} for server: ${server.hetzner_id}`);
     const hetRes = await hetznerDoAction(server.hetzner_id, hetAction);
 
-    console.log(`[API:action] Updating server status to ${newStatus} in Supabase`);
-    const now = new Date().toISOString();
-    const updateFields = { 
-      status: newStatus,
-      last_billed_at: now,
-      runtime_accumulated_seconds: 0,
-      last_empty_at: null,
-      started_at: now 
-    };
-    if (action === 'start' && sessionId && sessionId !== server.current_session_id) {
-      updateFields.current_session_id = sessionId; 
-    }
-    const { error: statusUpdateErr } = await supabaseAdmin.from('servers').update(updateFields).eq('id', serverId);
-    if (statusUpdateErr) {
-      console.error('[API:action] Failed to update server status in Supabase:', statusUpdateErr.message);
-      return res.status(500).json({ error: 'Failed to update server status', detail: statusUpdateErr.message });
-    }
+    const updateFields = { status: newStatus, runtime_accumulated_seconds: 0, last_empty_at: null, started_at: nowIso };
+    if (billingType !== 'monthly') updateFields.last_billed_at = nowIso;
+    if (action === 'start' && sessionId) updateFields.current_session_id = sessionId;
 
-    console.log(`[API:action] Waiting 15 seconds for server status update after action: ${action}`);
+    await supabaseAdmin.from('servers').update(updateFields).eq('id', serverId);
+
     await new Promise(resolve => setTimeout(resolve, 15000));
-    console.log(`[API:action] Fetching final server status for: ${server.hetzner_id}`);
     const hetznerServer = await hetznerGetServer(server.hetzner_id);
+    
     let finalStatus = newStatus;
-
     if (hetznerServer && hetznerServer.server) {
       const hetznerStatus = hetznerServer.server.status;
-      console.log(`[API:action] Hetzner server status: ${hetznerStatus}`);
-      if (hetznerStatus === 'running') {
-        finalStatus = 'Running';
-      } else if (hetznerStatus === 'off') {
-        finalStatus = 'Stopped';
-      }
+      if (hetznerStatus === 'running') finalStatus = 'Running';
+      else if (hetznerStatus === 'off') finalStatus = 'Stopped';
     }
 
-    console.log(`[API:action] Updating Supabase with final status: ${finalStatus}`);
-    const { error: finalStatusErr } = await supabaseAdmin.from('servers').update({ status: finalStatus }).eq('id', serverId);
-    if (finalStatusErr) {
-      console.error('[API:action] Failed to update final server status in Supabase:', finalStatusErr.message);
-      return res.status(500).json({ error: 'Failed to update final server status', detail: finalStatusErr.message });
-    }
+    await supabaseAdmin.from('servers').update({ status: finalStatus }).eq('id', serverId);
+    await supabaseAdmin.from('server_audit_logs').insert({ server_id: serverId, user_id: user.id, action_type: `server_${action}`, details: `Server ${action} initiated. Status: ${finalStatus}`, created_at: nowIso });
 
-    await supabaseAdmin.from('server_audit_logs').insert({
-        server_id: serverId,
-        user_id: user.id,
-        action_type: `server_${action}`,
-        details: `Server ${action} initiated. Status: ${finalStatus}`,
-        created_at: new Date().toISOString()
-    });
-
-    console.log(`[API:action] Action ${action} completed successfully for server ${serverId}`);
     return res.status(200).json({ ok: true, hetznerAction: hetRes, status: finalStatus });
   } catch (err) {
-    console.error('[API:action] Unhandled error:', err.message, err.stack);
-    return res.status(500).json({ error: 'Internal server error', detail: String(err), stack: process.env.NODE_ENV === 'development' ? err.stack : undefined });
+    return res.status(500).json({ error: 'Internal server error', detail: String(err) });
   }
 }

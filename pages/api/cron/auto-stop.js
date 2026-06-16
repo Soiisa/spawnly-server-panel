@@ -51,7 +51,6 @@ const deleteCloudflareRecords = async (subdomain) => {
   }
 };
 
-// --- FIX: ADDED DEDUCT CREDITS LOGIC ---
 async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId, billableSeconds) {
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('credits').eq('id', userId).single();
   if (error || profile.credits < amount) throw new Error('Insufficient credits');
@@ -81,7 +80,6 @@ async function deductCredits(supabaseAdmin, userId, amount, serverId, sessionId,
   }
 }
 
-// --- FIX: ADDED POOL DEDUCTION LOGIC ---
 async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessionId, billableSeconds) {
     const { data: pool, error } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', poolId).single();
     if (error || pool.balance < amount) throw new Error('Insufficient pool credits');
@@ -111,7 +109,6 @@ async function deductPoolCredits(supabaseAdmin, poolId, amount, serverId, sessio
     }
 }
 
-// --- FIX: ROUTE TO POOL OR PERSONAL WALLET ---
 async function billRemainingTime(server) {
   if (server.status !== 'Running') return;
   const now = new Date();
@@ -137,12 +134,14 @@ export default async function handler(req, res) {
   const cronHeader = req.headers['x-cron-secret'] || req.headers.authorization?.split(' ')[1];
   if (!CRON_SECRET || cronHeader !== CRON_SECRET) return res.status(401).json({ error: 'Unauthorized' });
 
+  // ---> NEW: Explicitly exclude 'monthly' billing type from the auto-stop sweep
   const { data: servers, error } = await supabaseAdmin
     .from('servers')
     .select('*')
     .eq('status', 'Running')
     .gt('auto_stop_timeout', 0)
-    .not('last_empty_at', 'is', null);
+    .not('last_empty_at', 'is', null)
+    .neq('billing_type', 'monthly'); 
 
   if (error) return res.status(500).json({ error: 'Database error' });
   
@@ -166,7 +165,6 @@ export default async function handler(req, res) {
         }
 
         if (server.subdomain) {
-          // Reverting to wildcard logic - only delete existing specific records
           await deleteCloudflareRecords(server.subdomain);
         }
 

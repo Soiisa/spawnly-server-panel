@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
-import zlib from 'zlib';
 import { verifyServerAccess } from '../../../lib/accessControl'; 
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
@@ -17,27 +16,27 @@ const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-
 const SLEEPER_SECRET = process.env.SLEEPER_SECRET;
 const DOMAIN_SUFFIX = '.spawnly.net';
 
-// Smarter API URL Resolution (Prevents VPS from pinging its own localhost)
 let appUrl = process.env.APP_BASE_URL || process.env.NEXTAUTH_URL;
 if (!appUrl && process.env.VERCEL_URL) appUrl = `https://${process.env.VERCEL_URL}`;
 if (!appUrl || appUrl.includes('localhost')) appUrl = 'https://spawnly.net';
 const APP_BASE_URL = appUrl;
 
-const sanitizeYaml = (str) => str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, '');
-
-const compressToGzB64 = (str) => {
-  return zlib.gzipSync(Buffer.from(str, 'utf-8')).toString('base64');
-};
-
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const ramToServerType = (ramGb) => {
+const ramToStandardType = (ramGb) => {
   if (ramGb <= 3) return 'cx23';
   if (ramGb <= 7) return 'cx33';
   if (ramGb <= 15) return 'cx43';
   return 'cx53';
+};
+
+const ramToPremiumType = (ramGb) => {
+  if (ramGb <= 4) return 'cx23'; 
+  if (ramGb <= 8) return 'cx33'; 
+  if (ramGb <= 16) return 'cx43'; 
+  return 'cx53'; 
 };
 
 const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
@@ -58,7 +57,7 @@ const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
   return null;
 };
 
-// --- Download URL Generators ---
+// --- Mod/Minecraft Download URL Generators ---
 const getVanillaDownloadUrl = async (version) => {
   const manifestRes = await fetch('https://launchermeta.mojang.com/mc/game/version_manifest.json');
   if (!manifestRes.ok) throw new Error('Failed to fetch Mojang manifest');
@@ -232,7 +231,7 @@ const deleteS3Files = async (serverId, s3Config) => {
         secretAccessKey: s3Config.AWS_SECRET_ACCESS_KEY, 
         region: s3Config.AWS_REGION, 
         endpoint: s3Config.S3_ENDPOINT || undefined,
-        s3ForcePathStyle: !!s3Config.S3_ENDPOINT // Fix for Coolify/MinIO
+        s3ForcePathStyle: !!s3Config.S3_ENDPOINT 
     });
     const listParams = { Bucket: s3Config.S3_BUCKET, Prefix: `servers/${serverId}/` };
     const listedObjects = await s3.listObjectsV2(listParams).promise();
@@ -247,15 +246,366 @@ const uploadBootstrapScript = async (serverId, s3Config, content) => {
         secretAccessKey: s3Config.AWS_SECRET_ACCESS_KEY, 
         region: s3Config.AWS_REGION, 
         endpoint: s3Config.S3_ENDPOINT || undefined,
-        s3ForcePathStyle: !!s3Config.S3_ENDPOINT // Fix for Coolify/MinIO
+        s3ForcePathStyle: !!s3Config.S3_ENDPOINT 
     });
     await s3.putObject({ Bucket: s3Config.S3_BUCKET, Key: `servers/${serverId}/bootstrap.sh`, Body: content, ContentType: 'text/x-shellscript' }).promise();
 };
 
+// ============================================================================
+// ========================= STEAMCMD PROVISIONER =============================
+// ============================================================================
+async function provisionSteamServer(serverRow, version, ssh_keys, res) {
+    try {
+        console.log(`\n\n=== [STEAM PROVISION] STARTING PROVISION FOR SERVER: ${serverRow.id} ===`);
+        
+        const serverRamGb = Number(serverRow.ram || 4);
+        const serverType = serverRow.billing_type === 'monthly' ? ramToPremiumType(serverRamGb) : ramToStandardType(serverRamGb);
+        const locationToUse = serverRow.location || 'nbg1';
+
+        // 1. Handle Credits & Billing Deductions
+        const apexPricingMatrix = { 3: 1199, 4: 1499, 5: 1875, 6: 2249, 8: 2799, 10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 24: 7799, 28: 9099, 32: 10399 };
+        const getApexCreditCost = (ram) => {
+            const availableTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
+            const targetTier = availableTiers.find(tier => tier >= ram) || 32;
+            return apexPricingMatrix[targetTier];
+        };
+
+        const isFirstTimeMonthly = serverRow.billing_type === 'monthly' && !serverRow.last_billed_at;
+        const monthlyCost = isFirstTimeMonthly ? getApexCreditCost(serverRamGb) : 0;
+        
+        const hourlyCost = serverRow.billing_type === 'monthly' ? Number((getApexCreditCost(serverRamGb) / 720).toFixed(4)) : serverRamGb;
+
+        let requiredCredits = isFirstTimeMonthly ? monthlyCost : 0.1;
+
+        const balanceTarget = serverRow.pool_id 
+            ? await supabaseAdmin.from('credit_pools').select('balance').eq('id', serverRow.pool_id).single() 
+            : await supabaseAdmin.from('profiles').select('credits').eq('id', serverRow.user_id).single();
+
+        const currentBalance = balanceTarget.data?.balance || balanceTarget.data?.credits || 0;
+
+        if (currentBalance < requiredCredits) {
+            return res.status(402).json({ error: isFirstTimeMonthly ? 'Insufficient credits for the first month. Please top up.' : 'Insufficient credits' });
+        }
+
+        let chargedFrom = null;
+        if (isFirstTimeMonthly) {
+            if (serverRow.pool_id) {
+                const { data: pool } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', serverRow.pool_id).single();
+                await supabaseAdmin.from('credit_pools').update({ balance: pool.balance - monthlyCost }).eq('id', serverRow.pool_id);
+                chargedFrom = 'pool';
+            } else {
+                const { data: profile } = await supabaseAdmin.from('profiles').select('credits').eq('id', serverRow.user_id).single();
+                await supabaseAdmin.from('profiles').update({ credits: profile.credits - monthlyCost }).eq('id', serverRow.user_id);
+                chargedFrom = 'user';
+            }
+        }
+
+        await supabaseAdmin.from('servers').update({ status: 'Provisioning' }).eq('id', serverRow.id);
+
+        const s3Config = { 
+            S3_BUCKET: process.env.S3_BUCKET, 
+            AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID, 
+            AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY, 
+            AWS_REGION: process.env.AWS_REGION || 'eu-central-1', 
+            S3_ENDPOINT: process.env.S3_ENDPOINT 
+        };
+        const s5cmdOpt = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
+
+        // 2. Setup Hetzner Firewall for Steam
+        let firewallId = null;
+        try {
+            const fwResponse = await fetch(`${HETZNER_API_BASE}/firewalls`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: `fw-${serverRow.subdomain || serverRow.id}-${Date.now()}`,
+                    rules: [
+                        { direction: 'in', protocol: 'tcp', port: '22', source_ips: ['0.0.0.0/0', '::/0'] },
+                        { direction: 'in', protocol: 'tcp', port: '7777', source_ips: ['0.0.0.0/0', '::/0'] },
+                        { direction: 'in', protocol: 'udp', port: '7777', source_ips: ['0.0.0.0/0', '::/0'] },
+                        { direction: 'in', protocol: 'tcp', port: '8888', source_ips: ['0.0.0.0/0', '::/0'] },
+                        { direction: 'in', protocol: 'tcp', port: '3003-3007', source_ips: ['0.0.0.0/0', '::/0'] } 
+                    ]
+                })
+            });
+            if (fwResponse.ok) {
+                const fwData = await fwResponse.json();
+                firewallId = fwData.firewall.id;
+            }
+        } catch (e) { }
+
+        // 3. Steam App ID Logic
+        const steamAppIds = {
+            'satisfactory': 1690800,
+            'palworld': 2394010,
+            'rust': 258550,
+            'valheim': 1006090
+        };
+        const appId = steamAppIds[serverRow.game?.toLowerCase()] || 1690800;
+
+        const requestedBranch = version && version.toLowerCase() !== 'public' ? version : '';
+        const betaFlag = requestedBranch ? `-beta ${requestedBranch}` : '';
+
+        const rconPassword = serverRow.rcon_password || generateRconPassword();
+
+        // 4. Construct Steam Cloud-Init Payload
+        const cloudInitPayload = `#cloud-config
+users:
+  - name: spawnly
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh_authorized_keys:
+      - ${process.env.HETZNER_DEFAULT_SSH_PUBLIC_KEY || ''}
+write_files:
+  - path: /home/spawnly/.aws/credentials
+    permissions: '0640'
+    owner: spawnly:spawnly
+    content: |
+      [default]
+      aws_access_key_id = ${s3Config.AWS_ACCESS_KEY_ID}
+      aws_secret_access_key = ${s3Config.AWS_SECRET_ACCESS_KEY}
+  - path: /home/spawnly/.aws/config
+    permissions: '0640'
+    owner: spawnly:spawnly
+    content: |
+      [default]
+      region = ${s3Config.AWS_REGION || 'eu-central-1'}
+      ${s3Config.S3_ENDPOINT ? `endpoint_url = ${s3Config.S3_ENDPOINT}` : ''}
+runcmd:
+  - dpkg --add-architecture i386
+  - apt-get update
+  - echo steam steam/question select "I AGREE" | debconf-set-selections
+  - echo steam steam/license note '' | debconf-set-selections
+  - curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs lib32gcc-s1 steamcmd unzip ufw
+  
+  - curl -sL https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz | tar -xzf - -C /usr/local/bin/ s5cmd
+  - curl -sL "https://github.com/satisfactorymodding/ficsit-cli/releases/latest/download/ficsit_linux_amd64" -o /usr/local/bin/ficsit-cli || true
+  - chmod +x /usr/local/bin/ficsit-cli 2>/dev/null || true
+
+  - mkdir -p /home/spawnly/server
+
+  - mkdir -p /home/spawnly/.config/Epic/FactoryGame/Saved/SaveGames
+  - ln -s /home/spawnly/.config/Epic/FactoryGame/Saved/SaveGames /home/spawnly/server/SaveGames
+  
+  - chown -R spawnly:spawnly /home/spawnly
+
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22
+  - ufw allow OpenSSH
+  - ufw allow 7777/tcp
+  - ufw allow 7777/udp
+  - ufw allow 8888/tcp
+  - ufw allow 3003:3007/tcp
+  - ufw --force enable
+
+  - su - spawnly -c "for i in 1 2 3; do /usr/games/steamcmd @sSteamCmdForcePlatformType linux +force_install_dir /home/spawnly/server +login anonymous +app_update ${appId} ${betaFlag} validate +quit && break; echo 'SteamCMD retry'; sleep 5; done"
+
+  - env AWS_ACCESS_KEY_ID="${s3Config.AWS_ACCESS_KEY_ID}" AWS_SECRET_ACCESS_KEY="${s3Config.AWS_SECRET_ACCESS_KEY}" AWS_REGION="${s3Config.AWS_REGION || 'eu-central-1'}" /usr/local/bin/s5cmd ${s5cmdOpt} cp s3://${s3Config.S3_BUCKET}/scripts/steam-wrapper.js /home/spawnly/steam-wrapper.js
+  - env AWS_ACCESS_KEY_ID="${s3Config.AWS_ACCESS_KEY_ID}" AWS_SECRET_ACCESS_KEY="${s3Config.AWS_SECRET_ACCESS_KEY}" AWS_REGION="${s3Config.AWS_REGION || 'eu-central-1'}" /usr/local/bin/s5cmd ${s5cmdOpt} cp s3://${s3Config.S3_BUCKET}/scripts/file-api.js /home/spawnly/file-api.js
+  
+  - cd /home/spawnly && npm install node-fetch ws express cors multer aws-sdk archiver@7.0.1
+  - chown -R spawnly:spawnly /home/spawnly
+
+  - |
+    cat << 'EOF' > /etc/systemd/system/game-server.service
+    [Unit]
+    Description=Spawnly Steam Game Server
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=spawnly
+    WorkingDirectory=/home/spawnly
+    Environment=SERVER_ID=${serverRow.id}
+    Environment=NEXTJS_API_URL=${APP_BASE_URL.replace(/\/+$/, '')}/api/servers/log
+    Environment=RCON_PASSWORD=${rconPassword}
+    ExecStart=/usr/bin/node /home/spawnly/steam-wrapper.js
+    Restart=on-failure
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+  - |
+    cat << 'EOF' > /etc/systemd/system/steam-file-api.service
+    [Unit]
+    Description=Steam File API Daemon
+    After=network.target
+
+    [Service]
+    WorkingDirectory=/home/spawnly
+    Environment=RCON_PASSWORD=${rconPassword}
+    Environment=FILE_API_PORT=3005
+    Environment=BASE_DIR=/home/spawnly/server
+    Environment=SERVER_ID=${serverRow.id}
+    Environment=S3_BUCKET=${s3Config.S3_BUCKET}
+    Environment=AWS_ACCESS_KEY_ID=${s3Config.AWS_ACCESS_KEY_ID}
+    Environment=AWS_SECRET_ACCESS_KEY=${s3Config.AWS_SECRET_ACCESS_KEY}
+    Environment=S3_ENDPOINT=${s3Config.S3_ENDPOINT || ''}
+    ExecStart=/usr/bin/node /home/spawnly/file-api.js
+    Restart=always
+    User=spawnly
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+  - systemctl daemon-reload
+  - systemctl enable game-server steam-file-api
+  - systemctl start game-server steam-file-api
+`;
+
+        // 5. Fetch SSH Keys
+        let sshKeysToUse = Array.isArray(ssh_keys) && ssh_keys.length > 0 ? ssh_keys : [];
+        if (sshKeysToUse.length === 0 && DEFAULT_SSH_KEY) {
+            try {
+                const keysRes = await axios.get(`${HETZNER_API_BASE}/ssh_keys`, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}` } });
+                const match = keysRes.data.ssh_keys.find((k) => k.name === DEFAULT_SSH_KEY);
+                if (match) sshKeysToUse = [match.id];
+            } catch (e) {}
+        }
+
+        let createRes = null, lastError = null;
+        const isResume = serverRow.billing_type === 'monthly' && serverRow.hetzner_id;
+        let requiresCreation = !isResume;
+
+        if (isResume) {
+            try {
+                const existingRes = await axios.get(`${HETZNER_API_BASE}/servers/${serverRow.hetzner_id}`, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}` } });
+                const serverData = existingRes.data.server;
+                
+                if (serverData.status !== 'running') {
+                    try {
+                        await axios.post(`${HETZNER_API_BASE}/servers/${serverRow.hetzner_id}/actions/poweron`, {}, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' } });
+                    } catch (powerErr) {}
+                }
+                createRes = { data: { server: serverData } };
+            } catch (err) { 
+                if (err.response && [404, 409, 422].includes(err.response.status)) {
+                    requiresCreation = true;
+                } else {
+                    lastError = err; 
+                }
+            }
+        } 
+        
+        if (requiresCreation) {
+            const locationsToTry = ['nbg1', 'fsn1', 'hel1'];
+            if (locationsToTry.includes(locationToUse)) locationsToTry.sort((x, y) => x === locationToUse ? -1 : y === locationToUse ? 1 : 0);
+            
+            const payload = { 
+                name: serverRow.name, 
+                server_type: serverType, 
+                image: 'ubuntu-22.04', 
+                user_data: cloudInitPayload, 
+                ssh_keys: sshKeysToUse
+            };
+            if (firewallId) payload.firewalls = [{ firewall: firewallId }];
+
+            for (const loc of locationsToTry) {
+                payload.location = loc;
+                try {
+                    createRes = await axios.post(`${HETZNER_API_BASE}/servers`, payload, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' } });
+                    break; 
+                } catch (err) { lastError = err; }
+            }
+        }
+
+        if (!createRes) {
+            if (isFirstTimeMonthly && chargedFrom) {
+                if (chargedFrom === 'pool') {
+                    const { data: pool } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', serverRow.pool_id).single();
+                    await supabaseAdmin.from('credit_pools').update({ balance: pool.balance + monthlyCost }).eq('id', serverRow.pool_id);
+                } else {
+                    const { data: profile } = await supabaseAdmin.from('profiles').select('credits').eq('id', serverRow.user_id).single();
+                    await supabaseAdmin.from('profiles').update({ credits: profile.credits + monthlyCost }).eq('id', serverRow.user_id);
+                }
+            }
+            
+            let rawError = lastError?.response?.data?.error?.message || lastError?.response?.data || lastError?.message || 'Unknown Error';
+            if (typeof rawError === 'object') rawError = JSON.stringify(rawError);
+            let friendlyError = rawError;
+            if (rawError.includes('resource_unavailable') || rawError.includes('no resources available') || rawError.includes('capacity')) {
+                friendlyError = "The selected datacenter is currently out of capacity for this server type. Please edit your server and select a different region (e.g., Falkenstein or Helsinki).";
+            } else {
+                friendlyError = `Server creation failed: ${rawError}`;
+            }
+            return res.status(400).json({ error: 'Provisioning Failed', detail: friendlyError });
+        }
+
+        const hetznerServer = createRes.data.server;
+        
+        // 6. Setup Cloudflare DNS A-Record for Steam Game
+        let dnsWarning = null;
+        let subdomainResult = null;
+        const ipv4 = hetznerServer?.public_net?.ipv4?.ip || null;
+        
+        if (ipv4 && serverRow.subdomain) {
+          try {
+            await deleteCloudflareRecords(serverRow.subdomain);
+            const aRecordIds = await createARecord(serverRow.subdomain, ipv4);
+            subdomainResult = `${serverRow.subdomain}.spawnly.net`;
+            await supabaseAdmin.from('servers').update({ dns_record_ids: [...aRecordIds] }).eq('id', serverRow.id);
+          } catch (e) {
+            dnsWarning = e.message;
+          }
+        }
+
+        const updatePayload = { 
+            hetzner_id: hetznerServer.id, 
+            ipv4: ipv4, 
+            status: 'Initializing', 
+            rcon_password: rconPassword,
+            current_session_id: uuidv4(),
+            cost_per_hour: hourlyCost 
+        };
+
+        if (isFirstTimeMonthly || serverRow.billing_type === 'hourly') {
+            updatePayload.last_billed_at = new Date().toISOString();
+        }
+
+        await supabaseAdmin.from('servers').update(updatePayload).eq('id', serverRow.id);
+        
+        if (isFirstTimeMonthly && chargedFrom) {
+            const desc = `First Month Reserved Fee: Server ${serverRow.id}`;
+            if (chargedFrom === 'pool') {
+                await supabaseAdmin.from('pool_transactions').insert({ pool_id: serverRow.pool_id, server_id: serverRow.id, amount: -monthlyCost, type: 'usage', description: desc, session_id: updatePayload.current_session_id });
+            } else {
+                await supabaseAdmin.from('credit_transactions').insert({ user_id: serverRow.user_id, amount: -monthlyCost, type: 'usage', description: desc, session_id: updatePayload.current_session_id });
+            }
+        }
+
+        return res.status(200).json({ 
+            server: { ...serverRow, ...updatePayload }, 
+            hetznerServer: hetznerServer, 
+            subdomain: subdomainResult,
+            message: 'Steam server provisioned',
+            warning: dnsWarning
+        });
+
+    } catch (error) {
+        await supabaseAdmin.from('servers').update({ status: 'Error' }).eq('id', serverRow.id);
+        return res.status(500).json({ error: 'Provisioning failed', detail: error.message });
+    }
+}
+
+// ============================================================================
+// ========================= MINECRAFT PROVISIONER ============================
+// ============================================================================
 async function provisionServer(serverRow, version, ssh_keys, res) {
   try {
-    console.log('provisionServer: Starting for serverId:', serverRow.id, 'software:', serverRow.type, 'version:', version);
-    const serverType = ramToServerType(Number(serverRow.ram || 4));
+    const serverRam = Number(serverRow.ram || 2);
+    // Convert to MB and safely leave room for the OS (1024MB or 512MB buffer)
+    const heapMb = Math.floor(serverRam > 2 ? (serverRam * 1024) - 1024 : (serverRam * 1024) - 512);
+
+    const serverType = serverRow.billing_type === 'monthly' 
+        ? ramToPremiumType(serverRam) 
+        : ramToStandardType(serverRam);
+
+    const locationToUse = serverRow.location || 'nbg1';
     const software = serverRow.type || 'vanilla';
     const s3Config = { S3_BUCKET: process.env.S3_BUCKET, AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY, AWS_REGION: process.env.AWS_REGION, S3_ENDPOINT: process.env.S3_ENDPOINT };
     const S3_BUCKET = s3Config.S3_BUCKET;
@@ -267,16 +617,37 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     try { await supabaseAdmin.from('server_console').delete().eq('server_id', serverRow.id); } catch (e) {}
 
+    const apexPricingMatrix = { 3: 1199,  4: 1499,  5: 1875,  6: 2249,  8: 2799, 10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 24: 7799, 28: 9099, 32: 10399 };
+
+    const getApexCreditCost = (ram) => {
+        const availableTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
+        const targetTier = availableTiers.find(tier => tier >= ram) || 32;
+        return apexPricingMatrix[targetTier];
+    };
+
+    const isFirstTimeMonthly = serverRow.billing_type === 'monthly' && !serverRow.last_billed_at;
+    const monthlyCost = isFirstTimeMonthly ? getApexCreditCost(serverRam) : 0;
+    const hourlyCost = serverRow.billing_type === 'monthly' ? Number((getApexCreditCost(serverRam) / 720).toFixed(4)) : serverRam;
+
+    let chargedFrom = null;
+    if (isFirstTimeMonthly) {
+        if (serverRow.pool_id) {
+            const { data: pool } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', serverRow.pool_id).single();
+            await supabaseAdmin.from('credit_pools').update({ balance: pool.balance - monthlyCost }).eq('id', serverRow.pool_id);
+            chargedFrom = 'pool';
+        } else {
+            const { data: profile } = await supabaseAdmin.from('profiles').select('credits').eq('id', serverRow.user_id).single();
+            await supabaseAdmin.from('profiles').update({ credits: profile.credits - monthlyCost }).eq('id', serverRow.user_id);
+            chargedFrom = 'user';
+        }
+    }
+
     const { data: allocations } = await supabaseAdmin.from('allocations').select('port_number').eq('server_id', serverRow.id);
     
     let downloadUrl = null;
-    try { downloadUrl = await getSoftwareDownloadUrl(software, version); } catch (e) { return res.status(400).json({ error: 'Failed to resolve download URL' }); }
+    try { downloadUrl = await getSoftwareDownloadUrl(software, version); } catch (e) { return res.status(400).json({ error: 'Failed to resolve download URL', detail: e.message }); }
 
     const rconPassword = serverRow.rcon_password || generateRconPassword();
-    
-    // --- RAM FIX (Prevent Linux OOM Killer) ---
-    const serverRam = Number(serverRow.ram || 2);
-    const heapGb = Math.max(1, serverRam > 2 ? serverRam - 1 : serverRam - 0.5);
     
     let effectiveVersion = version;
     let modpackMeta = { url: downloadUrl };
@@ -286,7 +657,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     }
     if (software === 'arclight' && version.includes('::')) effectiveVersion = version.split('::')[0];
 
-    // Safely parse Java version with support for bleeding-edge 2026+ Snapshots
     let javaBin = '/usr/lib/jvm/java-25-openjdk-amd64/bin/java'; 
     if (effectiveVersion && effectiveVersion !== 'latest') {
         const match = effectiveVersion.match(/^1\.(\d+)(?:\.(\d+))?/);
@@ -320,9 +690,6 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const escapedRestoreKey = escapeForSingleQuotes(serverRow.pending_backup_restore || '');
     const forceInstall = serverRow.force_software_install || false;
 
-// -------------------------------------------------------------------------------------------------
-// BASH COMPONENTS
-// -------------------------------------------------------------------------------------------------
 const mcSyncSh = `#!/bin/bash
 set -u
 LOG_FILE="/opt/minecraft/vps_system.log"
@@ -435,7 +802,7 @@ setup_generic_start_script() {
         FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar server.jar fabric-server-launch.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
         if [ -n "\$FORGE_JAR" ]; then 
             echo "[Startup] Falling back to discovered JAR: \$FORGE_JAR"
-            echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh
+            echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1024M -Xmx${heapMb}M \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh
         fi
     fi
 }
@@ -484,7 +851,6 @@ if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FO
             HAS_EXECUTABLE="true"
         fi
 
-        # Repair mechanism for previously broken S3 backups
         if [ "\$HAS_EXECUTABLE" = "true" ] && [ -f "run.sh" ] && [ ! -d "libraries" ]; then
             if grep -q "libraries/net/minecraftforge" run.sh || grep -q "libraries/net/neoforged" run.sh; then
                 echo "[Startup] Missing libraries/ folder. Forcing repair..."
@@ -552,13 +918,11 @@ if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FO
             fi
             [ -z "\$DETECTED_LOADER" ] && [ -d "mods" ] && DETECTED_LOADER="forge"
 
-            echo "[Startup] Resolved Environment: \$DETECTED_LOADER \$DETECTED_MC_VER"
-
             if [ "\$DETECTED_LOADER" = "fabric" ]; then
                 [ -z "\$LOADER_VER" ] || [ "\$LOADER_VER" = "null" ] && LOADER_VER=\$(curl -s https://meta.fabricmc.net/v2/versions/loader | jq -r '.[0].version')
                 INSTALLER_VER=\$(curl -s https://meta.fabricmc.net/v2/versions/installer | jq -r '.[0].version')
                 curl -o fabric-server-launch.jar "https://meta.fabricmc.net/v2/versions/loader/\${DETECTED_MC_VER}/\${LOADER_VER}/\${INSTALLER_VER}/server/jar"
-                echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar fabric-server-launch.jar nogui" > run.sh && chmod +x run.sh
+                echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1024M -Xmx${heapMb}M \$AIKAR_FLAGS -jar fabric-server-launch.jar nogui" > run.sh && chmod +x run.sh
             elif [ "\$DETECTED_LOADER" = "forge" ]; then
                 [ -z "\$LOADER_VER" ] || [ "\$LOADER_VER" = "null" ] && LOADER_VER=\$(curl -s https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json | jq -r ".promos[\\"\${DETECTED_MC_VER}-latest\\"] // empty" || true)
                 if [ -n "\$LOADER_VER" ]; then
@@ -568,7 +932,7 @@ if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FO
                         rm -f forge-installer.jar installer.log || true
                         if [ ! -f "run.sh" ]; then 
                             FORGE_JAR=\$(ls -1 forge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
-                            if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
+                            if [ -n "\$FORGE_JAR" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1024M -Xmx${heapMb}M \$AIKAR_FLAGS -jar \$FORGE_JAR nogui" > run.sh && chmod +x run.sh; fi
                         fi
                     fi
                 fi
@@ -578,35 +942,35 @@ if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FO
                     if [ -f "neo-installer.jar" ]; then
                         run_installer neo-installer.jar
                         rm -f neo-installer.jar installer.log || true
-                        if [ ! -f "run.sh" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS @libraries/net/neoforged/neoforge/\${LOADER_VER}/unix_args.txt nogui" > run.sh && chmod +x run.sh; fi
+                        if [ ! -f "run.sh" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1024M -Xmx${heapMb}M \$AIKAR_FLAGS @libraries/net/neoforged/neoforge/\${LOADER_VER}/unix_args.txt nogui" > run.sh && chmod +x run.sh; fi
                     fi
                 fi
             fi
         fi
-        echo "-Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS" >> user_jvm_args.txt
+        echo "-Xms1024M -Xmx${heapMb}M \$AIKAR_FLAGS" >> user_jvm_args.txt
         
     elif [ "\$SOFTWARE" = "forge" ] || [ "\$SOFTWARE" = "neoforge" ]; then
        wget -q --tries=3 -O server-installer.jar "\$DOWNLOAD_URL"
        run_installer server-installer.jar
        rm -f server-installer.jar installer.log || true
-       echo "-Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS" >> user_jvm_args.txt
+       echo "-Xms1024M -Xmx${heapMb}M \$AIKAR_FLAGS" >> user_jvm_args.txt
        if [ -f "run.sh" ]; then 
            chmod +x run.sh
        else 
            FORGE_JAR=\$(ls -1 forge-*.jar neoforge-*.jar 2>/dev/null | grep -v 'installer' | head -n 1 || true)
            if [ -n "\$FORGE_JAR" ]; then 
                mv "\$FORGE_JAR" server.jar
-               echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
+               echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1024M -Xmx${heapMb}M \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
            fi
        fi
     elif [ "\$SOFTWARE" = "quilt" ]; then
        wget -q --tries=3 -O quilt-installer.jar "\$DOWNLOAD_URL"
        \$JAVA_BIN -jar quilt-installer.jar install server "\$MC_VERSION" --download-server || true
        if [ -d "server" ]; then mv server/* . && mv server/.* . 2>/dev/null || true && rmdir server || true; fi
-       if [ -f "quilt-server-launch.jar" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar quilt-server-launch.jar nogui" > run.sh && chmod +x run.sh; fi
+       if [ -f "quilt-server-launch.jar" ]; then echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1024M -Xmx${heapMb}M \$AIKAR_FLAGS -jar quilt-server-launch.jar nogui" > run.sh && chmod +x run.sh; fi
     else
         wget -q --tries=3 -O server.jar "\$DOWNLOAD_URL"
-        echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1G -Xmx${heapGb}G \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
+        echo -e "#!/bin/bash\\n\$JAVA_BIN -Xms1024M -Xmx${heapMb}M \$AIKAR_FLAGS -jar server.jar nogui" > run.sh && chmod +x run.sh
     fi
 fi
 
@@ -628,9 +992,6 @@ chmod +x /opt/minecraft/*.sh 2>/dev/null || true
 echo "[\$(date -u +'%Y-%m-%dT%H:%M:%SZ')] [mc-startup.sh] Finished script execution"
 `;
 
-// -------------------------------------------------------------------------------------------------
-// ASSEMBLE BOOTSTRAP SCRIPT
-// -------------------------------------------------------------------------------------------------
 const bootstrapContent = `#!/bin/bash
 set -x
 
@@ -661,9 +1022,6 @@ ${mcStartupSh}
 EOF_STARTUP
 chmod +x /usr/local/bin/mc-startup.sh
 
-# ==========================================
-# DIAGNOSTIC LOGGER (OOM KILLS & CRASHES)
-# ==========================================
 cat > /usr/local/bin/sys-diag.sh << 'EOF_DIAG'
 #!/bin/bash
 LOG="/opt/minecraft/vps_system.log"
@@ -684,9 +1042,6 @@ echo -e "========================================\\n" >> \$LOG
 EOF_DIAG
 chmod +x /usr/local/bin/sys-diag.sh
 
-# ==========================================
-# MINECRAFT SERVICE
-# ==========================================
 cat > /etc/systemd/system/minecraft.service << 'EOF_SVC'
 [Unit]
 Description=Minecraft Server (Wrapper)
@@ -697,9 +1052,10 @@ WorkingDirectory=/opt/minecraft
 Environment=SERVER_ID=${serverRow.id}
 Environment=NEXTJS_API_URL=${APP_BASE_URL.replace(/\/+$/, '')}/api/servers/log
 Environment=RCON_PASSWORD=${escapedRconPassword}
-Environment=HEAP_GB=${heapGb}
+Environment=HEAP_MB=${heapMb}
 
 ExecStartPre=+/usr/local/bin/sys-diag.sh
+ExecStartPre=+/usr/local/bin/mc-sync-from-s3.sh
 ExecStart=/usr/bin/node /opt/minecraft/server-wrapper.js
 
 StandardOutput=append:/opt/minecraft/vps_system.log
@@ -770,6 +1126,7 @@ After=network.target minecraft.service
 WorkingDirectory=/opt/minecraft
 Environment=RCON_PASSWORD=${escapedRconPassword}
 Environment=FILE_API_PORT=3005
+Environment=BASE_DIR=/opt/minecraft
 Environment=SERVER_ID=${serverRow.id}
 Environment=S3_BUCKET=${S3_BUCKET}
 Environment=AWS_ACCESS_KEY_ID=${s3Config.AWS_ACCESS_KEY_ID}
@@ -864,21 +1221,78 @@ runcmd:
     }
 
     let createRes = null, lastError = null;
-    for (const loc of ['nbg1', 'fsn1', 'hel1']) {
-      try {
-        createRes = await axios.post(`${HETZNER_API_BASE}/servers`, { 
-            name: serverRow.name, 
-            server_type: serverType, 
-            image: '342669261', 
-            user_data: cloudInitPayload, 
-            ssh_keys: sshKeysToUse, 
-            location: loc 
-        }, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' } });
-        break;
-      } catch (err) { lastError = err; }
+
+    const isResume = serverRow.billing_type === 'monthly' && serverRow.hetzner_id;
+    let requiresCreation = !isResume;
+
+    if (isResume) {
+        console.log(`[PROVISION] Resuming existing Hetzner VPS ${serverRow.hetzner_id}`);
+        try {
+            const existingRes = await axios.get(`${HETZNER_API_BASE}/servers/${serverRow.hetzner_id}`, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}` } });
+            const serverData = existingRes.data.server;
+            
+            if (serverData.status !== 'running') {
+                try {
+                    await axios.post(`${HETZNER_API_BASE}/servers/${serverRow.hetzner_id}/actions/poweron`, {}, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' } });
+                } catch (powerErr) {
+                    console.warn(`[PROVISION] Poweron returned status: ${powerErr.response?.status}. Ignoring and proceeding.`);
+                }
+            }
+            createRes = { data: { server: serverData } };
+        } catch (err) { 
+            console.error(`[PROVISION] Resume failed. Status: ${err.response?.status}`);
+            if (err.response && [404, 409, 422].includes(err.response.status)) {
+                console.log(`[PROVISION] VPS ${serverRow.hetzner_id} unrecoverable. Recreating...`);
+                requiresCreation = true;
+            } else {
+                lastError = err; 
+            }
+        }
+    } 
+    
+    if (requiresCreation) {
+        const locationsToTry = ['nbg1', 'fsn1', 'hel1'];
+        if (locationsToTry.includes(locationToUse)) locationsToTry.sort((x, y) => x === locationToUse ? -1 : y === locationToUse ? 1 : 0);
+        
+        for (const loc of locationsToTry) {
+          try {
+            createRes = await axios.post(`${HETZNER_API_BASE}/servers`, { 
+                name: serverRow.name, 
+                server_type: serverType, 
+                image: '342669261', 
+                user_data: cloudInitPayload, 
+                ssh_keys: sshKeysToUse, 
+                location: loc 
+            }, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' } });
+            break;
+          } catch (err) { lastError = err; }
+        }
     }
 
-    if (!createRes) return res.status(502).json({ error: 'Hetzner create failed', detail: lastError.response?.data || lastError.message });
+    if (!createRes) {
+        if (isFirstTimeMonthly && chargedFrom) {
+            console.log(`[Provision] Hetzner failed. Rolling back ${monthlyCost} credits.`);
+            if (chargedFrom === 'pool') {
+                const { data: pool } = await supabaseAdmin.from('credit_pools').select('balance').eq('id', serverRow.pool_id).single();
+                await supabaseAdmin.from('credit_pools').update({ balance: pool.balance + monthlyCost }).eq('id', serverRow.pool_id);
+            } else {
+                const { data: profile } = await supabaseAdmin.from('profiles').select('credits').eq('id', serverRow.user_id).single();
+                await supabaseAdmin.from('profiles').update({ credits: profile.credits + monthlyCost }).eq('id', serverRow.user_id);
+            }
+        }
+
+        let rawError = lastError?.response?.data?.error?.message || lastError?.response?.data || lastError?.message || 'Unknown Error';
+        if (typeof rawError === 'object') rawError = JSON.stringify(rawError);
+
+        let friendlyError = rawError;
+        if (rawError.includes('resource_unavailable') || rawError.includes('no resources available') || rawError.includes('capacity')) {
+            friendlyError = "The selected datacenter is currently out of capacity for this server type. Please edit your server and select a different region (e.g., Falkenstein or Helsinki).";
+        } else {
+            friendlyError = `Server creation failed: ${rawError}`;
+        }
+
+        return res.status(400).json({ error: 'Provisioning Failed', detail: friendlyError });
+    }
 
     hetznerServer = createRes.data.server || null;
     await supabaseAdmin.from('servers').update({ status: 'Initializing', started_at: new Date().toISOString() }).eq('id', serverRow.id);
@@ -903,10 +1317,35 @@ runcmd:
       }
     }
 
-    const { data: updatedRow, error: updateErr } = await supabaseAdmin.from('servers').update({ hetzner_id: finalServer?.id || null, ipv4: ipv4, status: finalServer?.status === 'running' ? 'Running' : 'Initializing', rcon_password: rconPassword, needs_file_deletion: false, pending_backup_restore: null, force_software_install: false, current_session_id: uuidv4() }).eq('id', serverRow.id).select().single();
+    const updatePayload = { 
+        hetzner_id: finalServer?.id || null, 
+        ipv4: ipv4, 
+        status: finalServer?.status === 'running' ? 'Running' : 'Initializing', 
+        rcon_password: rconPassword, 
+        needs_file_deletion: false, 
+        pending_backup_restore: null, 
+        force_software_install: false, 
+        current_session_id: uuidv4(),
+        cost_per_hour: hourlyCost 
+    };
+
+    if (isFirstTimeMonthly || serverRow.billing_type === 'hourly') {
+        updatePayload.last_billed_at = new Date().toISOString();
+    }
+
+    const { data: updatedRow, error: updateErr } = await supabaseAdmin.from('servers').update(updatePayload).eq('id', serverRow.id).select().single();
 
     if (updateErr) return res.status(500).json({ error: 'Failed to update database' });
     
+    if (isFirstTimeMonthly && chargedFrom) {
+        const desc = `First Month Reserved Fee: Server ${serverRow.id}`;
+        if (chargedFrom === 'pool') {
+            await supabaseAdmin.from('pool_transactions').insert({ pool_id: serverRow.pool_id, server_id: serverRow.id, amount: -monthlyCost, type: 'usage', description: desc, session_id: updatePayload.current_session_id });
+        } else {
+            await supabaseAdmin.from('credit_transactions').insert({ user_id: serverRow.user_id, amount: -monthlyCost, type: 'usage', description: desc, session_id: updatePayload.current_session_id });
+        }
+    }
+
     return res.status(200).json({ 
         server: updatedRow, 
         hetznerServer: finalServer, 
@@ -935,8 +1374,30 @@ export default async function handler(req, res) {
   const { data: serverRow } = await supabaseAdmin.from('servers').select('*').eq('id', serverId).single();
   if (!serverRow) return res.status(404).json({ error: 'Server not found' });
 
+  if (serverRow.game && serverRow.game !== 'minecraft') {
+      return await provisionSteamServer(serverRow, version, ssh_keys, res);
+  }
+
+  const apexPricingMatrix = {
+      3: 1199,  4: 1499,  5: 1875,  6: 2249,  8: 2799, 
+      10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 
+      24: 7799, 28: 9099, 32: 10399
+  };
+  
+  const serverRamGb = Number(serverRow.ram || 4);
+  const isFirstTimeMonthly = serverRow.billing_type === 'monthly' && !serverRow.last_billed_at;
+  
+  let requiredCredits = 0.1;
+  if (isFirstTimeMonthly) {
+      const availableTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
+      const targetTier = availableTiers.find(tier => tier >= serverRamGb) || 32;
+      requiredCredits = apexPricingMatrix[targetTier];
+  }
+
   const balanceTarget = serverRow.pool_id ? await supabaseAdmin.from('credit_pools').select('balance').eq('id', serverRow.pool_id).single() : await supabaseAdmin.from('profiles').select('credits').eq('id', serverRow.user_id).single();
-  if ((balanceTarget.data?.balance || balanceTarget.data?.credits || 0) < 0.1) return res.status(402).json({ error: 'Insufficient credits' });
+  if ((balanceTarget.data?.balance || balanceTarget.data?.credits || 0) < requiredCredits) {
+      return res.status(402).json({ error: isFirstTimeMonthly ? 'Insufficient credits for the first month. Please top up.' : 'Insufficient credits' });
+  }
 
   try { await supabaseAdmin.from('server_audit_logs').insert({ server_id: serverId, user_id: userId, action_type: actionSource === 'SLEEPER' ? 'WAKE_UP' : 'START', details: actionSource === 'SLEEPER' ? 'Server woken up' : 'Server started', created_at: new Date().toISOString() }); } catch (e) {}
 

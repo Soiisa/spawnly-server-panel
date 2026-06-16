@@ -1,3 +1,4 @@
+// pages/server/[id].js
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useRouter } from 'next/router';
 import { supabase } from '../../lib/supabaseClient';
@@ -10,12 +11,14 @@ import {
   ClipboardDocumentIcon, PlayIcon, StopIcon, ArrowPathIcon, CpuChipIcon, 
   CurrencyDollarIcon, ClockIcon, ServerIcon, SignalIcon, UserGroupIcon, 
   PuzzlePieceIcon, PencilSquareIcon, CheckIcon, XMarkIcon, ArchiveBoxIcon, 
-  CalendarDaysIcon, TrashIcon, ShieldCheckIcon, BanknotesIcon, PlusIcon
+  CalendarDaysIcon, TrashIcon, ShieldCheckIcon, BanknotesIcon, PlusIcon, CalendarIcon
 } from '@heroicons/react/24/outline';
 
 // Components
 import ServerSoftwareTab from '../../components/ServerSoftwareTab';
+import ServerSoftwareTabSteam from '../../components/ServerSoftwareTabSteam';
 import ModsPluginsTab from '../../components/ModsPluginsTab';
+import ModsPluginsTabSteam from '../../components/ModsPluginsTabSteam';
 import ConsoleViewer from '../../components/ConsoleViewer';
 import ServerPropertiesEditor from '../../components/ServerPropertiesEditor';
 import ServerMetrics from '../../components/MetricsViewer';
@@ -146,7 +149,7 @@ export default function ServerDetailPage({ initialServer }) {
 
   // Ownership & Permissions State
   const [isOwner, setIsOwner] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false); // <--- ADDED: Admin State
+  const [isAdmin, setIsAdmin] = useState(false); 
   const [myPerms, setMyPerms] = useState({}); 
 
   const [autoStopCountdown, setAutoStopCountdown] = useState(null);
@@ -196,8 +199,6 @@ export default function ServerDetailPage({ initialServer }) {
         const userData = sessionData.session.user;
         setUser(userData);
         
-        // Fetch Credits AND Tour Status AND Admin Status
-        // --- CHANGED: Added is_admin to select ---
         const { data: profile } = await supabase
             .from('profiles')
             .select('credits, server_tour_completed, is_admin')
@@ -206,7 +207,7 @@ export default function ServerDetailPage({ initialServer }) {
 
         if (profile) {
             setCredits(profile.credits || 0);
-            setIsAdmin(!!profile.is_admin); // <--- Set Admin State
+            setIsAdmin(!!profile.is_admin); 
             if (!profile.server_tour_completed) {
                 setRunTour(true);
             }
@@ -345,7 +346,7 @@ export default function ServerDetailPage({ initialServer }) {
   useEffect(() => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     const hasActivePlayers = server?.player_count && server.player_count > 0;
-    if (server?.status === 'Running' && server?.last_empty_at && server?.auto_stop_timeout > 0 && !hasActivePlayers) {
+    if (server?.status === 'Running' && server?.last_empty_at && server?.auto_stop_timeout > 0 && !hasActivePlayers && server?.billing_type !== 'monthly') {
       const updateCountdown = () => {
         const lastEmpty = new Date(server.last_empty_at).getTime();
         const timeoutMs = (server.auto_stop_timeout || 0) * 60 * 1000;
@@ -364,7 +365,7 @@ export default function ServerDetailPage({ initialServer }) {
       setAutoStopCountdown(null);
     }
     return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
-  }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout, server?.player_count, t]);
+  }, [server?.status, server?.last_empty_at, server?.auto_stop_timeout, server?.player_count, server?.billing_type, t]);
 
   useEffect(() => {
     const prevStatus = prevStatusRef.current;
@@ -490,7 +491,7 @@ export default function ServerDetailPage({ initialServer }) {
       }
   };
 
-  const handleServerAction = async (action) => {
+  const handleServerAction = async (action, event = null) => {
     if (!myPerms.control) {
         setError("You do not have permission to control this server.");
         return;
@@ -498,7 +499,16 @@ export default function ServerDetailPage({ initialServer }) {
 
     if (actionLoading) return;
     
-    if (action === 'kill') {
+    // Check for Shift+Restart
+    let finalAction = action;
+    if (action === 'restart' && event?.shiftKey) {
+        finalAction = 'hard_restart';
+        if (!confirm('Are you sure you want to perform a HARD RESTART? This will power-cycle the entire VPS hardware instead of just safely restarting the game.')) {
+            return;
+        }
+    }
+
+    if (finalAction === 'kill') {
         if (!confirm(t('messages.confirm_kill', { defaultValue: 'Are you sure you want to FORCE KILL? This deletes data not saved to disk.' }))) {
             return;
         }
@@ -511,7 +521,14 @@ export default function ServerDetailPage({ initialServer }) {
       if (!session) throw new Error("No active session");
       const token = session.access_token;
 
-      if (action === 'start') {
+      // ==========================================
+      // FIXED ROUTING LOGIC FOR STEAM DAEMON START
+      // ==========================================
+      const isSteamGame = server.game && server.game !== 'minecraft';
+      const hasHardware = !!server.hetzner_id;
+
+      if (finalAction === 'start' && (!isSteamGame || !hasHardware)) {
+        // SCENARIO 1: MINECRAFT OR BRAND NEW SERVER (Needs Hetzner Power-On)
         setServer(p => ({ ...p, status: 'Starting' }));
         const { data: sData } = await supabase.from('servers').select('type, version, pending_type, pending_version').eq('id', server.id).single();
         const { data: installed } = await supabase.from('installed_software').select('*').eq('server_id', server.id);
@@ -535,9 +552,12 @@ export default function ServerDetailPage({ initialServer }) {
         }
         pollUntilStatus(['Running', 'Stopped']);
       } else {
+        // SCENARIO 2: STEAM DAEMON START / OR ANY STOP, RESTART, KILL ACTION
         let targetStatus = 'Stopping';
-        if (action === 'restart') targetStatus = 'Restarting';
-        const expected = action === 'restart' ? ['Running'] : ['Stopped'];
+        if (finalAction === 'restart' || finalAction === 'hard_restart') targetStatus = 'Restarting';
+        if (finalAction === 'start') targetStatus = 'Starting';
+        
+        const expected = (finalAction === 'restart' || finalAction === 'hard_restart' || finalAction === 'start') ? ['Running'] : ['Stopped'];
         
         setServer(p => ({ ...p, status: targetStatus }));
         
@@ -547,12 +567,12 @@ export default function ServerDetailPage({ initialServer }) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ serverId: server.id, action }),
+          body: JSON.stringify({ serverId: server.id, action: finalAction }), 
         });
         pollUntilStatus(expected);
       }
     } catch (e) {
-      setError(t('errors.failed_action', { action, message: e.message }));
+      setError(t('errors.failed_action', { action: finalAction, message: e.message }));
       await fetchServer(server.id);
     } finally {
       setActionLoading(false);
@@ -587,22 +607,26 @@ export default function ServerDetailPage({ initialServer }) {
       const { error: dbError } = await supabase.from('servers').update({ motd: motdText }).eq('id', server.id);
       if (dbError) throw dbError;
 
-      const propsRes = await fetch(`/api/servers/${server.id}/properties`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (propsRes.ok) {
-        let propsText = await propsRes.text();
-        if (propsText.includes('motd=')) {
-          propsText = propsText.replace(/^motd=.*$/m, `motd=${motdText}`);
-        } else {
-          propsText += `\nmotd=${motdText}`;
-        }
-        await fetch(`/api/servers/${server.id}/properties`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain', 'Authorization': `Bearer ${session.access_token}` },
-          body: propsText
+      const isMinecraft = !server.game || server.game === 'minecraft';
+      if (isMinecraft) {
+        const propsRes = await fetch(`/api/servers/${server.id}/properties`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
+        if (propsRes.ok) {
+          let propsText = await propsRes.text();
+          if (propsText.includes('motd=')) {
+            propsText = propsText.replace(/^motd=.*$/m, `motd=${motdText}`);
+          } else {
+            propsText += `\nmotd=${motdText}`;
+          }
+          await fetch(`/api/servers/${server.id}/properties`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain', 'Authorization': `Bearer ${session.access_token}` },
+            body: propsText
+          });
+        }
       }
+
       setServer(prev => ({ ...prev, motd: motdText }));
       setIsEditingMotd(false);
     } catch (e) {
@@ -610,6 +634,17 @@ export default function ServerDetailPage({ initialServer }) {
     } finally {
       setSavingMotd(false);
     }
+  };
+
+  const getNextBillingDate = () => {
+    if (!server.created_at) return t('billing.unknown', { defaultValue: 'Unknown' });
+    const created = new Date(server.created_at);
+    const now = new Date();
+    let next = new Date(created);
+    while (next <= now) {
+        next.setMonth(next.getMonth() + 1);
+    }
+    return next.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const { software: displaySoftware, version: displayVersion } = getDisplayInfo(server, t);
@@ -632,6 +667,8 @@ export default function ServerDetailPage({ initialServer }) {
   const isBusy = !isRunning && !isStopped && !isUnknown;
   const canKill = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting'].includes(status);
 
+  // --- Dynamic Tab Logic based on Game Type ---
+  const isMinecraft = !server.game || server.game === 'minecraft';
   const sType = (server.type || '').toLowerCase();
   const moddedTypes = ['forge', 'neoforge', 'fabric', 'quilt'];
   const pluginTypes = ['paper', 'spigot', 'purpur', 'folia', 'velocity', 'waterfall', 'bukkit'];
@@ -642,16 +679,16 @@ export default function ServerDetailPage({ initialServer }) {
   if (pluginTypes.includes(sType)) modLabel = t('tabs.plugins');
   if (hybridTypes.includes(sType)) modLabel = t('tabs.mods_plugins');
 
-  // --- Dynamic Tab List ---
+  // Strip Minecraft-specific tabs for SteamCMD games
   const allTabs = [
-    { id: 'overview', label: t('tabs.overview'), icon: SignalIcon, perm: null }, // Always show
+    { id: 'overview', label: t('tabs.overview'), icon: SignalIcon, perm: null },
     { id: 'schedules', label: t('tabs.schedules'), icon: CalendarDaysIcon, perm: 'schedules' },
-    { id: 'properties', label: t('tabs.properties'), icon: ServerIcon, perm: 'settings' },
+    ...(isMinecraft ? [{ id: 'properties', label: t('tabs.properties'), icon: ServerIcon, perm: 'settings' }] : []),
     { id: 'console', label: t('tabs.console'), icon: ClockIcon, perm: 'console' },
-    { id: 'players', label: t('tabs.players'), icon: UserGroupIcon, perm: 'players' },
-    { id: 'software', label: t('tabs.software'), icon: CpuChipIcon, perm: 'software' },
-    ...(showMods ? [{ id: 'mods', label: modLabel, icon: PuzzlePieceIcon, perm: 'mods' }] : []),
-    { id: 'world', label: t('tabs.world'), icon: ServerIcon, perm: 'world' },
+    ...(isMinecraft ? [{ id: 'players', label: t('tabs.players'), icon: UserGroupIcon, perm: 'players' }] : []), 
+    { id: 'software', label: isMinecraft ? t('tabs.software') : 'Release Branch', icon: CpuChipIcon, perm: 'software' },
+    ...(!isMinecraft ? [{ id: 'mods', label: 'Mods (FICSIT)', icon: PuzzlePieceIcon, perm: 'mods' }] : (showMods ? [{ id: 'mods', label: modLabel, icon: PuzzlePieceIcon, perm: 'mods' }] : [])),
+    ...(isMinecraft ? [{ id: 'world', label: t('tabs.world'), icon: ServerIcon, perm: 'world' }] : []),
     { id: 'files', label: t('tabs.files'), icon: ClipboardDocumentIcon, perm: 'files' },
     { id: 'backups', label: t('tabs.backups'), icon: ArchiveBoxIcon, perm: 'backups' },
     ...(isOwner ? [{ id: 'access', label: 'Access', icon: ShieldCheckIcon, perm: 'owner' }] : []),
@@ -689,7 +726,6 @@ export default function ServerDetailPage({ initialServer }) {
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             
             <div className="flex-1">
-              {/* --- ADDED: tour-status-indicator --- */}
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{server.name}</h1>
                 <div className="tour-status-indicator">
@@ -740,7 +776,7 @@ export default function ServerDetailPage({ initialServer }) {
             <div className="flex flex-wrap items-center gap-3 tour-server-controls">
               {myPerms.control && isStopped && (
                 <button
-                  onClick={() => handleServerAction('start')}
+                  onClick={(e) => handleServerAction('start', e)}
                   disabled={actionLoading}
                   className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -753,8 +789,9 @@ export default function ServerDetailPage({ initialServer }) {
                 <>
                   {isRunning && (
                     <button
-                      onClick={() => handleServerAction('restart')}
+                      onClick={(e) => handleServerAction('restart', e)}
                       disabled={actionLoading}
+                      title={!isMinecraft ? "Shift+Click for Hard Restart (Reboot VPS Hardware)" : "Restart Server"}
                       className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50"
                     >
                       {actionLoading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowPathIcon className="w-5 h-5" />}
@@ -762,7 +799,7 @@ export default function ServerDetailPage({ initialServer }) {
                     </button>
                   )}
                   <button
-                    onClick={() => handleServerAction('stop')}
+                    onClick={(e) => handleServerAction('stop', e)}
                     disabled={actionLoading}
                     className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50"
                   >
@@ -781,7 +818,7 @@ export default function ServerDetailPage({ initialServer }) {
 
               {myPerms.control && canKill && (
                 <button
-                    onClick={() => handleServerAction('kill')}
+                    onClick={(e) => handleServerAction('kill', e)}
                     disabled={actionLoading}
                     title="Force Kill (Delete VM)"
                     className="flex items-center gap-2 bg-red-800 hover:bg-red-900 text-white px-4 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50"
@@ -794,17 +831,15 @@ export default function ServerDetailPage({ initialServer }) {
           </div>
         </div>
 
-        {/* Dynamic Tabs Navigation */}
         <div className="mb-8 overflow-x-auto tour-server-tabs">
           <div className="flex items-center gap-2 min-w-max border-b border-gray-200 dark:border-slate-700 pb-1">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                // --- ADDED: Dynamic class for tour steps ---
                 className={`tour-tab-${tab.id} relative px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${
                   activeTab === tab.id 
-                    ? 'text-indigo-600 bg-indigo-50' 
+                    ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-400' 
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800'
                 }`}
               >
@@ -841,13 +876,13 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                   <div className="mt-6 pt-6 border-t border-gray-100 dark:border-slate-700">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm text-gray-600 dark:text-gray-300">{t('connection.software')}</span>
-                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 capitalize truncate max-w-[150px] text-right" title={displaySoftware}>
-                        {displaySoftware}
+                      <span className="text-sm text-gray-600 dark:text-gray-300">{isMinecraft ? t('connection.software') : 'Game'}</span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 capitalize truncate max-w-[150px] text-right" title={isMinecraft ? displaySoftware : server.game}>
+                        {isMinecraft ? displaySoftware : server.game}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600 dark:text-gray-300">{t('connection.version')}</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-300">{isMinecraft ? t('connection.version') : 'Branch'}</span>
                       <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{displayVersion}</span>
                     </div>
                   </div>
@@ -868,7 +903,7 @@ export default function ServerDetailPage({ initialServer }) {
                           </div>
                           <div className="text-right">
                             <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{server.player_count || 0}</span>
-                            <span className="text-gray-400 text-sm font-medium ml-1">/ {server.max_players || 20}</span>
+                            {isMinecraft && <span className="text-gray-400 text-sm font-medium ml-1">/ {server.max_players || 20}</span>}
                           </div>
                         </div>
                       </>
@@ -886,29 +921,31 @@ export default function ServerDetailPage({ initialServer }) {
                     <ClockIcon className="w-4 h-4" /> {t('config.title')}
                   </h3>
                   
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('config.auto_stop')}</label>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={server.auto_stop_timeout ?? 30}
-                        onChange={handleAutoStopChange}
-                        disabled={savingAutoStop || (!isOwner && !myPerms.settings)}
-                        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-gray-50 dark:bg-slate-700 disabled:opacity-50"
-                      >
-                        <option value="0">{t('config.auto_stop_never')}</option>
-                        <option value="5">{t('config.auto_stop_5m')}</option>
-                        <option value="15">{t('config.auto_stop_15m')}</option>
-                        <option value="30">{t('config.auto_stop_30m')}</option>
-                        <option value="60">{t('config.auto_stop_1h')}</option>
-                      </select>
-                      {savingAutoStop && <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />}
-                    </div>
-                    {autoStopCountdown && (
-                      <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-xs rounded-lg flex items-center gap-2 animate-pulse border border-amber-100 dark:border-amber-900">
-                        <ClockIcon className="w-3 h-3" /> {autoStopCountdown}
+                  {server.billing_type !== 'monthly' && (
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('config.auto_stop')}</label>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={server.auto_stop_timeout ?? 30}
+                          onChange={handleAutoStopChange}
+                          disabled={savingAutoStop || (!isOwner && !myPerms.settings)}
+                          className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm bg-gray-50 dark:bg-slate-700 disabled:opacity-50"
+                        >
+                          <option value="0">{t('config.auto_stop_never')}</option>
+                          <option value="5">{t('config.auto_stop_5m')}</option>
+                          <option value="15">{t('config.auto_stop_15m')}</option>
+                          <option value="30">{t('config.auto_stop_30m')}</option>
+                          <option value="60">{t('config.auto_stop_1h')}</option>
+                        </select>
+                        {savingAutoStop && <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />}
                       </div>
-                    )}
-                  </div>
+                      {autoStopCountdown && (
+                        <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-xs rounded-lg flex items-center gap-2 animate-pulse border border-amber-100 dark:border-amber-900">
+                          <ClockIcon className="w-3 h-3" /> {autoStopCountdown}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('config.ram_allocation')}</label>
@@ -930,7 +967,7 @@ export default function ServerDetailPage({ initialServer }) {
                     ) : (
                       <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-700 p-3 rounded-xl border border-gray-200 dark:border-slate-600">
                         <span className="font-mono font-bold text-gray-800 dark:text-gray-100">{server.ram} GB</span>
-                        {isStopped && isOwner && (
+                        {isStopped && isOwner && server.billing_type !== 'monthly' && (
                           <button 
                             onClick={() => { setNewRam(server.ram); setEditingRam(true); }} 
                             className="text-xs text-indigo-600 font-medium hover:text-indigo-800"
@@ -943,14 +980,12 @@ export default function ServerDetailPage({ initialServer }) {
                   </div>
                 </div>
 
-                {/* --- ADDED: tour-billing-card --- */}
                 {(isOwner || server.pool_id) && (
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2 tour-billing-card">
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2 tour-billing-card flex flex-col">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider flex items-center gap-2">
                             <CurrencyDollarIcon className="w-4 h-4" /> {t('billing.title')}
                         </h3>
-                        {/* Show Contribute Button for ANYONE if a pool is active */}
                         {server.pool_id && (
                             <button 
                                 onClick={() => setShowContributeModal(true)}
@@ -961,7 +996,6 @@ export default function ServerDetailPage({ initialServer }) {
                         )}
                     </div>
                     
-                    {/* Billing Source Selector (Owner Only) */}
                     {isOwner && (
                         <div className="mb-4 p-3 bg-gray-50 dark:bg-slate-700 rounded-lg border border-gray-100 dark:border-slate-600">
                             <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase block mb-1">
@@ -984,7 +1018,6 @@ export default function ServerDetailPage({ initialServer }) {
                         </div>
                     )}
 
-                    {/* Display Active Pool Info (If not owner but pool is active) */}
                     {!isOwner && server.pool && (
                         <div className="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-100 dark:border-indigo-800 flex justify-between items-center">
                             <div>
@@ -998,31 +1031,64 @@ export default function ServerDetailPage({ initialServer }) {
                         </div>
                     )}
 
-                    <div className="flex items-center gap-8">
-                        <div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.hourly_cost')}</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{server.cost_per_hour} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.credits_hr')}</span></p>
-                        </div>
-                        <div className="h-10 w-px bg-gray-200 dark:bg-slate-700"></div>
-                        <div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.est_runtime')}</p>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                             {/* Calculate based on selected source */}
-                             {(() => {
-                                // If pool exists use that balance, otherwise use user credits (if owner)
-                                const sourceBalance = server.pool 
-                                    ? server.pool.balance 
-                                    : (isOwner ? credits : 0);
-                                return (sourceBalance / (server.cost_per_hour || 1)).toFixed(1);
-                            })()} 
-                            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.hours_left')}</span>
-                        </p>
-                        </div>
+                    <div className="flex items-center gap-8 mt-auto pt-2">
+                        {server.billing_type === 'monthly' ? (
+                            <>
+                                <div>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.flat_monthly_cost', { defaultValue: 'Monthly Cost' })}</p>
+                                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                                        {Math.round((server.cost_per_hour || 0) * 720)}{' '}
+                                        <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.credits_mo', { defaultValue: 'Credits/mo' })}</span>
+                                    </p>
+                                </div>
+                                <div className="h-10 w-px bg-gray-200 dark:bg-slate-700"></div>
+                                <div>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                      <CalendarIcon className="w-3.5 h-3.5" />
+                                      {t('billing.next_billing', { defaultValue: 'Next Due' })}
+                                    </p>
+                                    <p className="text-lg font-bold text-gray-900 dark:text-gray-100 pt-0.5">
+                                        {getNextBillingDate()}
+                                    </p>
+                                </div>
+                                {/* SETUP AUTO-PAY BUTTON */}
+                                {isOwner && !server.pool_id && (
+                                    <button
+                                        onClick={() => router.push(`/credits?auto_add=${Math.round((server.cost_per_hour || 0) * 720)}`)}
+                                        className="ml-auto flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-xl text-sm font-bold border border-indigo-200 dark:border-indigo-800 transition-all"
+                                    >
+                                        <ArrowPathIcon className="w-4 h-4" />
+                                        {t('billing.setup_autopay', { defaultValue: 'Setup Auto-Pay' })}
+                                    </button>
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                <div>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.hourly_cost')}</p>
+                                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                                        {server.cost_per_hour}{' '}
+                                        <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.credits_hr')}</span>
+                                    </p>
+                                </div>
+                                <div className="h-10 w-px bg-gray-200 dark:bg-slate-700"></div>
+                                <div>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.est_runtime')}</p>
+                                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                                        {(() => {
+                                            const sourceBalance = server.pool ? server.pool.balance : (isOwner ? credits : 0);
+                                            return (sourceBalance / (server.cost_per_hour || 1)).toFixed(1);
+                                        })()} 
+                                        <span className="text-sm font-normal text-gray-500 dark:text-gray-400 pl-1">{t('billing.hours_left')}</span>
+                                    </p>
+                                </div>
+                            </>
+                        )}
                     </div>
-                    {/* [MODIFIED] Added && isRunning check to hide warning when server is stopped */}
-                    {credits < server.cost_per_hour && !server.pool_id && isOwner && isRunning && (
+                    
+                    {credits < server.cost_per_hour && !server.pool_id && isOwner && isRunning && server.billing_type !== 'monthly' && (
                         <div className="mt-4 bg-red-50 text-red-700 text-sm p-3 rounded-lg flex items-center gap-2">
-                        <span className="font-bold">{t('billing.warning_low')}</span>
+                            <span className="font-bold">{t('billing.warning_low')}</span>
                         </div>
                     )}
                     </div>
@@ -1032,9 +1098,8 @@ export default function ServerDetailPage({ initialServer }) {
             )}
 
             <div className={activeTab === 'overview' ? 'hidden' : 'block animate-in fade-in duration-300'}>
-              {activeTab === 'properties' && myPerms.settings && (
+              {activeTab === 'properties' && isMinecraft && myPerms.settings && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {/* --- CHANGED: Passed isAdmin prop --- */}
                   <ServerPropertiesEditor server={server} isAdmin={isAdmin} />
                 </div>
               )}
@@ -1051,16 +1116,16 @@ export default function ServerDetailPage({ initialServer }) {
                 </div>
               )}
 
-              {activeTab === 'players' && myPerms.players && (
+              {activeTab === 'players' && isMinecraft && myPerms.players && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating', { defaultValue: 'Authenticating...' })}</p>}
                 </div>
               )}
 
-              {activeTab === 'software' && myPerms.software && <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} />}
-              {activeTab === 'mods' && myPerms.mods && <ModsPluginsTab server={server} />}
+              {activeTab === 'software' && myPerms.software && (isMinecraft ? <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} /> : <ServerSoftwareTabSteam server={server} onSoftwareChange={handleSoftwareChange} />)}
+              {activeTab === 'mods' && myPerms.mods && (isMinecraft ? <ModsPluginsTab server={server} /> : <ModsPluginsTabSteam server={server} />)}
 
-              {activeTab === 'world' && myPerms.world && (
+              {activeTab === 'world' && isMinecraft && myPerms.world && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating', { defaultValue: 'Authenticating...' })}</p>}
                 </div>
@@ -1068,7 +1133,6 @@ export default function ServerDetailPage({ initialServer }) {
 
               {activeTab === 'files' && myPerms.files && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {/* --- CHANGED: Passed isAdmin prop --- */}
                   {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} isAdmin={isAdmin} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating_files', { defaultValue: 'Authenticating file access...' })}</p>}
                 </div>
               )}
@@ -1085,7 +1149,6 @@ export default function ServerDetailPage({ initialServer }) {
           </Suspense>
         </div>
 
-        {/* Contribution Modal */}
         <ContributeModal 
             isOpen={showContributeModal}
             onClose={() => setShowContributeModal(false)}
@@ -1118,7 +1181,6 @@ export async function getServerSideProps(context) {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return { props: { ...translations, initialServer: null } };
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    // Modified to fetch linked pool details
     const { data, error } = await supabaseAdmin.from('servers').select('*, pool:credit_pools(*)').eq('id', id).single();
 
     if (error || !data) return { notFound: true };
