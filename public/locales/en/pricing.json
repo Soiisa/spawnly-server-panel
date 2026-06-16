@@ -1,35 +1,57 @@
 {
-  "title": "Simple, Transparent Pricing",
-  "subtitle": "We believe in paying only for the resources you use.",
-  "credit_explanation": "1 Credit = 1 GB RAM per hour.",
-  "calculator": {
-    "title": "Customize Your Server",
-    "subtitle": "Slide to adjust RAM allocation",
-    "ram_label": "Memory (RAM)",
-    "capabilities": "Capabilities:",
-    "estimated_cost": "Estimated Cost",
-    "hourly_rate": "Hourly Rate",
-    "deploy_btn": "Deploy {{ram}}GB Server Now",
-    "no_card": "No credit card required to sign up."
+  "title": "Transparent Pricing.",
+  "subtitle": "Pay exclusively for the resources you use with zero hidden fees.",
+  "credit_explanation": "Exchange Rate: 100 Credits = €1.00",
+  "billing": {
+    "hourly": "Hourly Billing",
+    "monthly": "Monthly Billing"
+  },
+  "games": {
+    "minecraft": {
+      "subtitle": "Java & Bedrock"
+    },
+    "satisfactory": {
+      "subtitle": "Dedicated"
+    }
   },
   "recommendations": {
-    "small": "Good for small Vanilla servers with up to 5 friends. Not recommended for mods.",
-    "medium": "Perfect for Vanilla with up to 10 friends, or lightweight modpacks (approx. 50 mods).",
-    "standard": "Great for standard modpacks (100+ mods) or Vanilla servers with 20+ players.",
-    "heavy": "Ideal for heavy modpacks (200+ mods) or larger communities (40+ players).",
-    "very_heavy": "Powerful performance for very heavy modpacks (300+ mods) or 60+ players.",
-    "massive": "Enterprise-grade power for massive networks, 100+ players, or the most demanding modpacks."
+    "small": "Perfect for small survival servers with a few friends.",
+    "medium": "Great for standard communities and light modpacks.",
+    "standard": "Ideal for large player bases and heavy plugins.",
+    "heavy": "Recommended for intensive modpacks (e.g., All The Mods).",
+    "very_heavy": "Massive networks and extreme performance needs.",
+    "massive": "Enterprise-grade hosting for the largest communities."
+  },
+  "calculator": {
+    "hourly_disabled": "Hourly billing is currently disabled for {{game}} due to game architecture limitations.",
+    "configure_title": "Configure Your Node",
+    "configure_subtitle": "Select your game environment and allocate resources.",
+    "select_game": "1. Select Environment",
+    "ram_label": "2. Allocate Memory",
+    "recommendation_title": "Deployment Recommendation",
+    "estimate_title": "Deployment Estimate",
+    "environment": "Environment",
+    "resources": "Resources",
+    "ram_value": "{{ram}} GB RAM",
+    "billing_cycle": "Billing Cycle",
+    "total_cost": "Total Estimated Cost",
+    "per_hour": "/ hour",
+    "per_month": "/ month",
+    "deploy_btn": "Deploy {{ram}}GB Node",
+    "no_card": "No credit card required to register."
   },
   "features": {
-    "ddos": "DDoS Protection Included",
+    "included_title": "Included with every deployment",
+    "included_subtitle": "Enterprise features come standard. No upsells, no hidden fees.",
+    "ddos": "DDoS Protection",
     "slots": "Unlimited Player Slots",
-    "files": "File Access",
-    "mods": "Mod & Plugin Support",
-    "setup": "Instant Setup",
-    "uptime": "99.9% Platform Uptime"
+    "files": "Full File Access & FTP",
+    "mods": "1-Click Modpack Installers",
+    "setup": "Instant Setup in 60s",
+    "uptime": "99.9% Uptime Guarantee"
   },
   "faq": {
-    "title": "How does billing work?",
-    "answer": "Spawnly uses a credit-based system. You purchase credits (1 Credit ≈ €0.01), and we deduct them from your balance every minute your server is <1>Running</1>. If you <3>Stop</3> your server, billing pauses immediately, but your files are kept safe for free."
+    "title": "How does credit billing work?",
+    "answer": "Spawnly uses a credit-based system. Purchase credits (1 Credit = €0.01) and we deduct them from your balance for every hour your server is <1>Running</1>. If you <3>Stop</3> the server, billing pauses immediately, but your files are kept safe for free."
   }
 }

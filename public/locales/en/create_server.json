@@ -1,79 +1,58 @@
 {
-  "title": "Create New Server",
+  "title": "Deploy New Server",
   "labels": {
     "name": "Server Name",
-    "game": "Game",
-    "software": "Software",
-    "ram": "RAM Allocation",
-    "cost_est": "Estimated Cost",
-    "your_credits": "Your Credits"
+    "game": "Select Game",
+    "billing_type": "Billing Strategy",
+    "location": "Server Region",
+    "ram": "Memory (RAM)",
+    "your_credits": "Available Balance"
   },
   "placeholders": {
-    "name": "my-awesome-server"
-  },
-  "hints": {
-    "name_rules": "3-20 characters, letters, numbers, and hyphens only. Must be unique.",
-    "cost_basis": "Based on {{price}} credits per GB per hour",
-    "insufficient_credits": "You need at least {{cost}} credits for this server",
-    "need_more": "You need at least {{cost}} credits"
-  },
-  "buttons": {
-    "cancel": "Cancel",
-    "create": "Create Server",
-    "creating": "Creating...",
-    "fix_errors": "Fix Name Errors",
-    "insufficient": "Insufficient Credits"
-  },
-  "errors": {
-    "required": "Server name is required",
-    "min_length": "Name must be at least 3 characters",
-    "max_length": "Name must be at most 20 characters",
-    "invalid_chars": "Name can only contain letters, numbers, and hyphens",
-    "exists": "A server with this name already exists",
-    "credits": "You don't have enough credits for this server",
-    "valid_name": "Please enter a valid server name"
+    "name": "e.g., survival-smp"
   },
   "games": {
     "minecraft": "Minecraft",
-    "valheim": "Valheim",
-    "rust": "Rust",
-    "terraria": "Terraria",
-    "ark": "ARK: Survival Evolved"
+    "rust_soon": "Rust (Coming Soon)",
+    "palworld_soon": "Palworld (Coming Soon)"
   },
-  "software_names": {
-    "vanilla": "Vanilla",
-    "paper": "Paper",
-    "purpur": "Purpur",
-    "folia": "Folia",
-    "spigot": "Spigot",
-    "forge": "Forge",
-    "neoforge": "NeoForge",
-    "fabric": "Fabric",
-    "quilt": "Quilt",
-    "velocity": "Velocity",
-    "waterfall": "Waterfall",
-    "plus": "Valheim Plus",
-    "oxide": "Oxide",
-    "tmodloader": "tModLoader"
+  "billing": {
+    "hourly_title": "Hourly (Flex)",
+    "hourly_desc": "Pay only when running. Pauses to S3.",
+    "monthly_title": "Monthly (Reserved)",
+    "monthly_desc": "Always-on IP. 24/7 persistence."
   },
-  "software_desc": {
-    "vanilla": "Official server software",
-    "paper": "High-performance Spigot fork",
-    "purpur": "Paper fork with more features",
-    "folia": "Experimental multithreaded server",
-    "spigot": "Standard plugin server",
-    "forge": "Classic mod loader",
-    "neoforge": "Modern mod loader",
-    "fabric": "Lightweight mod loader",
-    "quilt": "Community-driven mod loader",
-    "velocity": "Proxy server",
-    "waterfall": "Legacy proxy server",
-    "modding": "Modding platform",
-    "enhanced": "Enhanced with quality-of-life features"
+  "locations": {
+    "nbg1": "🇩🇪 Nuremberg, Germany",
+    "fsn1": "🇩🇪 Falkenstein, Germany",
+    "hel1": "🇫🇮 Helsinki, Finland",
+    "ash": "🇺🇸 Ashburn, VA, USA",
+    "hil": "🇺🇸 Hillsboro, OR, USA",
+    "sin": "🇸🇬 Singapore",
+    "restriction_note": "Global routing is restricted to Monthly plans for cost-optimization."
   },
   "units": {
     "gb": "GB",
-    "credits": "credits",
-    "credits_per_hour": "credits/hr"
+    "credits": "Credits",
+    "credits_per_hour": "Credits/hr",
+    "credits_per_month": "Credits/mo"
+  },
+  "costs": {
+    "estimated_hourly": "Estimated Run Cost",
+    "flat_monthly": "Flat Monthly Cost"
+  },
+  "buttons": {
+    "cancel": "Cancel",
+    "create": "Deploy Server",
+    "creating": "Deploying...",
+    "fix_errors": "Fix Errors"
+  },
+  "errors": {
+    "required": "Name is required",
+    "min_length": "Name must be at least 3 characters",
+    "max_length": "Name must be under 20 characters",
+    "invalid_chars": "Only letters, numbers, and hyphens are allowed",
+    "exists": "A server with this name already exists",
+    "valid_name": "Please enter a valid name."
   }
 }

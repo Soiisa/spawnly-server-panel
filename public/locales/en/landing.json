@@ -1,88 +1,88 @@
 {
+  "seo": {
+    "title": "Spawnly | Premium Game Server Hosting",
+    "description": "High-performance game servers for Minecraft, Satisfactory, and more. Pay hourly, control everything."
+  },
   "hero": {
-    "announcement": "🚀 Now supporting Modpacks & Plugins",
-    "read_more": "Get Started",
-    "title_prefix": "Premium",
-    "title_highlight": "Game Server Hosting",
-    "subtitle": "Deploy high-performance game servers instantly. Experience simple hourly billing, enterprise hardware, and unlimited flexibility.",
-    "get_started": "Get Started",
-    "view_pricing": "View Pricing"
+    "title_p1": "Command Your",
+    "title_p2": "Multiplayer Universe.",
+    "subtitle": "Containerized hosting for Minecraft and Satisfactory. Experience zero-lag NVMe performance, fractional hourly billing, and absolute control via our custom-built management panel.",
+    "cta_primary": "Deploy a Server",
+    "cta_secondary": "View Pricing"
+  },
+  "mockup": {
+    "status": "Node Status",
+    "server_name": "Satisfactory Dedicated",
+    "online": "Online",
+    "per_hour": "per hour",
+    "cpu_load": "CPU Load",
+    "memory": "Memory (RAM)"
+  },
+  "carousel": {
+    "title": "Deploy Your Next Adventure",
+    "drag_instruction": "Drag left or right to explore",
+    "host_button": "Host {{game}}",
+    "minecraft": {
+      "edition": "Java & Bedrock Edition",
+      "desc": "Instantly deploy high-performance servers with full plugin and modpack support."
+    },
+    "satisfactory": {
+      "edition": "1.0 Dedicated Servers",
+      "desc": "Build massive factories without lag. Optimized for continuous background processing."
+    },
+    "rust": {
+      "edition": "Vanilla & Modded",
+      "desc": "Survive the wipe with extreme NVMe performance for seamless monument loading."
+    }
+  },
+  "deepdive": {
+    "access": {
+      "title": "Raw Access & Control.",
+      "desc": "Stop relying on FTP clients. Our built-in web file manager lets you edit configs, upload worlds, and manage mods directly from your browser. Pair that with our live WebSocket console to issue commands in real-time."
+    },
+    "teams": {
+      "title": "Built for Teams.",
+      "desc": "Don't share your password. Use our advanced Role-Based Access Control (RBAC) to invite friends or admins to your server. Grant them specific permissions like 'Start/Stop', 'Edit Files', or 'View Console' safely.",
+      "sub_access": "Sub-User Access"
+    }
+  },
+  "roles": {
+    "co_admin": "Co-Admin",
+    "full_access": "Full Access",
+    "moderator": "Moderator",
+    "console_only": "Console Only"
   },
   "features": {
-    "label": "Features",
-    "heading": "Everything you need to scale",
-    "subheading": "Everything you need to run a high-performance game server, built right into a modern panel.",
-    "instant": {
-      "title": "Instant Deployment",
-      "description": "Your server is online seconds after creation. No waiting queues, no manual provisioning."
-    },
+    "title": "Everything you need to host.",
+    "subtitle": "A comprehensive suite of tools built specifically for community leaders and game server admins.",
     "billing": {
-      "title": "Hourly Billing",
-      "description": "Pay only for what you use. Pause your server to stop billing while keeping your files safe."
+      "title": "Fractional Hourly Billing",
+      "desc": "Top up credits via Stripe and pay strictly for the hours your server is online. Turn it off, and the meter stops instantly."
     },
-    "storage": {
-      "title": "NVMe Storage",
-      "description": "Lightning fast load times and chunk generation with enterprise-grade NVMe drives."
+    "schedules": {
+      "title": "Automated Schedules",
+      "desc": "Set up cron jobs to automatically restart your server, send broadcast commands to players, or trigger routine backups while you sleep."
     },
-    "autostop": {
-      "title": "Smart Auto-Stop",
-      "description": "Never pay for an empty server. Our system automatically stops your server when no players are online."
+    "mods": {
+      "title": "1-Click Mod Manager",
+      "desc": "Deep integration with CurseForge and SteamCMD. Search, install, and update modpacks and server plugins with a single click."
     },
-    "files": {
-      "title": "Full File Access",
-      "description": "Manage your server files directly from the browser with our advanced file manager and editor."
+    "world": {
+      "title": "World Management",
+      "desc": "Upload your existing single-player saves directly to the cloud, or download your server's map to keep a local copy safe."
     },
-    "console": {
-      "title": "Live Console",
-      "description": "Monitor your server logs in real-time and execute commands instantly from the dashboard."
+    "backups": {
+      "title": "Secure Backups",
+      "desc": "Never lose progress. Create manual restore points instantly, or rely on our automated backup system to keep your data safe."
+    },
+    "isolation": {
+      "title": "Hard Isolation",
+      "desc": "Every server runs in a dedicated Docker/Kubernetes container environment, guaranteeing your CPU and RAM are never throttled by noisy neighbors."
     }
-  },
-  "steps": {
-    "heading": "Launch in seconds",
-    "subheading": "Getting started with Spawnly is easy and credit-based.",
-    "1": {
-      "title": "Create Account",
-      "desc": "Register a free account to access the dashboard."
-    },
-    "2": {
-      "title": "Top Up Credits",
-      "desc": "Add funds securely. Credits never expire."
-    },
-    "3": {
-      "title": "Deploy Server",
-      "desc": "Choose your software and RAM. Play instantly."
-    }
-  },
-  "credits_system": {
-    "title": "Smart Billing for Smart Players",
-    "subtitle": "Stop paying monthly fees for servers that sit empty. Our credit system saves you money.",
-    "recommended": "RECOMMENDED",
-    "examples": {
-      "weekend": {
-        "title": "The Weekend Warrior",
-        "description": "You only play on weekends? Turn your server off during the week and save over 70% compared to monthly hosting.",
-        "saving": "Save ~70% / mo"
-      },
-      "casual": {
-        "title": "Casual Groups",
-        "description": "Hosting a game night once a week? You could run a high-performance server for pennies a month.",
-        "saving": "Save ~90% / mo"
-      },
-      "dev": {
-        "title": "Developers & Testing",
-        "description": "Need to test a modpack or plugin configuration? Spin up a powerful server for 10 minutes, then delete it. Cost: $0.005.",
-        "saving": "Pay per minute"
-      }
-    }
-  },
-  "stats": {
-    "uptime": "Platform Uptime",
-    "storage": "NVMe Storage",
-    "protection": "DDoS Protection"
   },
   "cta": {
-    "title": "Ready to start your journey?",
-    "subtitle": "Join thousands of other players hosting on Spawnly today.",
-    "button": "Create My Server Now"
+    "title": "Ready to start your community?",
+    "subtitle": "Create an account, add credits, and have your server online in less than 60 seconds.",
+    "button": "Get Started Now"
   }
 }
