@@ -292,16 +292,15 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
               disabled={billingType === 'hourly'}
               className="block w-full rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value="nbg1">{t('locations.nbg1')}</option>
-              <option value="fsn1">{t('locations.fsn1')}</option>
-              <option value="hel1">{t('locations.hel1')}</option>
-              {billingType === 'monthly' && (
-                <>
-                  <option value="ash">{t('locations.ash')}</option>
-                  <option value="hil">{t('locations.hil')}</option>
-                  <option value="sin">{t('locations.sin')}</option>
-                </>
-              )}
+              {/* Active EU Regions */}
+              <option value="nbg1">{t('locations.nbg1', { defaultValue: 'Nuremberg, Germany' })}</option>
+              <option value="fsn1">{t('locations.fsn1', { defaultValue: 'Falkenstein, Germany' })}</option>
+              <option value="hel1">{t('locations.hel1', { defaultValue: 'Helsinki, Finland' })}</option>
+              
+              {/* Disabled Non-EU Regions */}
+              <option value="ash" disabled>{t('locations.ash', { defaultValue: 'Ashburn, VA' })} ({t('locations.soon', { defaultValue: 'Soon' })})</option>
+              <option value="hil" disabled>{t('locations.hil', { defaultValue: 'Hillsboro, OR' })} ({t('locations.soon', { defaultValue: 'Soon' })})</option>
+              <option value="sin" disabled>{t('locations.sin', { defaultValue: 'Singapore' })} ({t('locations.soon', { defaultValue: 'Soon' })})</option>
             </select>
             {billingType === 'hourly' && (
               <p className="mt-1 text-xs text-orange-600 dark:text-orange-400 font-medium">
