@@ -1,38 +1,8 @@
 // pages/CreateServerForm.js
-
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient"; 
 import { useTranslation } from "next-i18next"; 
-
-// The exact pricing matrix mirroring Apex Hosting (1 Euro = 100 Credits)
-const apexPricingMatrix = {
-  3: 1199,  4: 1499,  5: 1875,  6: 2249,  8: 2799, 
-  10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 
-  24: 7799, 28: 9099, 32: 10399
-};
-
-const monthlyTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
-
-const getApexCreditCost = (r) => {
-  const targetTier = monthlyTiers.find(tier => tier >= r) || 32;
-  return apexPricingMatrix[targetTier];
-};
-
-// Next-Gen Game Registry
-const GAME_REGISTRY = {
-  minecraft: {
-    minRam: 2,
-    defaultSoftware: 'vanilla',
-    defaultVersion: null,
-    allowHourly: true
-  },
-  satisfactory: {
-    minRam: 4, 
-    defaultSoftware: 'steamcmd',
-    defaultVersion: 'public',
-    allowHourly: false // Force monthly to preserve large 15GB+ Steam installations
-  }
-};
+import { GAME_REGISTRY, getAvailableRamTiers, getMonthlyCreditCost } from "../lib/config"; // <-- NEW
 
 export default function CreateServerForm({ onClose, onCreate, credits }) {
   const { t } = useTranslation('create_server'); 
@@ -48,10 +18,12 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
   const [nameError, setNameError] = useState(null);
   const [userId, setUserId] = useState(null);
 
-  // Dynamically calculate cost based on billing mode
+  const monthlyTiers = getAvailableRamTiers();
+
+  // Dynamically calculate cost based on billing mode and the new config
   const estimatedCost = billingType === 'hourly' 
-    ? ram // 1 Credit per Hour per Gigabyte of RAM
-    : getApexCreditCost(ram); // Monthly Apex Matrix
+    ? ram 
+    : getMonthlyCreditCost(ram); 
 
   const creditsNum = Number(credits); 
   const canCreate = !nameError && name.trim();
@@ -59,10 +31,11 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
   // Reset to allowed locations and enforce Game minRAM when switching billing types
   useEffect(() => {
     const gameConfig = GAME_REGISTRY[game] || GAME_REGISTRY.minecraft;
-    const minRamForGame = gameConfig.minRam || 2;
+    const minRamForGame = gameConfig?.minRam || 2;
+    const isHourlyAllowed = gameConfig?.allowHourly !== false;
 
     // Safety Catch: If somehow set to hourly but game forbids it, force to monthly
-    if (!gameConfig.allowHourly && billingType === 'hourly') {
+    if (!isHourlyAllowed && billingType === 'hourly') {
         setBillingType('monthly');
         return; 
     }
@@ -80,7 +53,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
         setRam(closest);
       }
     }
-  }, [billingType, ram, game]);
+  }, [billingType, ram, game, monthlyTiers]);
 
   useEffect(() => {
     const fetchUserAndServers = async () => {
@@ -132,14 +105,15 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
     setGame(selectedGame);
     
     const gameConfig = GAME_REGISTRY[selectedGame] || GAME_REGISTRY.minecraft;
-    const minRamForGame = gameConfig.minRam || 2;
+    const minRamForGame = gameConfig?.minRam || 2;
+    const isHourlyAllowed = gameConfig?.allowHourly !== false;
     
-    if (!gameConfig.allowHourly && billingType === 'hourly') {
+    if (!isHourlyAllowed && billingType === 'hourly') {
         setBillingType('monthly');
     }
 
     if (ram < minRamForGame) {
-      if (billingType === 'monthly' || !gameConfig.allowHourly) {
+      if (billingType === 'monthly' || !isHourlyAllowed) {
          const closest = monthlyTiers.find(t => t >= minRamForGame) || minRamForGame;
          setRam(closest);
       } else {
@@ -168,8 +142,8 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
     const serverData = { 
       name: name.trim(), 
       game, 
-      software: gameConfig.defaultSoftware,
-      version: gameConfig.defaultVersion,
+      software: gameConfig.defaultSoftware || 'vanilla',
+      version: gameConfig.defaultVersion || null,
       ram, 
       costPerHour: billingType === 'hourly' ? estimatedCost : Number((estimatedCost / 720).toFixed(4)), 
       billing_type: billingType,
@@ -182,9 +156,9 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
   };
 
   const currentConfig = GAME_REGISTRY[game] || GAME_REGISTRY.minecraft;
-  const currentMinRam = currentConfig.minRam;
+  const currentMinRam = currentConfig?.minRam || 2;
   const currentMinMonthlyIndex = monthlyTiers.findIndex(t => t >= currentMinRam);
-  const isHourlyAllowed = currentConfig.allowHourly;
+  const isHourlyAllowed = currentConfig?.allowHourly !== false;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
@@ -224,7 +198,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
             {nameError && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{nameError}</p>}
           </div>
 
-          {/* Game Selection */}
+          {/* Game Selection (Dynamically mapped from config) */}
           <div className="block">
             <label htmlFor="game" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               {t('labels.game')}
@@ -233,12 +207,13 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
               id="game"
               value={game}
               onChange={handleGameChange}
-              className="block w-full rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500"
+              className="block w-full rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm p-3 focus:ring-indigo-500 focus:border-indigo-500 capitalize"
             >
-              <option value="minecraft">{t('games.minecraft', { defaultValue: 'Minecraft' })}</option>
-              <option value="satisfactory">Satisfactory</option>
-              <option value="rust" disabled>{t('games.rust_soon', { defaultValue: 'Rust (Soon)' })}</option>
-              <option value="palworld" disabled>{t('games.palworld_soon', { defaultValue: 'Palworld (Soon)' })}</option>
+              {Object.entries(GAME_REGISTRY).map(([key, config]) => (
+                <option key={key} value={key} disabled={config.disabled}>
+                  {t(`games.${key}`, { defaultValue: config.name })} {config.disabled ? `(${t('locations.soon', { defaultValue: 'Soon' })})` : ''}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -262,7 +237,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
               >
                 <span className="block font-bold text-gray-900 dark:text-gray-100">{t('billing.hourly_title')}</span>
                 <span className="text-xs text-gray-500 dark:text-gray-400 block mt-1">
-                    {!isHourlyAllowed ? 'Not available for Steam Games' : t('billing.hourly_desc')}
+                    {!isHourlyAllowed ? 'Not available for this Game' : t('billing.hourly_desc')}
                 </span>
               </button>
               <button
@@ -323,7 +298,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
             {billingType === 'monthly' ? (
               <input
                 type="range" 
-                min={currentMinMonthlyIndex} 
+                min={Math.max(0, currentMinMonthlyIndex)} 
                 max={monthlyTiers.length - 1} 
                 step="1"
                 value={monthlyTiers.indexOf(ram) !== -1 ? monthlyTiers.indexOf(ram) : 0}

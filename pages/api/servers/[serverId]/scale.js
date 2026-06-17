@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { verifyServerAccess } from '../../../../lib/accessControl';
+import { getMonthlyCreditCost, getHetznerType, getHourlyCreditCost } from '../../../../lib/config';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,34 +12,6 @@ const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN;
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Reuse your exact pricing matrix from provision.js
-const apexPricingMatrix = { 
-  3: 1199, 4: 1499, 5: 1875, 6: 2249, 8: 2799, 
-  10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 
-  24: 7799, 28: 9099, 32: 10399 
-};
-
-const getApexCreditCost = (ram) => {
-    const availableTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
-    const targetTier = availableTiers.find(tier => tier >= ram) || 32;
-    return apexPricingMatrix[targetTier];
-};
-
-const ramToStandardType = (ramGb) => {
-  if (ramGb <= 3) return 'cx23';
-  if (ramGb <= 7) return 'cx33';
-  if (ramGb <= 15) return 'cx43';
-  return 'cx53';
-};
-
-const ramToPremiumType = (ramGb) => {
-  if (ramGb <= 4) return 'cpx21'; // Adjusted to premium cpx types if needed, matching provision.js
-  if (ramGb <= 8) return 'cpx31';
-  if (ramGb <= 16) return 'cpx41';
-  return 'cpx51';
-};
-
-// Helper to wait for Hetzner actions to complete
 const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
   if (!actionId) return null;
   const url = `${HETZNER_API_BASE}/actions/${actionId}`;
@@ -66,7 +39,6 @@ export default async function handler(req, res) {
 
   if (!serverId || !newRam) return res.status(400).json({ error: 'Missing parameters' });
 
-  // 1. Authenticate & Authorize
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
   const token = authHeader.split(' ')[1];
@@ -76,35 +48,29 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
-  // 2. Fetch Server Data
   const { data: server, error: serverErr } = await supabaseAdmin.from('servers').select('*').eq('id', serverId).single();
   if (serverErr || !server) return res.status(404).json({ error: 'Server not found' });
   
   if (server.billing_type !== 'monthly') {
-      // Hourly servers scale automatically when restarted since they use micro-billing.
       return res.status(400).json({ error: 'Scaling via this endpoint is only for monthly servers.' });
   }
   if (!server.hetzner_id) return res.status(400).json({ error: 'Server is not provisioned on Hetzner' });
   if (server.ram === newRam) return res.status(400).json({ error: 'Server is already at this RAM level' });
 
-  // 3. Prorated Math
+  // Centralized Math via Config
   const now = new Date();
   const lastBilled = new Date(server.last_billed_at || server.created_at);
   const elapsedDays = Math.max(0, (now - lastBilled) / (1000 * 60 * 60 * 24));
-  
-  // Cap remaining days at 30 (just in case cron is slightly delayed)
   const remainingDays = Math.min(30, Math.max(0, 30 - elapsedDays));
 
-  const oldMonthlyCost = getApexCreditCost(server.ram);
-  const newMonthlyCost = getApexCreditCost(newRam);
+  const oldMonthlyCost = getMonthlyCreditCost(server.ram);
+  const newMonthlyCost = getMonthlyCreditCost(newRam);
 
   const oldDaily = oldMonthlyCost / 30;
   const newDaily = newMonthlyCost / 30;
 
-  // Positive number = user owes us. Negative number = we owe the user a refund.
   const netCharge = Number(((newDaily - oldDaily) * remainingDays).toFixed(2));
 
-  // 4. Wallet/Pool Balance Checks
   const targetId = server.pool_id || server.user_id;
   const table = server.pool_id ? 'credit_pools' : 'profiles';
   const balanceCol = server.pool_id ? 'balance' : 'credits';
@@ -117,17 +83,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 5. Check Hetzner State (Must be Powered Off)
     const hetznerRes = await axios.get(`${HETZNER_API_BASE}/servers/${server.hetzner_id}`, {
         headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
     });
     const isRunning = hetznerRes.data.server.status !== 'off';
 
     if (isRunning) {
-        // Option A: Reject and tell user to stop it
-        // return res.status(400).json({ error: 'Server must be completely stopped before scaling. Please stop the server first.' });
-
-        // Option B: Auto-Stop it for them
         await supabaseAdmin.from('servers').update({ status: 'Stopping' }).eq('id', server.id);
         const powerOffRes = await axios.post(`${HETZNER_API_BASE}/servers/${server.hetzner_id}/actions/poweroff`, {}, {
             headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
@@ -135,26 +96,25 @@ export default async function handler(req, res) {
         await waitForAction(powerOffRes.data.action.id);
     }
 
-    // 6. Execute Hetzner Change Type
-    const newInstanceType = ramToStandardType(newRam); // or ramToPremiumType depending on your config mapping
+    // Dynamic Hardware Map via config
+    const newInstanceType = getHetznerType(newRam, false); 
     
     console.log(`[Scale] Upgrading ${server.id} to ${newInstanceType} with upgrade_disk: false`);
     const changeRes = await axios.post(`${HETZNER_API_BASE}/servers/${server.hetzner_id}/actions/change_type`, {
         server_type: newInstanceType,
-        upgrade_disk: false // CRITICAL: Allows downgrading in the future
+        upgrade_disk: false 
     }, {
         headers: { Authorization: `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' }
     });
 
     await waitForAction(changeRes.data.action.id);
 
-    // 7. Process Financials
     const newBalance = currentBalance - netCharge;
     await supabaseAdmin.from(table).update({ [balanceCol]: newBalance }).eq('id', targetId);
 
     const transactionTable = server.pool_id ? 'pool_transactions' : 'credit_transactions';
     const txPayload = {
-        amount: -netCharge, // Will be negative for deductions, positive for refunds
+        amount: -netCharge, 
         type: netCharge > 0 ? 'usage' : 'refund',
         description: `Prorated Server Scaling: ${server.ram}GB -> ${newRam}GB (${remainingDays.toFixed(1)} days left in cycle)`,
         session_id: server.current_session_id
@@ -164,16 +124,14 @@ export default async function handler(req, res) {
     
     await supabaseAdmin.from(transactionTable).insert([txPayload]);
 
-    // 8. Update Server Database Row
-    const hourlyCost = Number((newMonthlyCost / 720).toFixed(4));
+    const hourlyCost = getHourlyCreditCost(newRam);
     await supabaseAdmin.from('servers').update({
         ram: newRam,
         instance_type: newInstanceType,
-        cost_per_hour: hourlyCost, // Keep it updated for next month's cron job calculation
+        cost_per_hour: hourlyCost, 
         status: isRunning ? 'Starting' : 'Stopped'
     }).eq('id', server.id);
 
-    // 9. Auto-Start if we stopped it
     if (isRunning) {
         await axios.post(`${HETZNER_API_BASE}/servers/${server.hetzner_id}/actions/poweron`, {}, {
             headers: { Authorization: `Bearer ${HETZNER_TOKEN}` }
@@ -181,22 +139,13 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({ 
-        success: true, 
-        message: 'Server scaled successfully',
-        netCharge: netCharge,
-        newRam: newRam
+        success: true, message: 'Server scaled successfully', netCharge: netCharge, newRam: newRam
     });
 
   } catch (error) {
     const errorMsg = error.response?.data?.error?.message || error.message;
     console.error('[Scale API Error]', errorMsg);
-    
-    // Safety fallback
     await supabaseAdmin.from('servers').update({ status: 'Stopped' }).eq('id', server.id);
-
-    return res.status(500).json({ 
-        error: 'Scaling failed at infrastructure level', 
-        detail: errorMsg 
-    });
+    return res.status(500).json({ error: 'Scaling failed at infrastructure level', detail: errorMsg });
   }
 }

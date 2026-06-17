@@ -34,17 +34,8 @@ import SchedulesTab from '../../components/SchedulesTab';
 import AccessTab from '../../components/AccessTab';
 import ServerTour from '../../components/ServerTour';
 
-// --- Pricing Logic (Shared with backend) ---
-const apexPricingMatrix = { 
-    3: 1199, 4: 1499, 5: 1875, 6: 2249, 8: 2799, 
-    10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 
-    24: 7799, 28: 9099, 32: 10399 
-};
-const getApexCreditCost = (ram) => {
-    const availableTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
-    const targetTier = availableTiers.find(tier => tier >= ram) || 32;
-    return apexPricingMatrix[targetTier];
-};
+// NEW: Import from central Config
+import { getAvailableRamTiers, getMonthlyCreditCost, getHourlyCreditCost } from '../../lib/config';
 
 const getOnlinePlayersArray = (server) => {
   if (server?.status !== 'Running' || !server?.players_online) return [];
@@ -145,15 +136,15 @@ const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => 
   
     if (!isOpen || !server) return null;
   
-    const availableTiers = [3, 4, 5, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32];
+    const availableTiers = getAvailableRamTiers();
     
     const now = new Date();
     const lastBilled = new Date(server.last_billed_at || server.created_at);
     const elapsedDays = Math.max(0, (now - lastBilled) / (1000 * 60 * 60 * 24));
     const remainingDays = Math.min(30, Math.max(0, 30 - elapsedDays));
   
-    const oldMonthlyCost = getApexCreditCost(server.ram);
-    const newMonthlyCost = getApexCreditCost(targetRam);
+    const oldMonthlyCost = getMonthlyCreditCost(server.ram);
+    const newMonthlyCost = getMonthlyCreditCost(targetRam);
   
     const oldDaily = oldMonthlyCost / 30;
     const newDaily = newMonthlyCost / 30;
@@ -183,7 +174,6 @@ const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => 
           </div>
   
           <div className="space-y-5">
-            {/* Warning Block */}
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex gap-3 text-amber-800 dark:text-amber-300">
                 <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
@@ -191,7 +181,6 @@ const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => 
                 </div>
             </div>
 
-            {/* RAM Selector */}
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Select New RAM Tier</label>
               <select 
@@ -201,13 +190,12 @@ const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => 
               >
                 {availableTiers.map(tier => (
                   <option key={tier} value={tier}>
-                    {tier} GB RAM — {getApexCreditCost(tier)} Credits/mo
+                    {tier} GB RAM — {getMonthlyCreditCost(tier)} Credits/mo
                   </option>
                 ))}
               </select>
             </div>
   
-            {/* Prorated Math Display */}
             <div className="bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl border border-gray-200 dark:border-slate-600 space-y-2">
                 <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
                     <span>Current Plan (30 days)</span>
@@ -231,7 +219,6 @@ const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => 
                 </div>
             </div>
 
-            {/* Balances Notice */}
             {netCharge > 0 && (
                 <div className={`text-sm p-3 rounded-lg flex justify-between items-center ${isInsufficient ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-slate-700'}`}>
                     <span>Available Balance:</span>
@@ -650,7 +637,6 @@ export default function ServerDetailPage({ initialServer }) {
         await fetchServer(server.id);
         await fetchUserCredits(user.id);
 
-        // If it was running, the backend puts it into 'Starting'. We should poll.
         if (server.status !== 'Stopped') {
              pollUntilStatus(['Running', 'Stopped']);
         }
@@ -667,7 +653,6 @@ export default function ServerDetailPage({ initialServer }) {
 
     if (actionLoading) return;
     
-    // Check for Shift+Restart
     let finalAction = action;
     if (action === 'restart' && event?.shiftKey) {
         finalAction = 'hard_restart';
@@ -745,14 +730,19 @@ export default function ServerDetailPage({ initialServer }) {
   const handleSaveRam = async () => {
     if (!isOwner) return setError("Only owner can change RAM billing");
     if (server.status !== 'Stopped') return setError(t('errors.stop_ram'));
-    if (newRam < 2 || newRam > 32) return setError(t('errors.ram_range'));
+    
+    // Validate RAM exists in tiers
+    const validTiers = getAvailableRamTiers();
+    if (!validTiers.includes(newRam)) return setError(t('errors.ram_range'));
+
     setActionLoading(true);
     try {
+      const newHourlyCost = getHourlyCreditCost(newRam);
       const { error } = await supabase
         .from('servers')
-        .update({ ram: newRam, cost_per_hour: newRam }).eq('id', server.id);
+        .update({ ram: newRam, cost_per_hour: newHourlyCost }).eq('id', server.id);
       if (error) throw error;
-      setServer(prev => ({ ...prev, ram: newRam, cost_per_hour: newRam }));
+      setServer(prev => ({ ...prev, ram: newRam, cost_per_hour: newHourlyCost }));
       setEditingRam(false);
     } catch (e) { setError(e.message); } finally { setActionLoading(false); }
   };
@@ -1111,18 +1101,19 @@ export default function ServerDetailPage({ initialServer }) {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('config.ram_allocation')}</label>
                     {editingRam ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="range" min="2" max="32" step="1"
-                            value={newRam} onChange={(e) => setNewRam(Number(e.target.value))}
-                            className="w-full h-2 bg-gray-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                          />
-                          <span className="text-sm font-bold w-12 text-right">{newRam}GB</span>
-                        </div>
+                      <div className="space-y-3">
+                        <select
+                          value={newRam} 
+                          onChange={(e) => setNewRam(Number(e.target.value))}
+                          className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 focus:ring-2 focus:ring-indigo-500 text-sm font-medium"
+                        >
+                          {getAvailableRamTiers().map(tier => (
+                            <option key={tier} value={tier}>{tier} GB RAM</option>
+                          ))}
+                        </select>
                         <div className="flex gap-2">
-                          <button onClick={handleSaveRam} className="flex-1 bg-indigo-600 text-white text-xs py-1.5 rounded-lg hover:bg-indigo-700">{t('actions.save')}</button>
-                          <button onClick={() => setEditingRam(false)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-1.5 rounded-lg hover:bg-gray-300">{t('actions.cancel')}</button>
+                          <button onClick={handleSaveRam} className="flex-1 bg-indigo-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-indigo-700">{t('actions.save')}</button>
+                          <button onClick={() => setEditingRam(false)} className="flex-1 bg-gray-200 text-gray-700 text-xs font-bold py-2 rounded-lg hover:bg-gray-300">{t('actions.cancel')}</button>
                         </div>
                       </div>
                     ) : (

@@ -4,6 +4,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
 import { verifyServerAccess } from '../../../lib/accessControl'; 
+import { getMonthlyCreditCost, getHourlyCreditCost, getHetznerType } from '../../../lib/config'; // <-- NEW
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -24,20 +25,6 @@ const APP_BASE_URL = appUrl;
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
-
-const ramToStandardType = (ramGb) => {
-  if (ramGb <= 3) return 'cx23';
-  if (ramGb <= 7) return 'cx33';
-  if (ramGb <= 15) return 'cx43';
-  return 'cx53';
-};
-
-const ramToPremiumType = (ramGb) => {
-  if (ramGb <= 4) return 'cx23'; 
-  if (ramGb <= 8) return 'cx33'; 
-  if (ramGb <= 16) return 'cx43'; 
-  return 'cx53'; 
-};
 
 const waitForAction = async (actionId, maxTries = 60, intervalMs = 2000) => {
   if (!actionId) return null;
@@ -259,21 +246,13 @@ async function provisionSteamServer(serverRow, version, ssh_keys, res) {
         console.log(`\n\n=== [STEAM PROVISION] STARTING PROVISION FOR SERVER: ${serverRow.id} ===`);
         
         const serverRamGb = Number(serverRow.ram || 4);
-        const serverType = serverRow.billing_type === 'monthly' ? ramToPremiumType(serverRamGb) : ramToStandardType(serverRamGb);
+        // Uses Config mappings dynamically
+        const serverType = getHetznerType(serverRamGb, serverRow.billing_type === 'monthly');
         const locationToUse = serverRow.location || 'nbg1';
 
-        // 1. Handle Credits & Billing Deductions
-        const apexPricingMatrix = { 3: 1199, 4: 1499, 5: 1875, 6: 2249, 8: 2799, 10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 24: 7799, 28: 9099, 32: 10399 };
-        const getApexCreditCost = (ram) => {
-            const availableTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
-            const targetTier = availableTiers.find(tier => tier >= ram) || 32;
-            return apexPricingMatrix[targetTier];
-        };
-
         const isFirstTimeMonthly = serverRow.billing_type === 'monthly' && !serverRow.last_billed_at;
-        const monthlyCost = isFirstTimeMonthly ? getApexCreditCost(serverRamGb) : 0;
-        
-        const hourlyCost = serverRow.billing_type === 'monthly' ? Number((getApexCreditCost(serverRamGb) / 720).toFixed(4)) : serverRamGb;
+        const monthlyCost = isFirstTimeMonthly ? getMonthlyCreditCost(serverRamGb) : 0;
+        const hourlyCost = serverRow.billing_type === 'monthly' ? getHourlyCreditCost(serverRamGb) : serverRamGb;
 
         let requiredCredits = isFirstTimeMonthly ? monthlyCost : 0.1;
 
@@ -601,9 +580,8 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     // Convert to MB and safely leave room for the OS (1024MB or 512MB buffer)
     const heapMb = Math.floor(serverRam > 2 ? (serverRam * 1024) - 1024 : (serverRam * 1024) - 512);
 
-    const serverType = serverRow.billing_type === 'monthly' 
-        ? ramToPremiumType(serverRam) 
-        : ramToStandardType(serverRam);
+    // Uses Config mappings dynamically
+    const serverType = getHetznerType(serverRam, serverRow.billing_type === 'monthly');
 
     const locationToUse = serverRow.location || 'nbg1';
     const software = serverRow.type || 'vanilla';
@@ -617,17 +595,9 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     try { await supabaseAdmin.from('server_console').delete().eq('server_id', serverRow.id); } catch (e) {}
 
-    const apexPricingMatrix = { 3: 1199,  4: 1499,  5: 1875,  6: 2249,  8: 2799, 10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 24: 7799, 28: 9099, 32: 10399 };
-
-    const getApexCreditCost = (ram) => {
-        const availableTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
-        const targetTier = availableTiers.find(tier => tier >= ram) || 32;
-        return apexPricingMatrix[targetTier];
-    };
-
     const isFirstTimeMonthly = serverRow.billing_type === 'monthly' && !serverRow.last_billed_at;
-    const monthlyCost = isFirstTimeMonthly ? getApexCreditCost(serverRam) : 0;
-    const hourlyCost = serverRow.billing_type === 'monthly' ? Number((getApexCreditCost(serverRam) / 720).toFixed(4)) : serverRam;
+    const monthlyCost = isFirstTimeMonthly ? getMonthlyCreditCost(serverRam) : 0;
+    const hourlyCost = serverRow.billing_type === 'monthly' ? getHourlyCreditCost(serverRam) : serverRam;
 
     let chargedFrom = null;
     if (isFirstTimeMonthly) {
@@ -1377,21 +1347,14 @@ export default async function handler(req, res) {
   if (serverRow.game && serverRow.game !== 'minecraft') {
       return await provisionSteamServer(serverRow, version, ssh_keys, res);
   }
-
-  const apexPricingMatrix = {
-      3: 1199,  4: 1499,  5: 1875,  6: 2249,  8: 2799, 
-      10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 
-      24: 7799, 28: 9099, 32: 10399
-  };
   
   const serverRamGb = Number(serverRow.ram || 4);
   const isFirstTimeMonthly = serverRow.billing_type === 'monthly' && !serverRow.last_billed_at;
   
   let requiredCredits = 0.1;
   if (isFirstTimeMonthly) {
-      const availableTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
-      const targetTier = availableTiers.find(tier => tier >= serverRamGb) || 32;
-      requiredCredits = apexPricingMatrix[targetTier];
+      // Dynamic mapping via Config
+      requiredCredits = getMonthlyCreditCost(serverRamGb);
   }
 
   const balanceTarget = serverRow.pool_id ? await supabaseAdmin.from('credit_pools').select('balance').eq('id', serverRow.pool_id).single() : await supabaseAdmin.from('profiles').select('credits').eq('id', serverRow.user_id).single();

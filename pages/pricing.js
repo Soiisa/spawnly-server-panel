@@ -16,19 +16,8 @@ import {
 import { useTranslation, Trans } from "next-i18next"; 
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
 
-// The exact pricing matrix mirroring Apex Hosting (1 Euro = 100 Credits)
-const apexPricingMatrix = {
-  3: 1199,  4: 1499,  5: 1875,  6: 2249,  8: 2799, 
-  10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 
-  24: 7799, 28: 9099, 32: 10399
-};
-
-const monthlyTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
-
-const getApexCreditCost = (r) => {
-  const targetTier = monthlyTiers.find(tier => tier >= r) || 32;
-  return apexPricingMatrix[targetTier];
-};
+// NEW: Import the centralized source of truth
+import { GAME_REGISTRY as CORE_GAME_REGISTRY, getAvailableRamTiers, getMonthlyCreditCost } from "../lib/config";
 
 export default function Pricing() {
   const { t } = useTranslation('pricing'); 
@@ -36,32 +25,53 @@ export default function Pricing() {
   const [billingType, setBillingType] = useState("hourly");
   const [ram, setRam] = useState(4);
 
-  // Game Registry wrapped in useMemo to support live translation
-  const GAME_REGISTRY = useMemo(() => ({
-    minecraft: {
-      name: 'Minecraft',
-      subtitle: t('games.minecraft.subtitle', 'Java & Bedrock'),
-      minRam: 2,
-      allowHourly: true,
-      icon: CircleStackIcon,
-      color: 'text-green-500'
-    },
-    satisfactory: {
-      name: 'Satisfactory',
-      subtitle: t('games.satisfactory.subtitle'),
-      minRam: 4, 
-      allowHourly: false, 
-      icon: WrenchScrewdriverIcon,
-      color: 'text-orange-500'
+  const monthlyTiers = getAvailableRamTiers();
+
+  // Merge the centralized game config with Frontend UI aesthetics (Icons, Colors, Translations)
+  const GAME_REGISTRY = useMemo(() => {
+    const uiExtras = {
+      minecraft: {
+        icon: CircleStackIcon,
+        color: 'text-green-500',
+        subtitle: t('games.minecraft.subtitle', 'Java & Bedrock')
+      },
+      satisfactory: {
+        icon: WrenchScrewdriverIcon,
+        color: 'text-orange-500',
+        subtitle: t('games.satisfactory.subtitle', 'Factory Building')
+      },
+      rust: {
+        icon: ShieldCheckIcon,
+        color: 'text-red-500',
+        subtitle: t('games.rust.subtitle', 'Multiplayer Survival')
+      },
+      palworld: {
+        icon: GlobeAltIcon,
+        color: 'text-blue-500',
+        subtitle: t('games.palworld.subtitle', 'Monster Catching')
+      }
+    };
+
+    const merged = {};
+    for (const [key, coreConfig] of Object.entries(CORE_GAME_REGISTRY)) {
+      merged[key] = {
+        ...coreConfig, // Includes minRam, allowHourly, defaultPort, etc.
+        name: t(`games.${key}`, { defaultValue: coreConfig.name }),
+        subtitle: uiExtras[key]?.subtitle || t('games.generic.subtitle', 'Multiplayer Server'),
+        icon: uiExtras[key]?.icon || CpuChipIcon, 
+        color: uiExtras[key]?.color || 'text-indigo-500' 
+      };
     }
-  }), [t]);
+    return merged;
+  }, [t]);
 
   // Enforce Game Minimums and Billing restrictions when selections change
   useEffect(() => {
-    const gameConfig = GAME_REGISTRY[game];
-    const minRamForGame = gameConfig.minRam;
+    const gameConfig = GAME_REGISTRY[game] || GAME_REGISTRY.minecraft;
+    const minRamForGame = gameConfig.minRam || 2;
+    const isHourlyAllowed = gameConfig.allowHourly !== false;
 
-    if (!gameConfig.allowHourly && billingType === 'hourly') {
+    if (!isHourlyAllowed && billingType === 'hourly') {
         setBillingType('monthly');
         return; 
     }
@@ -77,7 +87,7 @@ export default function Pricing() {
         setRam(closest);
       }
     }
-  }, [billingType, ram, game, GAME_REGISTRY]);
+  }, [billingType, ram, game, GAME_REGISTRY, monthlyTiers]);
 
   const handleRamChange = (e) => {
     if (billingType === 'monthly') {
@@ -87,9 +97,10 @@ export default function Pricing() {
     }
   };
 
+  // Uses exactly 1 credit per hour per GB (matches config standard) or specific monthly array mapping
   const estimatedCost = billingType === 'hourly' 
-    ? Math.ceil((ram / 4) * 1.5) 
-    : getApexCreditCost(ram);    
+    ? ram 
+    : getMonthlyCreditCost(ram);    
 
   const priceEuro = (estimatedCost / 100).toFixed(2);
 
@@ -102,10 +113,10 @@ export default function Pricing() {
     return t('recommendations.massive', { defaultValue: 'Enterprise-grade hosting for the largest communities.' });
   };
 
-  const currentConfig = GAME_REGISTRY[game];
-  const currentMinRam = currentConfig.minRam;
+  const currentConfig = GAME_REGISTRY[game] || GAME_REGISTRY.minecraft;
+  const currentMinRam = currentConfig.minRam || 2;
   const currentMinMonthlyIndex = monthlyTiers.findIndex(t => t >= currentMinRam);
-  const isHourlyAllowed = currentConfig.allowHourly;
+  const isHourlyAllowed = currentConfig.allowHourly !== false;
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -248,7 +259,7 @@ export default function Pricing() {
                   {billingType === 'monthly' ? (
                     <input
                       type="range" 
-                      min={currentMinMonthlyIndex} 
+                      min={Math.max(0, currentMinMonthlyIndex)} 
                       max={monthlyTiers.length - 1} 
                       step="1"
                       value={monthlyTiers.indexOf(ram) !== -1 ? monthlyTiers.indexOf(ram) : 0}
