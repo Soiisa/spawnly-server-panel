@@ -56,7 +56,7 @@ export default function Pricing() {
     for (const [key, coreConfig] of Object.entries(CORE_GAME_REGISTRY)) {
       merged[key] = {
         ...coreConfig, // Includes minRam, allowHourly, defaultPort, etc.
-        name: t(`games.${key}`, { defaultValue: coreConfig.name }),
+        name: t(`games.${key}.name`, { defaultValue: coreConfig.name }),
         subtitle: uiExtras[key]?.subtitle || t('games.generic.subtitle', 'Multiplayer Server'),
         icon: uiExtras[key]?.icon || CpuChipIcon, 
         color: uiExtras[key]?.color || 'text-indigo-500' 

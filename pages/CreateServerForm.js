@@ -211,7 +211,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
             >
               {Object.entries(GAME_REGISTRY).map(([key, config]) => (
                 <option key={key} value={key} disabled={config.disabled}>
-                  {t(`games.${key}`, { defaultValue: config.name })} {config.disabled ? `(${t('locations.soon', { defaultValue: 'Soon' })})` : ''}
+                  {t(`games.${key}.name`, { defaultValue: config.name })} {config.disabled ? `(${t('locations.soon', { defaultValue: 'Soon' })})` : ''}
                 </option>
               ))}
             </select>
