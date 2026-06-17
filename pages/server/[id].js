@@ -11,7 +11,8 @@ import {
   ClipboardDocumentIcon, PlayIcon, StopIcon, ArrowPathIcon, CpuChipIcon, 
   CurrencyDollarIcon, ClockIcon, ServerIcon, SignalIcon, UserGroupIcon, 
   PuzzlePieceIcon, PencilSquareIcon, CheckIcon, XMarkIcon, ArchiveBoxIcon, 
-  CalendarDaysIcon, TrashIcon, ShieldCheckIcon, BanknotesIcon, PlusIcon, CalendarIcon
+  CalendarDaysIcon, TrashIcon, ShieldCheckIcon, BanknotesIcon, PlusIcon, 
+  CalendarIcon, ExclamationTriangleIcon, ArrowsPointingOutIcon
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -32,6 +33,18 @@ import BackupsTab from '../../components/BackupsTab';
 import SchedulesTab from '../../components/SchedulesTab';
 import AccessTab from '../../components/AccessTab';
 import ServerTour from '../../components/ServerTour';
+
+// --- Pricing Logic (Shared with backend) ---
+const apexPricingMatrix = { 
+    3: 1199, 4: 1499, 5: 1875, 6: 2249, 8: 2799, 
+    10: 3500, 12: 3899, 14: 4550, 16: 5199, 20: 6499, 
+    24: 7799, 28: 9099, 32: 10399 
+};
+const getApexCreditCost = (ram) => {
+    const availableTiers = Object.keys(apexPricingMatrix).map(Number).sort((a,b) => a - b);
+    const targetTier = availableTiers.find(tier => tier >= ram) || 32;
+    return apexPricingMatrix[targetTier];
+};
 
 const getOnlinePlayersArray = (server) => {
   if (server?.status !== 'Running' || !server?.players_online) return [];
@@ -125,6 +138,129 @@ const ContributeModal = ({ isOpen, onClose, pool, userCredits, onContribute }) =
   );
 };
 
+// --- Scale Server Modal Component ---
+const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => {
+    const [targetRam, setTargetRam] = useState(server?.ram || 4);
+    const [loading, setLoading] = useState(false);
+  
+    if (!isOpen || !server) return null;
+  
+    const availableTiers = [3, 4, 5, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32];
+    
+    const now = new Date();
+    const lastBilled = new Date(server.last_billed_at || server.created_at);
+    const elapsedDays = Math.max(0, (now - lastBilled) / (1000 * 60 * 60 * 24));
+    const remainingDays = Math.min(30, Math.max(0, 30 - elapsedDays));
+  
+    const oldMonthlyCost = getApexCreditCost(server.ram);
+    const newMonthlyCost = getApexCreditCost(targetRam);
+  
+    const oldDaily = oldMonthlyCost / 30;
+    const newDaily = newMonthlyCost / 30;
+    const netCharge = Number(((newDaily - oldDaily) * remainingDays).toFixed(2));
+  
+    const currentBalance = server.pool ? server.pool.balance : userCredits;
+    const isInsufficient = netCharge > 0 && currentBalance < netCharge;
+  
+    const handleSubmit = async () => {
+      if (targetRam === server.ram) return;
+      setLoading(true);
+      await onScale(targetRam);
+      setLoading(false);
+    };
+  
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-md shadow-2xl border border-gray-200 dark:border-slate-700 flex flex-col max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-400">
+              <ArrowsPointingOutIcon className="w-6 h-6" />
+            </div>
+            <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">Scale Server RAM</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Modify hardware allocation dynamically.</p>
+            </div>
+          </div>
+  
+          <div className="space-y-5">
+            {/* Warning Block */}
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex gap-3 text-amber-800 dark:text-amber-300">
+                <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                    <strong>Expected Downtime:</strong> Scaling hardware requires the server to be gracefully shut down. Expect approximately <strong>30-60 seconds</strong> of downtime while changes are applied. The server will automatically restart.
+                </div>
+            </div>
+
+            {/* RAM Selector */}
+            <div>
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Select New RAM Tier</label>
+              <select 
+                value={targetRam}
+                onChange={(e) => setTargetRam(Number(e.target.value))}
+                className="w-full px-3 py-2.5 border rounded-xl bg-gray-50 dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 font-medium"
+              >
+                {availableTiers.map(tier => (
+                  <option key={tier} value={tier}>
+                    {tier} GB RAM — {getApexCreditCost(tier)} Credits/mo
+                  </option>
+                ))}
+              </select>
+            </div>
+  
+            {/* Prorated Math Display */}
+            <div className="bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl border border-gray-200 dark:border-slate-600 space-y-2">
+                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
+                    <span>Current Plan (30 days)</span>
+                    <span>{oldMonthlyCost} cr</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
+                    <span>New Plan (30 days)</span>
+                    <span>{newMonthlyCost} cr</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300 pt-2 border-t border-gray-200 dark:border-slate-600">
+                    <span>Time remaining in billing cycle</span>
+                    <span className="font-mono">{remainingDays.toFixed(1)} days</span>
+                </div>
+                <div className="flex justify-between items-center pt-2">
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">
+                        {netCharge > 0 ? 'Prorated Cost Due Now' : netCharge < 0 ? 'Prorated Refund Amount' : 'Net Cost Difference'}
+                    </span>
+                    <span className={`text-lg font-bold ${netCharge > 0 ? 'text-red-600 dark:text-red-400' : netCharge < 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}`}>
+                        {netCharge > 0 ? `-${netCharge.toFixed(2)} cr` : netCharge < 0 ? `+${Math.abs(netCharge).toFixed(2)} cr` : '0.00 cr'}
+                    </span>
+                </div>
+            </div>
+
+            {/* Balances Notice */}
+            {netCharge > 0 && (
+                <div className={`text-sm p-3 rounded-lg flex justify-between items-center ${isInsufficient ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-slate-700'}`}>
+                    <span>Available Balance:</span>
+                    <span className="font-bold font-mono">{Number(currentBalance).toFixed(2)} cr</span>
+                </div>
+            )}
+  
+            <div className="flex gap-3 pt-2">
+              <button 
+                onClick={onClose} 
+                disabled={loading}
+                className="flex-1 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-200 dark:hover:bg-slate-600 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSubmit} 
+                disabled={loading || targetRam === server.ram || isInsufficient}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-md disabled:opacity-50 transition-colors flex justify-center items-center gap-2"
+              >
+                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Confirm & Scale'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+};
+
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
   const { id } = router.query;
@@ -140,8 +276,12 @@ export default function ServerDetailPage({ initialServer }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fileToken, setFileToken] = useState(null);
+  
+  // Modals / Editors
   const [editingRam, setEditingRam] = useState(false);
   const [newRam, setNewRam] = useState(null);
+  const [showScaleModal, setShowScaleModal] = useState(false);
+  
   const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer));
   
   // Tour State
@@ -491,6 +631,34 @@ export default function ServerDetailPage({ initialServer }) {
       }
   };
 
+  const handleScaleServer = async (targetRam) => {
+    setError(null);
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/servers/${server.id}/scale`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({ newRam: targetRam })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to scale server');
+        
+        setShowScaleModal(false);
+        await fetchServer(server.id);
+        await fetchUserCredits(user.id);
+
+        // If it was running, the backend puts it into 'Starting'. We should poll.
+        if (server.status !== 'Stopped') {
+             pollUntilStatus(['Running', 'Stopped']);
+        }
+    } catch (e) {
+        setError(e.message);
+    }
+  };
+
   const handleServerAction = async (action, event = null) => {
     if (!myPerms.control) {
         setError("You do not have permission to control this server.");
@@ -521,14 +689,10 @@ export default function ServerDetailPage({ initialServer }) {
       if (!session) throw new Error("No active session");
       const token = session.access_token;
 
-      // ==========================================
-      // FIXED ROUTING LOGIC FOR STEAM DAEMON START
-      // ==========================================
       const isSteamGame = server.game && server.game !== 'minecraft';
       const hasHardware = !!server.hetzner_id;
 
       if (finalAction === 'start' && (!isSteamGame || !hasHardware)) {
-        // SCENARIO 1: MINECRAFT OR BRAND NEW SERVER (Needs Hetzner Power-On)
         setServer(p => ({ ...p, status: 'Starting' }));
         const { data: sData } = await supabase.from('servers').select('type, version, pending_type, pending_version').eq('id', server.id).single();
         const { data: installed } = await supabase.from('installed_software').select('*').eq('server_id', server.id);
@@ -552,7 +716,6 @@ export default function ServerDetailPage({ initialServer }) {
         }
         pollUntilStatus(['Running', 'Stopped']);
       } else {
-        // SCENARIO 2: STEAM DAEMON START / OR ANY STOP, RESTART, KILL ACTION
         let targetStatus = 'Stopping';
         if (finalAction === 'restart' || finalAction === 'hard_restart') targetStatus = 'Restarting';
         if (finalAction === 'start') targetStatus = 'Starting';
@@ -667,7 +830,6 @@ export default function ServerDetailPage({ initialServer }) {
   const isBusy = !isRunning && !isStopped && !isUnknown;
   const canKill = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting'].includes(status);
 
-  // --- Dynamic Tab Logic based on Game Type ---
   const isMinecraft = !server.game || server.game === 'minecraft';
   const sType = (server.type || '').toLowerCase();
   const moddedTypes = ['forge', 'neoforge', 'fabric', 'quilt'];
@@ -679,7 +841,6 @@ export default function ServerDetailPage({ initialServer }) {
   if (pluginTypes.includes(sType)) modLabel = t('tabs.plugins');
   if (hybridTypes.includes(sType)) modLabel = t('tabs.mods_plugins');
 
-  // Strip Minecraft-specific tabs for SteamCMD games
   const allTabs = [
     { id: 'overview', label: t('tabs.overview'), icon: SignalIcon, perm: null },
     { id: 'schedules', label: t('tabs.schedules'), icon: CalendarDaysIcon, perm: 'schedules' },
@@ -967,13 +1128,24 @@ export default function ServerDetailPage({ initialServer }) {
                     ) : (
                       <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-700 p-3 rounded-xl border border-gray-200 dark:border-slate-600">
                         <span className="font-mono font-bold text-gray-800 dark:text-gray-100">{server.ram} GB</span>
-                        {isStopped && isOwner && server.billing_type !== 'monthly' && (
-                          <button 
-                            onClick={() => { setNewRam(server.ram); setEditingRam(true); }} 
-                            className="text-xs text-indigo-600 font-medium hover:text-indigo-800"
-                          >
-                            {t('config.edit_ram')}
-                          </button>
+                        {isOwner && (
+                            server.billing_type !== 'monthly' ? (
+                                isStopped && (
+                                    <button 
+                                      onClick={() => { setNewRam(server.ram); setEditingRam(true); }} 
+                                      className="text-xs text-indigo-600 font-medium hover:text-indigo-800"
+                                    >
+                                      {t('config.edit_ram')}
+                                    </button>
+                                )
+                            ) : (
+                                <button 
+                                  onClick={() => setShowScaleModal(true)} 
+                                  className="text-xs text-indigo-600 font-medium hover:text-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 transition-colors"
+                                >
+                                  Scale RAM
+                                </button>
+                            )
                         )}
                       </div>
                     )}
@@ -1155,6 +1327,14 @@ export default function ServerDetailPage({ initialServer }) {
             pool={server.pool}
             userCredits={credits}
             onContribute={handleContribute}
+        />
+
+        <ScaleServerModal
+            isOpen={showScaleModal}
+            onClose={() => setShowScaleModal(false)}
+            server={server}
+            userCredits={credits}
+            onScale={handleScaleServer}
         />
 
       </main>
