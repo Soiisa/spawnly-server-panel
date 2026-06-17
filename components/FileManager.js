@@ -230,10 +230,9 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     const conflictingNames = new Set();
 
     filesList.forEach(({ relativePath }) => {
-      // Find the top-level entity name in the uploaded structure
       const topLevelName = relativePath.split('/')[0].toLowerCase();
       if (existingNames.has(topLevelName)) {
-        conflictingNames.add(relativePath.split('/')[0]); // Use original case for display
+        conflictingNames.add(relativePath.split('/')[0]); 
       }
     });
 
@@ -333,7 +332,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
           return;
       }
 
-      // Concurrency limit to not overwhelm the API
       const concurrencyLimit = 3;
       let i = 0;
 
@@ -375,7 +373,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
 
       fetchFiles(currentPath);
       
-      // Keep complete message for 2 seconds before hiding
       setTimeout(() => {
           setUploadState({ active: false, progress: 0, currentFileName: '', uploadedCount: 0, totalCount: 0 });
       }, 2000);
@@ -585,7 +582,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
             
             <div className="relative group flex items-center gap-2">
               <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm hover:bg-indigo-700 transition-colors">
-                <ArrowUpTrayIcon className="w-4 h-4" />{t('files.upload', {defaultValue: 'Files'})}
+                <ArrowUpTrayIcon className="w-4 h-4" />{t('files.upload_files_btn', {defaultValue: 'Files'})}
               </button>
               <button onClick={() => folderInputRef.current?.click()} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm hover:bg-indigo-700 transition-colors">
                 <FolderPlusIcon className="w-4 h-4" />{t('files.upload_folder', {defaultValue: 'Folder'})}
