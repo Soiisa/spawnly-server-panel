@@ -88,7 +88,24 @@ const getWaterfallDownloadUrl = async (version) => {
 
 const getForgeDownloadUrl = async (version) => `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}/forge-${version}-installer.jar`;
 const getNeoForgeDownloadUrl = async (version) => `https://maven.neoforged.net/releases/net/neoforged/neoforge/${version}/neoforge-${version}-installer.jar`;
-const getFabricDownloadUrl = async (version) => `https://meta.fabricmc.net/v2/versions/loader`;
+const getFabricDownloadUrl = async (version) => {
+  // 1. Fetch the latest stable loader for this specific MC version
+  const loaderRes = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${version}`);
+  if (!loaderRes.ok) throw new Error(`Failed to fetch Fabric loader data for MC ${version}`);
+  const loaderData = await loaderRes.json();
+  if (!loaderData || loaderData.length === 0) throw new Error(`No Fabric loaders found for MC ${version}`);
+  
+  const stableLoader = loaderData.find(l => l.loader.stable) || loaderData[0];
+  const loaderVersion = stableLoader.loader.version;
+
+  // 2. Fetch the latest installer version
+  const installerRes = await fetch('https://meta.fabricmc.net/v2/versions/installer');
+  const installerData = await installerRes.json();
+  const installerVersion = installerData[0].version;
+
+  // 3. Return the direct server .jar download link
+  return `https://meta.fabricmc.net/v2/versions/loader/${version}/${loaderVersion}/${installerVersion}/server/jar`;
+};
 
 const getQuiltDownloadUrl = async (version) => {
   const installerRes = await fetch('https://meta.quiltmc.org/v3/versions/installer');
