@@ -10,8 +10,8 @@ import {
   ClipboardDocumentIcon, PlayIcon, StopIcon, ArrowPathIcon, CpuChipIcon, 
   CurrencyDollarIcon, ClockIcon, ServerIcon, SignalIcon, UserGroupIcon, 
   PuzzlePieceIcon, PencilSquareIcon, CheckIcon, XMarkIcon, ArchiveBoxIcon, 
-  CalendarDaysIcon, TrashIcon, ShieldCheckIcon, BanknotesIcon, PlusIcon, 
-  CalendarIcon, ExclamationTriangleIcon, ArrowsPointingOutIcon
+  CalendarDaysIcon, TrashIcon, ShieldCheckIcon, BanknotesIcon, PlusIcon,
+  ArrowsPointingOutIcon, ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
 // Components
@@ -42,7 +42,7 @@ const getOnlinePlayersArray = (server) => {
 const showStatusNotification = (serverName, t) => {
   if (typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') {
-      new Notification(t('notifications.ready_title', { serverName }), { body: t('notifications.ready_body', { serverName }), icon: '/logo.png' });
+      new Notification(t('notifications.ready_title', { serverName }), { body: t('notifications.ready_body', { serverName }), icon: '/logo.png', vibrate: [200, 100, 200] });
     } else if (Notification.permission !== 'denied') {
       Notification.requestPermission();
     }
@@ -50,13 +50,13 @@ const showStatusNotification = (serverName, t) => {
 };
 
 const getDisplayInfo = (server, t) => {
-  if (!server) return { software: t ? t('software.unknown', 'Unknown') : 'Unknown', version: t ? t('software.unknown', 'Unknown') : 'Unknown' };
+  if (!server) return { software: t ? t('software.unknown') : 'Unknown', version: t ? t('software.unknown') : 'Unknown' };
   let software = server.type || 'Vanilla';
   let version = server.version || '';
   if (server.type?.startsWith('modpack-')) {
     const providerRaw = server.type.replace('modpack-', '');
     const provider = providerRaw.charAt(0).toUpperCase() + providerRaw.slice(1);
-    software = t ? `${t('software.modpack', 'Modpack')} (${provider})` : `Modpack (${provider})`;
+    software = t ? `${t('software.modpack')} (${provider})` : `Modpack (${provider})`;
     if (server.version?.includes('::')) {
       const parts = server.version.split('::');
       if (parts[1]) version = parts[1];
@@ -90,7 +90,7 @@ const ContributeModal = ({ isOpen, onClose, pool, userCredits, onContribute }) =
             <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-900 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-indigo-500" placeholder="100" />
           </div>
           <div className="flex gap-3 pt-2">
-            <button onClick={onClose} className="flex-1 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">{t('actions.cancel')}</button>
+            <button onClick={onClose} className="flex-1 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-200">{t('actions.cancel', 'Cancel')}</button>
             <button onClick={handleSubmit} disabled={loading || !amount} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-md disabled:opacity-50 flex justify-center items-center gap-2">
               {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <BanknotesIcon className="w-4 h-4" />} {t('contribute.donate', 'Donate')}
             </button>
@@ -101,6 +101,7 @@ const ContributeModal = ({ isOpen, onClose, pool, userCredits, onContribute }) =
   );
 };
 
+// --- RESTORED SCALE MODAL ---
 const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => {
     const { t } = useTranslation('server');
     const [targetRam, setTargetRam] = useState(server?.ram || 4);
@@ -184,9 +185,8 @@ export default function ServerDetailPage({ initialServer }) {
   const [error, setError] = useState(null);
   const [fileToken, setFileToken] = useState(null);
   
-  // NEW: UI state to handle Hetzner-Provision vs Wrapper-Booting gaps
   const [isLocalProvisioning, setIsLocalProvisioning] = useState(false);
-
+  
   const [editingRam, setEditingRam] = useState(false);
   const [newRam, setNewRam] = useState(null);
   const [showScaleModal, setShowScaleModal] = useState(false);
@@ -336,15 +336,11 @@ export default function ServerDetailPage({ initialServer }) {
     return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
   }, [server?.game_status, server?.last_empty_at, server?.auto_stop_timeout, server?.player_count, server?.billing_type, t]);
 
-  // NEW: Effect to gracefully handle the transition between Installing, Starting, and Running
   useEffect(() => {
     const currentStatus = server?.game_status;
-    
-    // Clear our local provisioning lock as soon as the wrapper says it's Starting or Running
     if (['Starting', 'Running'].includes(currentStatus)) {
         setIsLocalProvisioning(false);
     }
-
     const prevStatus = prevGameStatusRef.current;
     if (['Starting', 'Provisioning', 'Recreating', 'Installing'].includes(prevStatus) && currentStatus === 'Running') {
         showStatusNotification(server?.name, t);
@@ -476,8 +472,6 @@ export default function ServerDetailPage({ initialServer }) {
       const hasHardware = !!server.hetzner_id;
 
       if (finalAction === 'start' && !hasHardware) {
-        // --- UI LOCK TRIGGERED HERE ---
-        // Forces UI into "Installing Game Data" state, ignoring premature "Running" updates from DB
         setIsLocalProvisioning(true);
         setServer(p => ({ ...p, status: 'Installing', game_status: 'Installing' }));
         
@@ -487,8 +481,6 @@ export default function ServerDetailPage({ initialServer }) {
         await safeFetchJson('/api/servers/provision', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` }, body: JSON.stringify({ serverId: server.id, type: sData.pending_type || sData.type, version: sData.pending_version || sData.version, installedSoftware: installed }) });
         
         if (sData.pending_type || sData.pending_version) await supabase.from('servers').update({ pending_type: null, pending_version: null }).eq('id', server.id);
-        
-        // Wait until it shifts out of "Stopped" logic to true Running or Starting
         pollUntilStatus(['Starting', 'Running']);
       } else {
         let targetStatus = 'Stopping';
@@ -549,11 +541,9 @@ export default function ServerDetailPage({ initialServer }) {
   if (!user || loading) return <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center"><div className="flex flex-col items-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div><p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">{t('loading')}</p></div></div>;
   if (!server) return <div className="p-10 text-center dark:text-gray-400">{t('not_found')}</div>;
 
-  // --- DECOUPLED UI LOGIC ---
   const vpsStatus = server.status || 'Unknown';
-  let gameStatus = server.game_status || server.status || 'Stopped'; // Fallback for legacy database rows
+  let gameStatus = server.game_status || server.status || 'Stopped'; 
 
-  // If the VPS says Installing, or our local lock hasn't cleared yet, force gameStatus to Installing
   if (vpsStatus === 'Installing' || vpsStatus === 'Provisioning' || isLocalProvisioning) {
       gameStatus = 'Installing';
   }
@@ -864,7 +854,7 @@ export default function ServerDetailPage({ initialServer }) {
             <div className={activeTab === 'overview' ? 'hidden' : 'block animate-in fade-in duration-300'}>
               {activeTab === 'properties' && isMinecraft && myPerms.settings && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {isVpsRunning ? <ServerPropertiesEditor server={server} isAdmin={isAdmin} /> : <div className="text-center py-10 text-gray-500">{t('properties.start_to_edit', 'Please start the server to edit configuration.')}</div>}
+                  <ServerPropertiesEditor server={server} isAdmin={isAdmin} />
                 </div>
               )}
 
@@ -882,11 +872,12 @@ export default function ServerDetailPage({ initialServer }) {
 
               {activeTab === 'players' && isMinecraft && myPerms.players && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {isVpsRunning ? (fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating')}</p>) : <div className="text-center py-10 text-gray-500">{t('players.offline', 'Server is currently offline.')}</div>}
+                  {isVpsRunning ? (fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating')}</p>) : <div className="text-center py-10 text-gray-500">{t('players.start_to_access', 'Please start the server to manage players.')}</div>}
                 </div>
               )}
 
               {activeTab === 'software' && myPerms.software && (isMinecraft ? <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} /> : <ServerSoftwareTabSteam server={server} onSoftwareChange={handleSoftwareChange} />)}
+              
               {activeTab === 'mods' && myPerms.mods && (isMinecraft ? <ModsPluginsTab server={server} /> : <ModsPluginsTabSteam server={server} />)}
 
               {activeTab === 'world' && isMinecraft && myPerms.world && (
@@ -897,7 +888,7 @@ export default function ServerDetailPage({ initialServer }) {
 
               {activeTab === 'files' && myPerms.files && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {isVpsRunning ? (fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} isAdmin={isAdmin} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating_files')}</p>) : <div className="text-center py-10 text-gray-500">{t('files.start_to_access', 'Please start the server to access the File Manager.')}</div>}
+                  {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} isAdmin={isAdmin} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating_files', { defaultValue: 'Authenticating file access...' })}</p>}
                 </div>
               )}
 
