@@ -1,88 +1,256 @@
 {
+  "seo": {
+    "title": "Spawnly | Alojamento Premium de Servidores de Jogos",
+    "description": "Servidores de jogos de alta performance para Minecraft, Satisfactory e mais. Paga à hora, controla tudo."
+  },
   "hero": {
-    "announcement": "🚀 Agora com suporte para Modpacks e Plugins",
-    "read_more": "Começar",
-    "title_prefix": "Alojamento",
-    "title_highlight": "Premium de Servidores",
-    "subtitle": "Lance servidores de jogo de alto desempenho instantaneamente. Experimente faturação à hora simples, hardware empresarial e flexibilidade ilimitada.",
-    "get_started": "Começar",
-    "view_pricing": "Ver Preços"
+    "title_p1": "Comanda o Teu",
+    "title_p2": "Universo Multiplayer.",
+    "subtitle": "Alojamento em containers para Minecraft e Satisfactory. Experimenta uma performance NVMe sem lag, faturação ao minuto calculada à hora e controlo absoluto através do nosso painel de gestão feito à medida.",
+    "cta_primary": "Criar um Servidor",
+    "cta_secondary": "Ver Preços"
+  },
+  "mockup": {
+    "status": "Estado do Nó",
+    "server_name": "Satisfactory Dedicado",
+    "online": "Online",
+    "per_hour": "por hora",
+    "cpu_load": "Carga de CPU",
+    "memory": "Memória (RAM)"
+  },
+  "carousel": {
+    "title": "Biblioteca",
+    "subtitle": "Seleciona um título para criares o teu servidor dedicado.",
+    "drag_instruction": "Arrasta para a esquerda ou direita para explorar",
+    "game_button": "Alojar {{game}}",
+    "pricing_button": "Ver Preços"
+  },
+  "deepdive": {
+    "access": {
+      "title": "Acesso Direto e Controlo Total.",
+      "desc": "Deixa de depender de clientes FTP. O nosso gestor de ficheiros web integrado permite-te editar configurações, fazer upload de mundos e gerir mods diretamente do teu browser. Junta a isso a nossa consola WebSocket em direto para enviares comandos em tempo real."
+    },
+    "teams": {
+      "title": "Feito para Equipas.",
+      "desc": "Não partilhes a tua palavra-passe. Usa o nosso controlo de acessos avançado baseado em funções (RBAC) para convidares amigos ou admins para o teu servidor. Dá-lhes permissões específicas como 'Iniciar/Parar', 'Editar Ficheiros' ou 'Ver Consola' de forma totalmente segura.",
+      "sub_access": "Acesso de Subutilizadores"
+    }
+  },
+  "roles": {
+    "co_admin": "Co-Admin",
+    "full_access": "Acesso Total",
+    "moderator": "Moderador",
+    "console_only": "Apenas Consola"
   },
   "features": {
-    "label": "Funcionalidades",
-    "heading": "Tudo o que precisa para escalar",
-    "subheading": "Tudo o que precisa para correr um servidor de alto desempenho, integrado num painel moderno.",
-    "instant": {
-      "title": "Implementação Instantânea",
-      "description": "O servidor fica online segundos após a criação. Sem filas de espera, sem provisionamento manual."
-    },
+    "title": "Tudo o que precisas para alojar.",
+    "subtitle": "Um conjunto completo de ferramentas criadas especificamente para líderes de comunidade e admins de servidores de jogos.",
     "billing": {
-      "title": "Faturação à Hora",
-      "description": "Pague apenas pelo que usa. Pause o servidor para parar a cobrança enquanto mantém os ficheiros seguros."
+      "title": "Faturação à Hora Fracionada",
+      "desc": "Carrega créditos via Stripe e paga estritamente pelas horas em que o teu servidor estiver online. Desliga-o e o contador para instantaneamente."
     },
-    "storage": {
-      "title": "Armazenamento NVMe",
-      "description": "Tempos de carregamento e geração de chunks ultra-rápidos com discos NVMe de nível empresarial."
+    "schedules": {
+      "title": "Agendamentos Automáticos",
+      "desc": "Configura tarefas cron para reiniciar automaticamente o teu servidor, enviar comandos globais aos jogadores ou acionar backups de rotina enquanto dormes."
     },
-    "autostop": {
-      "title": "Paragem Automática Inteligente",
-      "description": "Nunca pague por um servidor vazio. O sistema para o servidor automaticamente quando não há jogadores online."
+    "mods": {
+      "title": "Gestor de Mods com 1 Clique",
+      "desc": "Integração profunda com o CurseForge e SteamCMD. Pesquisa, instala e atualiza modpacks e plugins de servidor com um único clique."
     },
-    "files": {
-      "title": "Acesso Total aos Ficheiros",
-      "description": "Gerencie os ficheiros do servidor diretamente no browser com o nosso gestor e editor avançado."
+    "world": {
+      "title": "Gestão do Mundo",
+      "desc": "Faz o upload das tuas gravações single-player diretamente para a cloud, ou saca o mapa do teu servidor para manteres uma cópia local segura."
     },
-    "console": {
-      "title": "Consola em Tempo Real",
-      "description": "Monitorize os logs do servidor em tempo real e execute comandos instantaneamente a partir do painel."
+    "backups": {
+      "title": "Backups Seguros",
+      "desc": "Nunca percas o teu progresso. Cria pontos de restauro manuais instantaneamente ou confia no nosso sistema de backups automáticos para manteres os teus dados seguros."
+    },
+    "isolation": {
+      "title": "Isolamento Total",
+      "desc": "Cada servidor corre num ambiente de container Docker/Kubernetes dedicado, garantindo que o teu CPU e a tua RAM nunca sofram lentidão por causa de vizinhos barulhentos."
     }
-  },
-  "steps": {
-    "heading": "Lance em segundos",
-    "subheading": "Começar na Spawnly é fácil e baseado em créditos.",
-    "1": {
-      "title": "Criar Conta",
-      "desc": "Registe uma conta gratuita para aceder ao painel."
-    },
-    "2": {
-      "title": "Carregar Créditos",
-      "desc": "Adicione fundos de forma segura. Os créditos nunca expiram."
-    },
-    "3": {
-      "title": "Criar Servidor",
-      "desc": "Escolha o software e a RAM. Jogue instantaneamente."
-    }
-  },
-  "credits_system": {
-    "title": "Faturação Inteligente para Jogadores Inteligentes",
-    "subtitle": "Pare de pagar mensalidades por servidores que ficam vazios. O nosso sistema de créditos poupa-lhe dinheiro.",
-    "recommended": "RECOMENDADO",
-    "examples": {
-      "weekend": {
-        "title": "Guerreiro de Fim de Semana",
-        "description": "Só joga aos fins de semana? Desligue o servidor durante a semana e poupe mais de 70% comparado com alojamento mensal.",
-        "saving": "Poupe ~70% / mês"
-      },
-      "casual": {
-        "title": "Grupos Casuais",
-        "description": "Organiza uma noite de jogos uma vez por semana? Pode ter um servidor de alto desempenho por cêntimos ao mês.",
-        "saving": "Poupe ~90% / mês"
-      },
-      "dev": {
-        "title": "Developers e Testes",
-        "description": "Precisa de testar um modpack ou configuração de plugin? Crie um servidor potente por 10 minutos, depois elimine-o. Custo: $0.005.",
-        "saving": "Pague ao minuto"
-      }
-    }
-  },
-  "stats": {
-    "uptime": "Uptime da Plataforma",
-    "storage": "Armazenamento NVMe",
-    "protection": "Proteção DDoS"
   },
   "cta": {
-    "title": "Pronto para começar a jornada?",
-    "subtitle": "Junte-se a milhares de outros jogadores na Spawnly hoje.",
-    "button": "Criar o Meu Servidor Agora"
+    "title": "Pronto para começares a tua comunidade?",
+    "subtitle": "Cria uma conta, adiciona créditos e tem o teu servidor online em menos de 60 segundos.",
+    "button": "Começar Agora"
+  },
+  "game_detail": {
+    "not_found": "Jogo Não Encontrado",
+    "meta_title": "Alojamento de Servidor de {{game}} | Spawnly",
+    "meta_description": "Alojamento premium de servidores dedicados de {{game}}. {{description}}",
+    "hero_hosting": "Alojamento",
+    "deploy": "Criar Servidor de {{game}}",
+    "pricing": "Ver Preços",
+    "features_title": "Porquê alojar connosco?",
+    "specs_title": "Especificações Técnicas",
+    "specs_engine": "Motor de Jogo",
+    "specs_mod_support": "Suporte para Mods",
+    "specs_mod_supported": "Totalmente Suportado",
+    "specs_billing": "Faturação",
+    "specs_billing_value": "À Hora e Mensal",
+    "specs_deployment": "Tempo de Ativação",
+    "specs_deployment_value": "< 60 Segundos",
+    "features": {
+      "ddos_title": "Proteção DDoS",
+      "ddos_desc": "Mitigação DDoS empresarial da Cloudflare e Hetzner incluída por padrão.",
+      "nvme_title": "Armazenamento NVMe",
+      "nvme_desc": "Diz adeus às paragens para guardar o jogo. Os nossos discos Gen4 NVMe garantem gravações instantâneas e carregamento rápido de chunks."
+    }
+  },
+  "games": {
+    "seo": {
+      "title": "Jogos Suportados | Spawnly",
+      "description": "Explora o nosso catálogo completo de servidores dedicados suportados, incluindo Minecraft, Rust, Palworld e mais."
+    },
+    "hero": {
+      "title": "Escolhe o teu Jogo",
+      "subtitle": "Desde sobrevivência hardcore a co-op indie leve, oferecemos a performance de que precisas para alojar a tua comunidade."
+    },
+    "minecraft": {
+      "edition": "Edição Java e Bedrock",
+      "desc": "Cria instantaneamente servidores de alta performance com suporte total para plugins e modpacks.",
+      "long_desc": "Experimenta um alojamento de Minecraft sem limites. Quer estejas a correr um servidor vanilla leve para amigos ou uma enorme rede BungeeCord com mais de 200 mods, o nosso armazenamento NVMe e os CPUs dedicados garantem zero lag de ticks e uma geração de chunks super rápida."
+    },
+    "satisfactory": {
+      "edition": "Servidores Dedicados 1.0",
+      "desc": "Constrói fábricas massivas sem lag. Otimizado para processamento contínuo em segundo plano.",
+      "long_desc": "A fábrica tem de crescer. Aloja o teu servidor dedicado de Satisfactory 1.0 num hardware feito para logística pesada. Os nossos servidores ficam online 24/7, o que significa que a tua fábrica continua a produzir recursos mesmo enquanto dormes."
+    },
+    "rust": {
+      "edition": "Vanilla e Modded",
+      "desc": "Sobrevive ao wipe com uma excelente performance NVMe para um carregamento fluido de monumentos.",
+      "long_desc": "Os servidores de Rust exigem uma performance incrível por single-core. A nossa frota entrega exatamente isso, evitando o efeito rubber-banding durante combates PvP intensos. Inclui instalação fluida de Oxide/uMod com 1 clique."
+    },
+    "palworld": {
+      "edition": "Servidor Dedicado",
+      "desc": "Captura, luta e constrói com amigos numa infraestrutura de alta performance.",
+      "long_desc": "Aloja o teu próprio servidor dedicado de Palworld. Domina Pals, constrói bases gigantescas e explora um vasto mundo aberto com até 32 jogadores. Os nossos servidores estão otimizados para uma elevada alocação de memória para evitar leaks de RAM."
+    },
+    "valheim": {
+      "edition": "Vanilla e Modded",
+      "desc": "Explora o décimo mundo com um alojamento fluido de sobrevivência Viking e suporte para BepInEx.",
+      "long_desc": "Conquista o reino mítico de Valheim com amigos. Oferecemos um alojamento robusto com suporte fácil para crossplay, backups instantâneos e injeção manual de mods BepInEx."
+    },
+    "ark_sa": {
+      "edition": "Servidor Unreal Engine 5",
+      "desc": "A sobrevivência com dinossauros reinventada. Alojado em discos NVMe de topo para um carregamento rápido.",
+      "long_desc": "Sobrevive à derradeira experiência de ARK. Criado no Unreal Engine 5, o ARK: SA exige hardware a sério. Os nossos níveis premium oferecem a RAM e o CPU pesados de que precisas para domares dinossauros com fluidez."
+    },
+    "ark_se": {
+      "edition": "Suporte para Cluster Clássico",
+      "desc": "A experiência clássica de sobrevivência. Pronto para listas massivas de mods e mapas customizados.",
+      "long_desc": "Aloja o clássico ARK: Survival Evolved. Perfeito para listas gigantes de mods, mapas customizados e grandes tribos que procuram dominar o Island."
+    },
+    "factorio": {
+      "edition": "Servidor Headless",
+      "desc": "A fábrica tem de crescer. Desfruta de uma automação perfeitamente sincronizada e sem lag.",
+      "long_desc": "Aloja um servidor headless de Factorio. Gere redes de logística complexas e linhas de automação infinitas sem perder um único UPS. Perfeito para megabases massivas."
+    },
+    "project_zomboid": {
+      "edition": "Sobrevivência Multiplayer",
+      "desc": "Foi assim que morreste. Alojamento para sobrevivência zombie multiplayer massiva e fluida.",
+      "long_desc": "Sobrevive em Knox Country com os teus amigos. Os nossos servidores lidam com hordas gigantescas de zombies, listas complexas de mods e carregamento persistente de chunks sem vacilar."
+    },
+    "gmod": {
+      "edition": "Source Engine",
+      "desc": "Diversão sandbox ilimitada com integração instantânea do Steam Workshop e fastDL.",
+      "long_desc": "Aloja TTT, DarkRP ou Sandbox. Inclui integração com 1 clique no Steam Workshop para que o teu servidor descarregue e monte os addons instantaneamente."
+    },
+    "cs2": {
+      "edition": "Matchmaking Competitivo",
+      "desc": "Alojamento com precisão sub-tick para a derradeira vantagem competitiva e servidores comunitários.",
+      "long_desc": "Experimenta a nova era do Counter-Strike. Os nossos CPUs de alta frequência garantem que a arquitetura sub-tick do Source 2 funcione exatamente como pretendido para servidores comunitários e treinos."
+    },
+    "arma3": {
+      "edition": "Sandbox Milsim",
+      "desc": "Simulação militar massiva com forte suporte para mods do Workshop e performance fiável.",
+      "long_desc": "Organiza grandes operações de armas combinadas. Os nossos servidores de Arma 3 analisam e montam automaticamente as tuas coleções do Steam Workshop, copiando as keys de forma segura para a pasta raiz."
+    },
+    "arma_reforger": {
+      "edition": "Motor Enfusion",
+      "desc": "Alojamento de simulação militar de próxima geração com ferramentas nativas poderosas para modding.",
+      "long_desc": "Experimenta o motor Enfusion. O alojamento de Arma Reforger oferece gestão de mods integrada e suporte para crossplay entre jogadores de PC e Xbox."
+    },
+    "space_engineers": {
+      "edition": "Servidor Dedicado",
+      "desc": "Constrói, mina e explora as estrelas com amigos sem lag de física.",
+      "long_desc": "Conquista o sistema solar. A nossa infraestrutura utiliza camadas de compatibilidade Wine avançadas para correr o servidor dedicado de Space Engineers (exclusivo para Windows) sem falhas em hardware Linux de alta performance."
+    },
+    "seven_days_to_die": {
+      "edition": "Sobrevivência Zombie",
+      "desc": "Sobrevive à horda da lua de sangue com alojamento nativo de alta performance.",
+      "long_desc": "Prepara-te para a 7ª noite. Aloja o teu próprio servidor dedicado 1.0 com tempos de carregamento NVMe rápidos para destruição massiva de voxels e gestão de hordas."
+    },
+    "conan_exiles": {
+      "edition": "Servidor Dedicado",
+      "desc": "Sobrevive, constrói e domina as Exiled Lands com uma performance impecável.",
+      "long_desc": "Esmaga os teus inimigos nas Exiled Lands. Os nossos servidores de Conan Exiles utilizam o nosso wrapper Wine de alta performance para entregar um combate de sobrevivência fluido e sem lag."
+    },
+    "dayz": {
+      "edition": "Sobrevivência Hardcore",
+      "desc": "Sobrevive ao pós-apocalipse com forte suporte para mods e altas taxas de tick rate.",
+      "long_desc": "O derradeiro jogo de sobrevivência hardcore. Suportamos instalações com 1 clique do Steam Workshop para montares facilmente modificações completas de mapas como Namalsk ou Deer Isle."
+    },
+    "enshrouded": {
+      "edition": "Sobrevivência Voxel",
+      "desc": "Explora um continente massivo baseado em voxels com até 16 jogadores em co-op fluido.",
+      "long_desc": "Aloja un servidor de Enshrouded para até 16 jogadores. Constrói castelos de voxels magníficos e explora o Shroud com os nossos CPUs de alta velocidade a alimentar o backend."
+    },
+    "sons_of_the_forest": {
+      "edition": "Sobrevivência Co-op",
+      "desc": "Constrói e sobrevive contra mutantes numa floresta aterradora com zero lag.",
+      "long_desc": "Aloja a tua própria aventura aterradora em co-op. Os nossos servidores oferecem uma enorme alocação de RAM para lidar com bases complexas e uma IA de mutantes agressiva sem hesitar."
+    },
+    "v_rising": {
+      "edition": "Sobrevivência de Vampiros",
+      "desc": "Acorda como um vampiro, reconstrói o teu castelo e domina a noite com amigos.",
+      "long_desc": "Domina Vardoran. Configura um reino PvE privado ou um servidor PvP brutal. O alojamento de alta performance garante que o teu combate de vampiro se mantenha afiado e responsivo."
+    },
+    "core_keeper": {
+      "edition": "Sandbox de Mineração",
+      "desc": "Mina, constrói e explora nesta aventura subterrânea em co-op.",
+      "long_desc": "Aloja um mundo subterrâneo persistente. O Core Keeper usa recursos mínimos, tornando-se o servidor perfeito e acessível para correres 24/7 para o teu grupo de amigos."
+    },
+    "squad": {
+      "edition": "FPS Táctico",
+      "desc": "Shooter táctico 50v50 com performance de servidor robusta para operações em grande escala.",
+      "long_desc": "Alimenta as operações de 100 jogadores do teu clã. O Squad depende fortemente de processadores de alta frequência para manter 50 TPS. Entregamos o poder de computação de que a tua comunidade precisa."
+    },
+    "insurgency_sandstorm": {
+      "edition": "Táctico Hardcore",
+      "desc": "Combate intenso em espaços fechados e multiplayer baseado em objetivos.",
+      "long_desc": "Aloja servidores de Insurgency rápidos e com alto tick rate. Suporte completo para mapas e mutadores do Steam Workshop diretamente do teu painel."
+    },
+    "unturned": {
+      "edition": "Sandbox Zombie",
+      "desc": "Sobrevivência free-to-play com uma comunidade massiva e suporte extensivo para mods.",
+      "long_desc": "Aloja servidores de Unturned leves, rápidos e facilmente modificáveis. Perfeito para grandes comunidades que queiram instalar o RocketMod e assets customizados do Steam Workshop."
+    },
+    "tf2": {
+      "edition": "Source Engine",
+      "desc": "Alojamento do clássico shooter baseado em classes com integração instantânea de FastDL.",
+      "long_desc": "Mantém o clássico vivo. Aloja servidores 24/7 de 2Fort, mapas de Jump ou servidores MGE com suporte total para SourceMod/MetaMod e latência ultra-baixa."
+    },
+    "l4d2": {
+      "edition": "Shooter Zombie Co-op",
+      "desc": "Sobrevive ao apocalipse com suporte fluido para campanhas customizadas e mods.",
+      "long_desc": "Aloja Versus de 8 jogadores ou Co-op de 4 jogadores. Suporta totalmente campanhas personalizadas do Steam Workshop e SourceMod para uma IA do realizador intensa e modificada."
+    },
+    "dst": {
+      "edition": "Sobrevivência na Selva",
+      "desc": "Jogo de sobrevivência implacável repleto de ciência e magia.",
+      "long_desc": "Sobrevivam juntos. Os servidores de DST são incrivelmente leves, o que significa que podes alojar mega-mundos massivos para os teus amigos por uma fração do custo."
+    },
+    "terraria": {
+      "edition": "Vanilla e TShock",
+      "desc": "Escava, luta, explora e constrói com um suporte robusto para plugins.",
+      "long_desc": "Aloja servidores de Terraria cross-platform usando o TShock. Ganha controlo total de admin, proteção de mundo e suporte para multiplayer massivo nas nossas instâncias leves."
+    },
+    "stardew_valley": {
+      "edition": "Quinta em Co-op",
+      "desc": "Cria a tua quinta, recolhe recursos e constrói uma comunidade com alojamento multiplayer fluido.",
+      "long_desc": "Aloja uma quinta persistente 24/7 para ti e para os teus amigos. Utilizamos wrappers headless de código aberto para manter o teu mundo de Stardew Valley vivo mesmo quando desligas o jogo."
+    }
   }
 }

@@ -11,7 +11,16 @@
     "save": "Save",
     "cancel": "Cancel",
     "confirm": "Confirm",
-    "kill": "Kill"
+    "kill": "Kill",
+    "create": "Create",
+    "download": "Download",
+    "rename": "Rename",
+    "move": "Move",
+    "edit": "Edit",
+    "delete": "Delete",
+    "hard_restart_tooltip": "Shift+Click for Hard Restart (Reboot VPS Hardware)",
+    "restart_tooltip": "Restart Server",
+    "force_kill_tooltip": "Force Kill"
   },
   "tour": {
     "welcome_title": "Server Command Center",
@@ -63,13 +72,17 @@
     "mods_plugins": "Mods/Plugins",
     "world": "World",
     "files": "Files",
-    "backups": "Backups"
+    "backups": "Backups",
+    "release_branch": "Release Branch",
+    "access": "Access"
   },
   "connection": {
     "title": "Connection",
     "address": "Server Address",
     "software": "Software",
-    "version": "Version"
+    "version": "Version",
+    "game": "Game",
+    "branch": "Branch"
   },
   "resources": {
     "title": "Live Resources",
@@ -87,7 +100,10 @@
     "stopping_soon": "Stopping soon...",
     "stopping_in": "Stopping in {{time}}",
     "ram_allocation": "RAM Allocation",
-    "edit_ram": "Edit"
+    "edit_ram": "Edit",
+    "update_on_start_title": "Update on Start",
+    "update_on_start_desc": "Automatically verify and install base game updates via SteamCMD when booting up.",
+    "scale_ram": "Scale RAM"
   },
   "billing": {
     "title": "Billing Status",
@@ -98,7 +114,15 @@
     "warning_low": "Warning: Low balance. Server may stop soon.",
     "source": "Billing Source",
     "personal_wallet": "Personal Wallet",
-    "pool_explanation": "If the pool runs out of credits, the server will attempt to charge your personal wallet."
+    "pool_explanation": "If the pool runs out of credits, the server will attempt to charge your personal wallet.",
+    "contribute": "Contribute",
+    "active_pool": "Active Pool",
+    "balance": "Balance",
+    "unknown": "Unknown",
+    "flat_monthly_cost": "Flat Monthly Cost",
+    "credits_mo": "credits/mo",
+    "next_billing": "Next Billing Date",
+    "setup_autopay": "Setup Autopay"
   },
   "errors": {
     "load_session": "Failed to load session data.",
@@ -107,7 +131,43 @@
     "failed_action": "Failed to {{action}}: {{message}}",
     "stop_ram": "Server must be stopped to change RAM.",
     "ram_range": "RAM must be between 2 and 32 GB.",
-    "save_motd": "Failed to save MOTD"
+    "save_motd": "Failed to save MOTD",
+    "update_auto_update": "Failed to update auto-update settings.",
+    "update_billing": "Failed to update billing source.",
+    "no_permission_control": "You do not have permission to control this server.",
+    "only_owner_ram": "Only owner can change RAM billing",
+    "permission_denied": "Permission denied",
+    "no_permission": "Permission denied",
+    "no_session": "No active session"
+  },
+  "messages": {
+    "confirm_hard_restart": "Are you sure you want to perform a HARD RESTART? This will power-cycle the entire VPS hardware instead of just safely restarting the game.",
+    "confirm_kill": "Are you sure you want to force kill the server?",
+    "default_motd": "A Spawnly Server",
+    "dismiss": "Dismiss"
+  },
+  "scale": {
+    "title": "Scale Server RAM",
+    "desc": "Modify hardware allocation dynamically.",
+    "downtime_label": "Expected Downtime:",
+    "downtime_desc": "Scaling requires the server to be forcefully stopped and re-provisioned. Expect ~60 seconds of downtime.",
+    "select_tier": "Select New RAM Tier",
+    "tier_option": "{{tier}} GB RAM — {{cost}} Credits/mo",
+    "current_plan": "Current Plan",
+    "new_plan": "New Plan",
+    "prorated_due": "Prorated Cost Due",
+    "prorated_refund": "Prorated Refund",
+    "available_balance": "Available Balance:",
+    "confirm": "Confirm & Scale"
+  },
+  "contribute": {
+    "title": "Contribute to Server",
+    "desc_prefix": "Add credits to ",
+    "wallet": "Your Wallet",
+    "amount": "Amount",
+    "donate": "Donate",
+    "success": "Contribution successful!",
+    "failed": "Contribution failed: {{message}}"
   },
   "notifications": {
     "ready_title": "{{serverName}} is READY!",
@@ -126,7 +186,8 @@
     "disconnected": "Disconnected",
     "processing": "Processing",
     "authenticating": "Authenticating...",
-    "authenticating_files": "Authenticating file access..."
+    "authenticating_files": "Authenticating file access...",
+    "vps_status": "VPS {{status}}"
   },
   "console": {
     "title": "Terminal",
@@ -152,7 +213,8 @@
     "errors": {
       "failed_send": "Failed to send command",
       "no_session": "No active session"
-    }
+    },
+    "start_to_access": "Please start the server to access the live console."
   },
   "metrics": {
     "cpu": "CPU Usage",
@@ -220,7 +282,8 @@
       "save": "Save Changes",
       "confirm_discard": "Discard all unsaved changes?",
       "save_success": "Properties saved successfully! Restart server to apply."
-    }
+    },
+    "start_to_edit": "Please start the server to edit configuration."
   },
   "files": {
     "empty": "This folder is empty",
@@ -233,6 +296,10 @@
     "delete_fail": "Delete failed",
     "delete_confirm": "Delete {{name}}? This cannot be undone.",
     "drop_to_upload": "Drop files to upload",
+    "create_folder": "Create Folder",
+    "create_file": "Create File",
+    "upload_files_btn": "Files",
+    "upload_folder": "Folder",
     "overwrite": {
       "title": "Confirm Overwrite",
       "message": "The following items already exist in this directory. Uploading will overwrite or merge them:",
@@ -252,7 +319,14 @@
     "editor": {
       "save_changes": "Save Changes",
       "saving": "Saving..."
-    }
+    },
+    "errors": {
+      "move_fail": "Move failed",
+      "create_fail": "Failed to create item",
+      "invalid_nbt": "Invalid NBT data. This file might be a binary save, not a Minecraft NBT file.",
+      "open_fail": "Could not open file"
+    },
+    "start_to_access": "Please start the server to access the File Manager."
   },
   "backups": {
     "title": "Backups",
@@ -320,7 +394,8 @@
       "l2": "Level 2 (Command blocks)",
       "l3": "Level 3 (Kick/Ban)",
       "l4": "Level 4 (Stop/Operator)"
-    }
+    },
+    "offline": "Server is currently offline."
   },
   "schedules": {
     "title": "Automation",
@@ -371,7 +446,12 @@
       "release": "Release",
       "beta": "Beta",
       "alpha": "Alpha",
-      "server_pack": "Server Pack"
+      "server_pack": "Server Pack",
+      "stable": "Stable",
+      "dev": "Dev",
+      "legacy": "Legacy",
+      "private": "Private",
+      "public": "Public"
     },
     "buttons": {
       "show_all": "Show All",
@@ -381,8 +461,56 @@
       "change_pack": "Change Pack",
       "install": "Install Modpack",
       "save": "Save Changes",
+      "saving": "Saving...",
       "confirm_install": "Confirm & Install",
       "resolving": "Resolving Server Files..."
+    },
+    "steam_config": {
+      "title": "Server Configuration",
+      "currently_active": "CURRENTLY ACTIVE",
+      "success_saved": "Settings updated successfully! Please Restart the server to apply changes.",
+      "error_failed": "Failed to update settings.",
+      "modal_title": "Confirm Configuration Change",
+      "modal_desc": "You are about to switch the server configuration to <strong>{{branch}}</strong>. The server will apply these changes the next time it restarts.",
+      "modal_warning": "If you are switching to an experimental or beta branch, we highly recommend taking a backup of your save files first.",
+      "btn_cancel": "Cancel",
+      "btn_confirm": "Confirm Change"
+    },
+    "steam_branches": {
+      "rust_public_name": "Public (Main)",
+      "rust_public_desc": "The stable default branch. Used by 99% of public servers and players.",
+      "rust_staging_name": "Staging",
+      "rust_staging_desc": "The testing branch for upcoming updates. Wipes frequently and may contain bugs.",
+      "rust_aux01_name": "Aux01",
+      "rust_aux01_desc": "Bleeding edge developer testing branch. Highly unstable.",
+      "arma3_public_name": "Public (Main)",
+      "arma3_public_desc": "The stable default branch. Recommended for all standard communities.",
+      "arma3_profiling_name": "Profiling (Performance)",
+      "arma3_profiling_desc": "Special build with performance optimizations and server debugging tools.",
+      "arma3_rc_name": "Release Candidate",
+      "arma3_rc_desc": "Testing branch for upcoming stable updates.",
+      "arma3_legacy_name": "Legacy Build",
+      "arma3_legacy_desc": "An older stable version kept for compatibility with outdated mods.",
+      "palworld_private_name": "Private Server (Direct Connect)",
+      "palworld_private_desc": "Default server mode. Does not show up on the community browser. Players must connect directly via IP.",
+      "palworld_public_name": "Community Server (Public)",
+      "palworld_public_desc": "Publicly listed server. Automatically broadcasts to the in-game community browser and BattleMetrics.",
+      "gmod_public_name": "Standard (32-bit)",
+      "gmod_public_desc": "The stable default branch.",
+      "gmod_x64_name": "x86-64 (64-bit)",
+      "gmod_x64_desc": "Modern 64-bit branch. Recommended for better performance and higher memory limits.",
+      "gmod_chromium_name": "Chromium",
+      "gmod_chromium_desc": "Includes updated embedded Chromium for modern web panels.",
+      "valheim_public_name": "Public (Main)",
+      "valheim_public_desc": "The stable default branch.",
+      "valheim_test_name": "Public Test",
+      "valheim_test_desc": "Testing branch for upcoming updates. May be unstable.",
+      "exp_public_name": "Public (Stable)",
+      "exp_public_desc": "The default, stable branch of the game. Recommended for most players.",
+      "exp_experimental_name": "Experimental",
+      "exp_experimental_desc": "The bleeding-edge branch. Contains the latest features but may be unstable.",
+      "fallback_public_name": "Public Branch",
+      "fallback_public_desc": "The official, stable release branch for this game."
     },
     "placeholders": {
       "search_version": "Search version...",
@@ -422,7 +550,9 @@
     "messages": {
       "saved_reinstall": "Configuration saved. Server will be completely re-installed on next restart.",
       "saved": "Configuration saved successfully."
-    }
+    },
+    "unknown": "Unknown",
+    "modpack": "Modpack"
   },
   "world": {
     "warning_running_title": "Server is Running",
@@ -490,6 +620,163 @@
       "generate_fail": "Generation failed",
       "load_level_fail": "Could not find world/level.dat. Has the world been generated?",
       "save_fail": "Failed to save level.dat"
+    },
+    "start_to_manage": "Please start the server to manage worlds."
+  },
+  "access": {
+    "edit_permissions": "Edit Permissions",
+    "manage_access": "Manage Access",
+    "update": "Update",
+    "invite": "Invite",
+    "email_placeholder": "User Email",
+    "permissions_header": "Permissions",
+    "no_users": "No users have been granted access yet.",
+    "active_permissions": "active permissions",
+    "revoke_confirm": "Revoke access?",
+    "operation_failed": "Operation failed",
+    "revoke_title": "Revoke Access",
+    "perms": {
+      "control": "Control (Start/Stop)",
+      "console": "Console Access",
+      "files": "File Manager",
+      "settings": "Settings (Properties)",
+      "schedules": "Schedules",
+      "players": "Player Manager",
+      "software": "Change Software",
+      "mods": "Mods & Plugins",
+      "world": "World Manager",
+      "backups": "Backups"
+    },
+    "logs": {
+      "title": "Activity Logs",
+      "search_placeholder": "Search logs...",
+      "col_user": "User",
+      "col_action": "Action",
+      "col_details": "Details",
+      "col_time": "Time",
+      "no_search_results": "No logs found matching your search.",
+      "no_activity": "No activity recorded yet.",
+      "system_unknown": "System / Unknown",
+      "showing": "Showing",
+      "to": "to",
+      "of": "of",
+      "results": "results",
+      "page": "Page"
+    }
+  },
+  "mods_plugins": {
+    "tabs": {
+      "mods": "Mods",
+      "plugins": "Plugins"
+    },
+    "search": {
+      "placeholder_plugins": "Search Bukkit plugins...",
+      "placeholder_mods": "Search Mods...",
+      "placeholder_umod": "Search uMod Plugins...",
+      "placeholder_workshop": "Search Steam Workshop...",
+      "placeholder_ficsit": "Search FICSIT Mod Repository...",
+      "searching": "Searching...",
+      "button": "Search"
+    },
+    "catalog": {
+      "loading": "Fetching resources...",
+      "empty_title": "No resources found",
+      "empty_desc": "Try a different search term or check compatibility",
+      "loading_more": "Loading...",
+      "load_more": "Load More",
+      "scanning": "Scanning database...",
+      "empty_results": "No results found"
+    },
+    "item": {
+      "no_description": "No description provided.",
+      "select_version": "Select Version",
+      "downloads": "downloads",
+      "dependency": "Dependency"
+    },
+    "modal": {
+      "view_curseforge_tooltip": "Click to view on CurseForge",
+      "open_curseforge": "Open in CurseForge",
+      "tab_downloads": "Downloads",
+      "tab_dependencies": "Dependencies",
+      "loading_versions": "Fetching versions...",
+      "installing_btn": "Installing...",
+      "install_btn": "Install",
+      "loading_dependencies": "Fetching dependency details...",
+      "empty_dependencies_title": "No required dependencies found.",
+      "empty_dependencies_desc": "This mod should work standalone.",
+      "required_dependencies_html": "These mods are required for <b>{{name}}</b> to work. Please install them as well.",
+      "empty_versions": "No versions found for this mod.",
+      "sml_required": "SML Required:",
+      "any": "Any"
+    },
+    "messages": {
+      "login_required": "You must be logged in to install content.",
+      "install_success": "Installed {{name}} ({{version}}) to /{{folder}}! Restart server to apply.",
+      "oxide_stop_required": "You must STOP the server from the Overview tab before installing or updating Oxide.",
+      "oxide_install_success": "Oxide Framework installed successfully! You can now start the server.",
+      "gmod_save_success": "Workshop Collection saved! Restart the server to apply.",
+      "gmod_save_failed": "Failed to save settings.",
+      "mod_stop_required": "You must STOP the server before installing {{game}} mods.",
+      "workshop_queued": "Download Queued! Go to the Overview tab and check the Server Console to watch the live download progress.",
+      "rust_download_success": "Successfully downloaded {{name}}! Oxide will compile it automatically.",
+      "install_success_restart": "Successfully installed {{name}} ({{version}})! Restart server to initialize.",
+      "uninstall_confirm": "Are you sure you want to remove {{name}}?",
+      "remove_success": "Successfully removed {{name}}.",
+      "uninstall_workshop_success": "Successfully uninstalled Workshop Mod {{name}}.",
+      "uninstall_success_restart": "Successfully uninstalled {{name}}! Restart server to apply."
+    },
+    "errors": {
+      "fetch_catalog": "Failed to load resources: {{error}}",
+      "fetch_versions": "Failed to load versions: {{error}}",
+      "install_failed": "Installation failed",
+      "fetch_installed": "Failed to fetch installed mods",
+      "uninstall_failed": "Uninstallation failed"
+    },
+    "steam": {
+      "rust": {
+        "oxide_required_title": "Oxide Framework Required",
+        "oxide_required_desc": "Vanilla Rust does not support plugins natively. To browse and install plugins from the uMod repository, you must first install the Oxide framework onto your server.",
+        "install_oxide_btn": "Install Oxide Framework",
+        "server_must_stop": "You must STOP the server to install."
+      },
+      "gmod": {
+        "title": "Garry's Mod Workshop Collection",
+        "desc": "To ensure maximum stability and native client syncing, Garry's Mod dedicated servers require the use of Steam Workshop Collections rather than individual mod files.",
+        "api_key_label": "Steam Web API Key",
+        "api_key_placeholder": "e.g. 1A2B3C4D5E6F7G8H9I0J",
+        "api_key_help_prefix": "Get this from",
+        "api_key_help_link": "Steam Community Developer",
+        "collection_label": "Workshop Collection ID",
+        "collection_placeholder": "e.g. 123456789",
+        "collection_help": "The ID at the end of your Steam Workshop Collection URL (?id=XXXXX).",
+        "saving_btn": "Saving...",
+        "save_btn": "Save & Sync"
+      },
+      "unsupported": {
+        "title": "No Mod Manager Available",
+        "desc": "Our automated mod manager does not currently support {{game}}. You can still install mods manually using the File Manager tab."
+      },
+      "view_browse": "Browse Catalog",
+      "view_installed_plugins": "Installed Plugins",
+      "view_installed_mods": "Installed Mods",
+      "update_oxide": "Update Oxide",
+      "install_mod_keys": "Install Mod & Keys",
+      "download_install": "Download & Install",
+      "scanning_folder": "Scanning folder...",
+      "empty_installed_plugins": "No plugins currently installed.",
+      "empty_installed_mods": "No mods currently installed.",
+      "browse_catalog_link": "Browse the Catalog",
+      "installed_title_plugins": "Installed Plugins",
+      "installed_title_mods": "Installed Mods",
+      "read_from_oxide": "Read from oxide/plugins/",
+      "read_from_workshop": "Read from workshop/content/{{appId}}/",
+      "read_from_profiles": "Read from profiles.json",
+      "type_workshop": "Steam Workshop Mod",
+      "type_script": "C# Script",
+      "btn_delete": "Delete",
+      "status_enabled": "Enabled",
+      "status_disabled": "Disabled",
+      "btn_uninstall": "Uninstall"
     }
   }
 }

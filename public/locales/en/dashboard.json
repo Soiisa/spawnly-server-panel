@@ -80,6 +80,13 @@
     "stats_title": "Resource Overview",
     "stats_content": "Here you can monitor your total active servers, memory usage, and hourly costs.",
     "create_title": "Launch a Server",
-    "create_content": "Click here to deploy your first Minecraft server in seconds!"
+    "create_content": "Click here to deploy your first Minecraft server in seconds!",
+    "buttons": {
+      "back": "Back",
+      "close": "Close",
+      "last": "Done",
+      "next": "Next",
+      "skip": "Skip Tour"
+    }
   }
 }

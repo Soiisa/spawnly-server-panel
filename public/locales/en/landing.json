@@ -19,21 +19,11 @@
     "memory": "Memory (RAM)"
   },
   "carousel": {
-    "title": "Deploy Your Next Adventure",
+    "title": "Library",
+    "subtitle": "Select a title to deploy your dedicated server.",
     "drag_instruction": "Drag left or right to explore",
     "host_button": "Host {{game}}",
-    "minecraft": {
-      "edition": "Java & Bedrock Edition",
-      "desc": "Instantly deploy high-performance servers with full plugin and modpack support."
-    },
-    "satisfactory": {
-      "edition": "1.0 Dedicated Servers",
-      "desc": "Build massive factories without lag. Optimized for continuous background processing."
-    },
-    "rust": {
-      "edition": "Vanilla & Modded",
-      "desc": "Survive the wipe with extreme NVMe performance for seamless monument loading."
-    }
+    "pricing_button": "View Pricing"
   },
   "deepdive": {
     "access": {
@@ -84,5 +74,183 @@
     "title": "Ready to start your community?",
     "subtitle": "Create an account, add credits, and have your server online in less than 60 seconds.",
     "button": "Get Started Now"
+  },
+  "game_detail": {
+    "not_found": "Game Not Found",
+    "meta_title": "{{game}} Server Hosting | Spawnly",
+    "meta_description": "Premium {{game}} dedicated server hosting. {{description}}",
+    "hero_hosting": "Hosting",
+    "deploy": "Deploy {{game}} Server",
+    "pricing": "View Pricing",
+    "features_title": "Why host with us?",
+    "specs_title": "Technical Specs",
+    "specs_engine": "Game Engine",
+    "specs_mod_support": "Mod Support",
+    "specs_mod_supported": "Fully Supported",
+    "specs_billing": "Billing",
+    "specs_billing_value": "Hourly & Monthly",
+    "specs_deployment": "Deployment Time",
+    "specs_deployment_value": "< 60 Seconds",
+    "features": {
+      "ddos_title": "DDoS Protection",
+      "ddos_desc": "Enterprise-grade Cloudflare and Hetzner DDoS mitigation comes standard.",
+      "nvme_title": "NVMe Storage",
+      "nvme_desc": "Say goodbye to save-pauses. Our Gen4 NVMe drives ensure instant saving and chunk loading."
+    }
+  },
+  "games": {
+    "seo": {
+      "title": "Supported Games | Spawnly",
+      "description": "Browse our full catalog of supported dedicated servers including Minecraft, Rust, Palworld, and more."
+    },
+    "hero": {
+      "title": "Choose your Game",
+      "subtitle": "From hardcore survival to lightweight indie co-op, we provide the performance you need to host your community."
+    },
+    "minecraft": {
+      "edition": "Java & Bedrock Edition",
+      "desc": "Instantly deploy high-performance servers with full plugin and modpack support.",
+      "long_desc": "Experience Minecraft hosting without limits. Whether you are running a lightweight vanilla server for friends or a massive BungeeCord network with 200+ mods, our NVMe storage and dedicated CPUs ensure zero tick-lag and lightning-fast chunk generation."
+    },
+    "satisfactory": {
+      "edition": "1.0 Dedicated Servers",
+      "desc": "Build massive factories without lag. Optimized for continuous background processing.",
+      "long_desc": "The factory must grow. Host your Satisfactory 1.0 dedicated server on hardware built for heavy logistics. Our servers stay online 24/7, meaning your factory keeps producing resources even while you sleep."
+    },
+    "rust": {
+      "edition": "Vanilla & Modded",
+      "desc": "Survive the wipe with extreme NVMe performance for seamless monument loading.",
+      "long_desc": "Rust servers require incredible single-core performance. Our fleet delivers exactly that, preventing rubber-banding during intense PvP firefights. Includes seamless 1-click Oxide/uMod installation."
+    },
+    "palworld": {
+      "edition": "Dedicated Server",
+      "desc": "Capture, battle, and build with friends on high-performance infrastructure.",
+      "long_desc": "Host your own Palworld dedicated server. Tame Pals, build massive bases, and explore a vast open world with up to 32 players. Our servers are optimized for high memory allocation to prevent memory leaks."
+    },
+    "valheim": {
+      "edition": "Vanilla & Modded",
+      "desc": "Explore the tenth world with seamless Viking survival hosting and BepInEx support.",
+      "long_desc": "Conquer the mythical realm of Valheim with friends. We provide robust hosting with easy crossplay support, instant backups, and manual BepInEx mod injection."
+    },
+    "ark_sa": {
+      "edition": "Unreal Engine 5 Server",
+      "desc": "Dinosaur survival reimagined. Hosted on extreme NVMe drives for fast loading.",
+      "long_desc": "Survive the definitive ARK experience. Built on Unreal Engine 5, ARK: SA requires serious hardware. Our premium tiers provide the heavy-duty RAM and CPU needed for smooth dino-taming."
+    },
+    "ark_se": {
+      "edition": "Classic Cluster Support",
+      "desc": "The classic survival experience. Ready for massive mod lists and custom maps.",
+      "long_desc": "Host classic ARK: Survival Evolved. Perfect for massive mod lists, custom maps, and large tribes looking to dominate the Island."
+    },
+    "factorio": {
+      "edition": "Headless Server",
+      "desc": "The factory must grow. Enjoy perfectly synchronized, lag-free automation.",
+      "long_desc": "Host a Factorio headless server. Manage sprawling logistics networks and infinite automation lines without dropping a single UPS. Perfect for massive megabases."
+    },
+    "project_zomboid": {
+      "edition": "Multiplayer Survival",
+      "desc": "This is how you died. Massive, seamless multiplayer zombie survival hosting.",
+      "long_desc": "Survive Knox Country with your friends. Our servers handle vast zombie hordes, complex mod lists, and persistent chunk loading flawlessly."
+    },
+    "gmod": {
+      "edition": "Source Engine",
+      "desc": "Limitless sandbox fun with instant Steam Workshop integration and fastDL.",
+      "long_desc": "Host TTT, DarkRP, or Sandbox. Features 1-click Steam Workshop integration so your server downloads addons and mounts them instantly."
+    },
+    "cs2": {
+      "edition": "Competitive Matchmaking",
+      "desc": "Sub-tick precision hosting for the ultimate competitive edge and community servers.",
+      "long_desc": "Experience the new era of Counter-Strike. Our high-frequency CPUs ensure Source 2’s sub-tick architecture performs exactly as intended for community servers and scrims."
+    },
+    "arma3": {
+      "edition": "Milsim Sandbox",
+      "desc": "Massive military simulation with heavy Workshop mod support and reliable performance.",
+      "long_desc": "Deploy massive combined-arms operations. Our Arma 3 servers automatically parse and mount your Steam Workshop collections, copying keys securely to the root folder."
+    },
+    "arma_reforger": {
+      "edition": "Enfusion Engine",
+      "desc": "Next-gen military simulation hosting with powerful native modding tools.",
+      "long_desc": "Experience the Enfusion engine. Arma Reforger hosting offers built-in mod management and crossplay support for PC and Xbox players."
+    },
+    "space_engineers": {
+      "edition": "Dedicated Server",
+      "desc": "Build, mine, and explore the stars with friends without physics lag.",
+      "long_desc": "Conquer the solar system. Our infrastructure utilizes advanced Wine compatibility layers to run the Windows-only Space Engineers dedicated server seamlessly on high-performance Linux hardware."
+    },
+    "seven_days_to_die": {
+      "edition": "Zombie Survival",
+      "desc": "Survive the blood moon horde with native high-performance hosting.",
+      "long_desc": "Prepare for the 7th night. Host your own 1.0 dedicated server with fast NVMe loading times for vast voxel destruction and horde management."
+    },
+    "conan_exiles": {
+      "edition": "Dedicated Server",
+      "desc": "Survive, build, and dominate the Exiled Lands with flawless performance.",
+      "long_desc": "Crush your enemies in the Exiled Lands. Our Conan Exiles servers utilize our high-performance Wine wrapper to deliver seamless, lag-free survival combat."
+    },
+    "dayz": {
+      "edition": "Hardcore Survival",
+      "desc": "Survive the post-apocalypse with heavy modding support and high tick rates.",
+      "long_desc": "The ultimate hardcore survival game. We support 1-click Steam Workshop installations to easily mount map overhauls like Namalsk or Deer Isle."
+    },
+    "enshrouded": {
+      "edition": "Voxel Survival",
+      "desc": "Explore a massive voxel-based continent with up to 16 players in seamless co-op.",
+      "long_desc": "Host an Enshrouded server for up to 16 players. Build magnificent voxel castles and explore the shroud with our high-clock CPUs powering the backend."
+    },
+    "sons_of_the_forest": {
+      "edition": "Co-op Survival",
+      "desc": "Build and survive against mutants in a terrifying forest with zero lag.",
+      "long_desc": "Host your terrifying co-op adventure. Our servers provide massive RAM allocation to handle sprawling bases and aggressive mutant AI without skipping a beat."
+    },
+    "v_rising": {
+      "edition": "Vampire Survival",
+      "desc": "Awaken as a vampire, rebuild your castle, and rule the night with friends.",
+      "long_desc": "Rule Vardoran. Set up a private PvE realm or a brutal PvP server. High-performance hosting ensures your vampire combat remains sharp and responsive."
+    },
+    "core_keeper": {
+      "edition": "Mining Sandbox",
+      "desc": "Mine, build, and explore in this underground co-op adventure.",
+      "long_desc": "Host a persistent underground world. Core Keeper uses minimal resources, making it a perfect, affordable server to run for your friend group 24/7."
+    },
+    "squad": {
+      "edition": "Tactical FPS",
+      "desc": "50v50 tactical shooter with robust server performance for large-scale operations.",
+      "long_desc": "Power your clan's 100-player operations. Squad relies heavily on high-frequency processors to maintain 50 TPS. We deliver the compute power your community needs."
+    },
+    "insurgency_sandstorm": {
+      "edition": "Hardcore Tactical",
+      "desc": "Intense close-quarters combat and objective-based multiplayer.",
+      "long_desc": "Host lightning-fast, high-tickrate Insurgency servers. Complete support for Steam Workshop maps and mutators right from our dashboard."
+    },
+    "unturned": {
+      "edition": "Zombie Sandbox",
+      "desc": "Free-to-play survival with a massive community and extensive mod support.",
+      "long_desc": "Host lightweight, fast, and easily moddable Unturned servers. Perfect for large communities looking to install RocketMod and custom Steam Workshop assets."
+    },
+    "tf2": {
+      "edition": "Source Engine",
+      "desc": "Classic class-based shooter hosting with instant FastDL integration.",
+      "long_desc": "Keep the classic alive. Host 24/7 2Fort, Jump maps, or MGE servers with full SourceMod/MetaMod support and ultra-low latency."
+    },
+    "l4d2": {
+      "edition": "Co-op Zombie Shooter",
+      "desc": "Survive the apocalypse with seamless custom campaign and mod support.",
+      "long_desc": "Host 8-player Versus or 4-player Co-op. Fully supports Steam Workshop custom campaigns and SourceMod for intense, heavily modified director AI."
+    },
+    "dst": {
+      "edition": "Wilderness Survival",
+      "desc": "Uncompromising wilderness survival game full of science and magic.",
+      "long_desc": "Survive together. DST servers are incredibly lightweight, meaning you can host massive mega-worlds for your friends at a fraction of the cost."
+    },
+    "terraria": {
+      "edition": "Vanilla & TShock",
+      "desc": "Dig, fight, explore, and build with robust plugin support.",
+      "long_desc": "Host cross-platform Terraria servers using TShock. Gain full admin control, world protection, and massive multiplayer support on our lightweight instances."
+    },
+    "stardew_valley": {
+      "edition": "Co-op Farming",
+      "desc": "Farm, forage, and build a community with seamless multiplayer hosting.",
+      "long_desc": "Host a persistent 24/7 farm for you and your friends. We utilize open-source headless wrappers to keep your Stardew Valley world alive even when you log off."
+    }
   }
 }

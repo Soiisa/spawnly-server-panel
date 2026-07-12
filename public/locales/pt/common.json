@@ -1,7 +1,7 @@
 {
   "nav": {
     "dashboard": "Painel",
-    "pools": "Pools de Crédito",
+    "pools": "Pools de Créditos",
     "billing": "Faturação",
     "logout": "Terminar sessão",
     "settings": "Definições",
@@ -17,39 +17,39 @@
   },
   "public_nav": {
     "pricing": "Preços",
-    "login": "Entrar",
+    "login": "Iniciar sessão",
     "get_started": "Começar"
   },
   "footer": {
     "rights": "Todos os direitos reservados.",
-    "imprint": "Ficha Técnica",
+    "imprint": "Informação Legal",
     "terms": "Termos",
     "privacy": "Privacidade",
-    "aup": "PUA",
+    "aup": "AUP",
     "refunds": "Reembolsos",
     "support": "Suporte"
   },
   "cookie": {
-    "text": "Utilizamos cookies para garantir a melhor experiência na Spawnly. Ao continuar, concorda com a nossa <1>Política de Privacidade</1> e <3>Termos de Serviço</3>.",
+    "text": "Usamos cookies para garantir que tens a melhor experiência no Spawnly. Ao continuares, concordas com a nossa <1>Política de Privacidade</1> e <3>Termos de Serviço</3>.",
     "accept": "Aceitar e Continuar"
   },
   "settings": {
     "title": "Definições de Utilizador",
     "profile": "Perfil",
-    "profile_desc": "Gerir o seu perfil público",
-    "username": "Nome de utilizador",
+    "profile_desc": "Gere o teu perfil público",
+    "username": "Nome de Utilizador",
     "save": "Guardar",
     "success": "Sucesso! Nome de utilizador atualizado.",
-    "username_error": "O nome de utilizador deve ter pelo menos 3 caracteres.",
+    "username_error": "O nome de utilizador tem de ter pelo menos 3 caracteres.",
     "updating": "A atualizar...",
     "error_generic": "Erro",
     "language": "Idioma",
-    "language_desc": "Selecione o seu idioma preferido",
+    "language_desc": "Seleciona o teu idioma preferido",
     "appearance": "Aparência",
     "appearance_desc": "Alternar modo escuro",
     "security": "Segurança",
-    "security_desc": "Gerir a sua palavra-passe e segurança da conta",
-    "change_password": "Alterar Palavra-passe"
+    "security_desc": "Gere a tua palavra-passe e segurança da conta",
+    "change_password": "Mudar Palavra-passe"
   },
   "support": {
     "contact": "Contactar Suporte",

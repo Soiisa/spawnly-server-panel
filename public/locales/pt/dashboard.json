@@ -1,14 +1,14 @@
 {
-  "loading": "A carregar os seus servidores...",
+  "loading": "A carregar os teus servidores...",
   "headers": {
-    "your_servers": "Os Seus Servidores",
+    "your_servers": "Os Teus Servidores",
     "new_server": "Novo Servidor"
   },
   "stats": {
     "total_servers": "Total de Servidores",
     "active_now": "Ativos Agora",
-    "total_ram": "RAM Total",
-    "hourly_cost": "Custo Horário"
+    "total_ram": "Total de RAM",
+    "hourly_cost": "Custo por Hora"
   },
   "server_card": {
     "memory": "Memória",
@@ -27,22 +27,22 @@
     "running": "A Correr",
     "stopping": "A Parar",
     "restarting": "A Reiniciar",
-    "provisioning": "A Provisionar",
+    "provisioning": "A Aprovisionar",
     "unknown": "Desconhecido",
     "disconnected": "Desligado"
   },
   "empty_state": {
-    "title": "Ainda Sem Servidores",
-    "description": "Comece por criar o seu primeiro servidor de jogo de alto desempenho.",
+    "title": "Ainda Não Tens Servidores",
+    "description": "Começa por criar o teu primeiro servidor de jogos de alta performance.",
     "button": "Criar Servidor"
   },
   "messages": {
-    "error_create": "Falha ao criar servidor",
-    "error_delete": "Falha ao eliminar servidor",
-    "error_start": "Falha ao iniciar servidor",
-    "error_stop": "Falha ao parar servidor",
-    "confirm_delete": "Tem a certeza que deseja eliminar este servidor? Esta ação não pode ser desfeita.",
-    "dismiss": "Dispensar"
+    "error_create": "Falha ao criar o servidor",
+    "error_delete": "Falha ao apagar o servidor",
+    "error_start": "Falha ao iniciar o servidor",
+    "error_stop": "Falha ao parar o servidor",
+    "confirm_delete": "Tens a certeza que queres apagar este servidor? Esta ação não pode ser desfeita.",
+    "dismiss": "Fechar"
   },
   "software": {
     "unknown": "Desconhecido",
@@ -67,19 +67,26 @@
   "tooltips": {
     "console_files": "Consola e Ficheiros",
     "settings": "Definições",
-    "delete_server": "Eliminar Servidor"
+    "delete_server": "Apagar Servidor"
   },
   "units": {
     "gb": "GB"
   },
   "tour": {
-    "welcome_title": "Bem-vindo à Spawnly!",
-    "welcome_content": "Vamos fazer uma visita rápida para ajudar a começar com o seu novo painel de servidor.",
-    "credits_title": "A Sua Carteira",
-    "credits_content": "Este é o seu saldo de créditos. Precisa de créditos para criar e correr servidores.",
-    "stats_title": "Visão Geral de Recursos",
-    "stats_content": "Aqui pode monitorizar o total de servidores ativos, uso de memória e custos horários.",
+    "welcome_title": "Bem-vindo ao Spawnly!",
+    "welcome_content": "Vamos fazer uma visita rápida para te ajudar a dar os primeiros passos no painel do teu novo servidor.",
+    "credits_title": "Tua Carteira",
+    "credits_content": "Este é o teu saldo de créditos. Vais precisar de créditos para criar e manter servidores a correr.",
+    "stats_title": "Visão Geral dos Recursos",
+    "stats_content": "Aqui podes acompanhar o total de servidores ativos, o uso de memória e os custos por hora.",
     "create_title": "Lançar um Servidor",
-    "create_content": "Clique aqui para lançar o seu primeiro servidor Minecraft em segundos!"
+    "create_content": "Clica aqui para criares o teu primeiro servidor de Minecraft em segundos!",
+    "buttons": {
+      "back": "Voltar",
+      "close": "Fechar",
+      "last": "Concluído",
+      "next": "Seguinte",
+      "skip": "Saltar Visita"
+    }
   }
 }

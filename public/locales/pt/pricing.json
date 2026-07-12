@@ -1,35 +1,57 @@
 {
-  "title": "Preços Simples e Transparentes",
-  "subtitle": "Acreditamos que só deve pagar pelos recursos que utiliza.",
-  "credit_explanation": "1 Crédito = 1 GB de RAM por hora.",
-  "calculator": {
-    "title": "Personalize o Seu Servidor",
-    "subtitle": "Deslize para ajustar a alocação de RAM",
-    "ram_label": "Memória (RAM)",
-    "capabilities": "Capacidades:",
-    "estimated_cost": "Custo Estimado",
-    "hourly_rate": "Taxa Horária",
-    "deploy_btn": "Criar Servidor de {{ram}}GB Agora",
-    "no_card": "Não é necessário cartão de crédito para se registar."
+  "title": "Preços Transparentes.",
+  "subtitle": "Paga exclusivamente pelos recursos que usas, sem taxas ocultas.",
+  "credit_explanation": "Taxa de Câmbio: 100 Créditos = €1.00",
+  "billing": {
+    "hourly": "Faturação à Hora",
+    "monthly": "Faturação Mensal"
+  },
+  "games": {
+    "minecraft": {
+      "subtitle": "Java e Bedrock"
+    },
+    "satisfactory": {
+      "subtitle": "Dedicado"
+    }
   },
   "recommendations": {
-    "small": "Bom para pequenos servidores Vanilla com até 5 amigos. Não recomendado para mods.",
-    "medium": "Perfeito para Vanilla com até 10 amigos, ou modpacks leves (aprox. 50 mods).",
-    "standard": "Ótimo para modpacks padrão (100+ mods) ou servidores Vanilla com 20+ jogadores.",
-    "heavy": "Ideal para modpacks pesados (200+ mods) ou comunidades maiores (40+ jogadores).",
-    "very_heavy": "Desempenho poderoso para modpacks muito pesados (300+ mods) ou 60+ jogadores.",
-    "massive": "Poder de nível empresarial para redes massivas, 100+ jogadores, ou os modpacks mais exigentes."
+    "small": "Perfeito para pequenos servidores de sobrevivência com alguns amigos.",
+    "medium": "Excelente para comunidades padrão e modpacks leves.",
+    "standard": "Ideal para bases grandes de jogadores e plugins pesados.",
+    "heavy": "Recomendado para modpacks intensivos (ex., All The Mods).",
+    "very_heavy": "Redes massivas e necessidades de performance extrema.",
+    "massive": "Alojamento empresarial para as maiores comunidades."
+  },
+  "calculator": {
+    "hourly_disabled": "A faturação à hora está desativada de momento para o {{game}} devido a limitações da arquitetura do jogo.",
+    "configure_title": "Configura o teu Nó",
+    "configure_subtitle": "Seleciona o ambiente do teu jogo e aloca recursos.",
+    "select_game": "1. Selecionar Ambiente",
+    "ram_label": "2. Alocar Memória",
+    "recommendation_title": "Recomendação de Criação",
+    "estimate_title": "Estimativa de Criação",
+    "environment": "Ambiente",
+    "resources": "Recursos",
+    "ram_value": "{{ram}} GB RAM",
+    "billing_cycle": "Ciclo de Faturação",
+    "total_cost": "Custo Total Estimado",
+    "per_hour": "/ hora",
+    "per_month": "/ mês",
+    "deploy_btn": "Criar Nó de {{ram}}GB",
+    "no_card": "Não precisas de cartão de crédito para te registares."
   },
   "features": {
-    "ddos": "Proteção DDoS Incluída",
+    "included_title": "Incluído em cada criação",
+    "included_subtitle": "Funcionalidades empresariais incluídas por padrão. Sem upsells, sem taxas ocultas.",
+    "ddos": "Proteção DDoS",
     "slots": "Slots de Jogador Ilimitados",
-    "files": "Acesso aos Ficheiros",
-    "mods": "Suporte a Mods e Plugins",
-    "setup": "Configuração Instantânea",
-    "uptime": "99.9% de Uptime da Plataforma"
+    "files": "Acesso Total a Ficheiros e FTP",
+    "mods": "Instaladores de Modpacks com 1 Clique",
+    "setup": "Configuração Instantânea em 60s",
+    "uptime": "Garantia de 99.9% de Uptime"
   },
   "faq": {
-    "title": "Como funciona a faturação?",
-    "answer": "A Spawnly utiliza um sistema baseado em créditos. Compra créditos (1 Crédito ≈ €0.01) e nós descontamo-los do seu saldo a cada minuto que o seu servidor estiver <1>A Correr</1>. Se <3>Parar</3> o servidor, a faturação para imediatamente, mas os seus ficheiros são mantidos seguros gratuitamente."
+    "title": "Como funciona a faturação por créditos?",
+    "answer": "O Spawnly usa um sistema baseado em créditos. Compras créditos (1 Crédito = €0.01) e nós deduzimos do teu saldo por cada hora em que o teu servidor estiver <1>A Correr</1>. Se <3>Parares</3> o servidor, a faturação pausa imediatamente, mas os teus ficheiros são guardados em segurança de forma gratuita."
   }
 }

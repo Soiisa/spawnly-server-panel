@@ -8,13 +8,33 @@
     "info_title": "Real-time Billing",
     "info_desc": "Servers are billed per minute of runtime. Credits are deducted automatically while your server is running."
   },
+  "subscription": {
+    "title": "Monthly Auto-Refill",
+    "description": "Never worry about your reserved servers pausing. Automatically add credits to your balance every 30 days.",
+    "amount_label": "Amount (€):",
+    "amount_limit_error": "Must be between €5 and €200",
+    "per_month": "/ month",
+    "credits_label": "Credits",
+    "subscribe": "Subscribe",
+    "conversion_rate": "1€ = 100 Credits. You will receive",
+    "active": "Active",
+    "next_billing": "Next Due",
+    "manage_billing": "Manage Billing",
+    "cancel": "Cancel",
+    "confirm_cancel": "Are you sure you want to cancel your monthly auto-refill?",
+    "cancel_success": "Subscription cancelled successfully.",
+    "update_success": "Subscription updated successfully! The new amount will be charged on your next billing date."
+  },
   "history": {
     "title": "Transaction History",
     "empty": "No transactions found.",
     "session_runtime": "Session Runtime",
     "detailed_charges": "Detailed Charges",
-    "manual_deduction": "Manual Deduction",
-    "id_prefix": "ID:"
+    "manual_deduction": "Runtime Deduction",
+    "id_prefix": "ID:",
+    "deposit": "Credit Deposit",
+    "monthly_fee": "Monthly Server Fee",
+    "server_prefix": "Server: {{id}}"
   },
   "units": {
     "credits": "credits",
@@ -31,7 +51,7 @@
     "current_offer": "Current Offer",
     "bonus_active": "{{percent}}% BONUS ACTIVE",
     "credits_received": "Credits Received",
-    "bonus_breakdown": "{{base}} + {{bonus}} Bonus",
+    "bonus_breakdown": "Base: {{base}} + Bonus: {{bonus}}",
     "drag_adjust": "Drag to Adjust",
     "quick_select": "Quick Select"
   },
@@ -48,7 +68,33 @@
     "change_amount": "Change Amount",
     "secure_msg": "Secure Payment via Stripe"
   },
+  "billing": {
+    "flat_monthly_cost": "Flat Monthly Cost",
+    "credits_mo": "credits/mo",
+    "next_billing": "Next Billing Date",
+    "setup_autopay": "Setup Autopay",
+    "hourly_cost": "Hourly Cost",
+    "est_runtime": "Est. Runtime",
+    "hours_left": "hours left"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "kill": "Kill",
+    "create": "Create",
+    "download": "Download",
+    "rename": "Rename",
+    "move": "Move",
+    "edit": "Edit",
+    "delete": "Delete",
+    "manage": "Manage"
+  },
   "errors": {
-    "payment_init_failed": "Failed to initialize payment processor"
+    "payment_init_failed": "Failed to initialize payment processor",
+    "sub_create_failed": "Failed to create subscription session",
+    "sub_cancel_failed": "Failed to cancel subscription",
+    "sub_update_failed": "Failed to update subscription",
+    "portal_open_failed": "Failed to open billing portal"
   }
 }

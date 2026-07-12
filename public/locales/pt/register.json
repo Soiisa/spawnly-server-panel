@@ -4,18 +4,18 @@
     "subtitle": "Inicie o seu servidor em segundos"
   },
   "buttons": {
-    "google_signup": "Registar com Google",
+    "google_signup": "Registar com o Google",
     "create_account": "Criar Conta",
-    "creating_account": "A criar conta...",
+    "creating_account": "A criar Conta...",
     "sign_in": "Iniciar sessão"
   },
   "divider": {
-    "email": "Ou registar com email",
+    "email": "Ou registar com e-mail",
     "existing_account": "Já tem uma conta?"
   },
   "fields": {
     "email": {
-      "label": "Endereço de email",
+      "label": "Endereço de e-mail",
       "placeholder": "voce@exemplo.com"
     },
     "password": {
@@ -30,6 +30,6 @@
     "privacy": "Política de Privacidade"
   },
   "messages": {
-    "success": "Sucesso! Verifique o seu email para confirmar a conta."
+    "success": "Sucesso! Por favor, verifique o seu e-mail para confirmar a sua conta."
   }
 }

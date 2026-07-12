@@ -1,20 +1,40 @@
 {
   "title": "Faturação e Créditos",
-  "subtitle": "Gerencie o seu saldo e veja o histórico de uso",
+  "subtitle": "Gere o teu saldo e vê o teu histórico de utilização",
   "buy_credits": "Comprar Créditos",
   "card": {
     "title": "Saldo Atual",
-    "value_approx": "~€{{value}} valor",
-    "info_title": "Faturação em tempo real",
-    "info_desc": "Os servidores são faturados por minuto de execução. Os créditos são deduzidos automaticamente enquanto o servidor estiver a correr."
+    "value_approx": "valor de ~€{{value}}",
+    "info_title": "Faturação em Tempo Real",
+    "info_desc": "Os servidores são faturados por minuto de execução. Os créditos são deduzidos automaticamente enquanto o teu servidor estiver a correr."
+  },
+  "subscription": {
+    "title": "Recarregamento Automático Mensal",
+    "description": "Nunca te preocupes com a paragem dos teus servidores reservados. Adiciona créditos ao teu saldo automaticamente a cada 30 dias.",
+    "amount_label": "Montante (€):",
+    "amount_limit_error": "Tem de estar entre €5 e €200",
+    "per_month": "/ mês",
+    "credits_label": "Créditos",
+    "subscribe": "Subscrever",
+    "conversion_rate": "1€ = 100 Créditos. Vais receber",
+    "active": "Ativo",
+    "next_billing": "Próxima Data",
+    "manage_billing": "Gerir Faturação",
+    "cancel": "Cancelar",
+    "confirm_cancel": "Tens a certeza que queres cancelar o teu recarregamento automático mensal?",
+    "cancel_success": "Subscrição cancelada com sucesso.",
+    "update_success": "Subscrição atualizada com sucesso! O novo montante será cobrado na tua próxima data de faturação."
   },
   "history": {
     "title": "Histórico de Transações",
     "empty": "Nenhuma transação encontrada.",
-    "session_runtime": "Tempo de Sessão",
+    "session_runtime": "Tempo de Execução da Sessão",
     "detailed_charges": "Cobranças Detalhadas",
-    "manual_deduction": "Dedução Manual",
-    "id_prefix": "ID:"
+    "manual_deduction": "Dedução por Execução",
+    "id_prefix": "ID:",
+    "deposit": "Depósito de Créditos",
+    "monthly_fee": "Taxa Mensal do Servidor",
+    "server_prefix": "Servidor: {{id}}"
   },
   "units": {
     "credits": "créditos",
@@ -23,32 +43,58 @@
     "s": "s"
   },
   "tooltips": {
-    "payment_soon": "Integração de pagamento em breve"
+    "payment_soon": "Integração de pagamentos em breve"
   },
   "modal": {
     "title": "Adicionar Créditos",
-    "subtitle": "Selecione uma quantia para recarregar.",
+    "subtitle": "Seleciona um montante para recarregar.",
     "current_offer": "Oferta Atual",
-    "bonus_active": "{{percent}}% BÓNUS ATIVO",
+    "bonus_active": "BÓNUS DE {{percent}}% ATIVO",
     "credits_received": "Créditos Recebidos",
-    "bonus_breakdown": "{{base}} + {{bonus}} Bónus",
-    "drag_adjust": "Arraste para Ajustar",
+    "bonus_breakdown": "Base: {{base}} + Bónus: {{bonus}}",
+    "drag_adjust": "Arrasta para Ajustar",
     "quick_select": "Seleção Rápida"
   },
   "checkout": {
-    "summary_title": "Resumo do Pedido",
-    "amount": "Quantia",
+    "summary_title": "Resumo da Encomenda",
+    "amount": "Montante",
     "bonus_applied": "Bónus Aplicado",
     "total": "Total",
-    "or_card": "Ou pagar com cartão",
+    "or_card": "Ou paga com cartão",
     "pay_button": "Pagar €{{amount}}",
-    "continue_btn": "Continuar para Pagamento",
-    "refund_waiver": "Reconheço que ao comprar acesso imediato a créditos digitais, renuncio ao meu direito de retratação de 14 dias.",
-    "payment_details": "Detalhes de Pagamento",
-    "change_amount": "Alterar Quantia",
+    "continue_btn": "Continuar para o Pagamento",
+    "refund_waiver": "Reconheço que ao comprar acesso imediato a créditos digitais, abdico do meu direito de livre resolução de 14 dias.",
+    "payment_details": "Detalhes do Pagamento",
+    "change_amount": "Mudar Montante",
     "secure_msg": "Pagamento Seguro via Stripe"
   },
+  "billing": {
+    "flat_monthly_cost": "Custo Fixo Mensal",
+    "credits_mo": "créditos/mês",
+    "next_billing": "Próxima Data de Faturação",
+    "setup_autopay": "Configurar Pagamento Automático",
+    "hourly_cost": "Custo por Hora",
+    "est_runtime": "Tempo de Execução Est.",
+    "hours_left": "horas restantes"
+  },
+  "actions": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "kill": "Forçar Paragem",
+    "create": "Criar",
+    "download": "Download",
+    "rename": "Mudar o Nome",
+    "move": "Mover",
+    "edit": "Editar",
+    "delete": "Apagar",
+    "manage": "Gerir"
+  },
   "errors": {
-    "payment_init_failed": "Falha ao inicializar processador de pagamentos"
+    "payment_init_failed": "Falha ao inicializar o processador de pagamentos",
+    "sub_create_failed": "Falha ao criar sessão de subscrição",
+    "sub_cancel_failed": "Falha ao cancelar a subscrição",
+    "sub_update_failed": "Falha ao atualizar a subscrição",
+    "portal_open_failed": "Falha ao abrir o portal de faturação"
   }
 }
