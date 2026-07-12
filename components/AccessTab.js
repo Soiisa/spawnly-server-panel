@@ -8,7 +8,8 @@ import {
 import { supabase } from '../lib/supabaseClient';
 
 export default function AccessTab({ server }) {
-  const { t } = useTranslation('common');
+  // 1. Switched namespace to 'server'
+  const { t } = useTranslation('server');
   const [users, setUsers] = useState([]);
   
   // Logs State
@@ -35,10 +36,8 @@ export default function AccessTab({ server }) {
 
   useEffect(() => {
     fetchUsers();
-    // fetchLogs called via debounced effect below
   }, [server.id]);
 
-  // Debounced Search & Pagination Effect
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       fetchLogs(page, search);
@@ -109,7 +108,7 @@ export default function AccessTab({ server }) {
       resetForm();
       fetchUsers();
     } else {
-      alert('Operation failed');
+      alert(t('access.operation_failed')); // Translated alert
     }
   };
 
@@ -126,7 +125,7 @@ export default function AccessTab({ server }) {
   };
 
   const removeUser = async (permId) => {
-    if(!confirm('Revoke access?')) return;
+    if(!confirm(t('access.revoke_confirm'))) return; // Translated confirm
     const { data: { session } } = await supabase.auth.getSession();
     await fetch(`/api/servers/${server.id}/users`, {
       method: 'DELETE',
@@ -156,7 +155,8 @@ export default function AccessTab({ server }) {
       {/* Access Management Section */}
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
         <h3 className="text-lg font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-2">
-          <UserPlusIcon className="w-5 h-5" /> {editingUser ? 'Edit Permissions' : 'Manage Access'}
+          <UserPlusIcon className="w-5 h-5" /> 
+          {editingUser ? t('access.edit_permissions') : t('access.manage_access')}
         </h3>
 
         {/* Form */}
@@ -165,14 +165,14 @@ export default function AccessTab({ server }) {
             <input
               type="email"
               required
-              placeholder="User Email"
+              placeholder={t('access.email_placeholder')}
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               disabled={!!editingUser} 
               className="flex-1 rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white disabled:opacity-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none p-2"
             />
             <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-medium transition-colors">
-              {editingUser ? 'Update' : 'Invite'}
+              {editingUser ? t('access.update') : t('access.invite')}
             </button>
             {editingUser && (
               <button type="button" onClick={resetForm} className="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-300 transition-colors">
@@ -182,18 +182,18 @@ export default function AccessTab({ server }) {
           </div>
           
           <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase mb-3 tracking-wider">Permissions</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase mb-3 tracking-wider">{t('access.permissions_header')}</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <PermissionCheckbox label="Control (Start/Stop)" pKey="control" />
-                  <PermissionCheckbox label="Console Access" pKey="console" />
-                  <PermissionCheckbox label="File Manager" pKey="files" />
-                  <PermissionCheckbox label="Settings (Properties)" pKey="settings" />
-                  <PermissionCheckbox label="Schedules" pKey="schedules" />
-                  <PermissionCheckbox label="Player Manager" pKey="players" />
-                  <PermissionCheckbox label="Change Software" pKey="software" />
-                  <PermissionCheckbox label="Mods & Plugins" pKey="mods" />
-                  <PermissionCheckbox label="World Manager" pKey="world" />
-                  <PermissionCheckbox label="Backups" pKey="backups" />
+                  <PermissionCheckbox label={t('access.perms.control')} pKey="control" />
+                  <PermissionCheckbox label={t('access.perms.console')} pKey="console" />
+                  <PermissionCheckbox label={t('access.perms.files')} pKey="files" />
+                  <PermissionCheckbox label={t('access.perms.settings')} pKey="settings" />
+                  <PermissionCheckbox label={t('access.perms.schedules')} pKey="schedules" />
+                  <PermissionCheckbox label={t('access.perms.players')} pKey="players" />
+                  <PermissionCheckbox label={t('access.perms.software')} pKey="software" />
+                  <PermissionCheckbox label={t('access.perms.mods')} pKey="mods" />
+                  <PermissionCheckbox label={t('access.perms.world')} pKey="world" />
+                  <PermissionCheckbox label={t('access.perms.backups')} pKey="backups" />
               </div>
           </div>
         </form>
@@ -201,7 +201,7 @@ export default function AccessTab({ server }) {
         {/* Users List */}
         <div className="space-y-3">
           {users.length === 0 && !loading && (
-              <p className="text-center text-gray-500 dark:text-gray-400 py-4">No users have been granted access yet.</p>
+              <p className="text-center text-gray-500 dark:text-gray-400 py-4">{t('access.no_users')}</p>
           )}
           {users.map((u) => {
              const activeCount = Object.values(u.permissions || {}).filter(Boolean).length;
@@ -210,14 +210,14 @@ export default function AccessTab({ server }) {
                   <div>
                   <p className="font-medium text-gray-900 dark:text-white">{u.email}</p>
                   <p className="text-xs text-gray-500 mt-1">
-                      {activeCount} active permissions
+                      {activeCount} {t('access.active_permissions')}
                   </p>
                   </div>
                   <div className="flex items-center gap-2">
-                      <button onClick={() => startEdit(u)} className="text-gray-500 hover:text-indigo-600 p-2 rounded hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors" title="Edit Permissions">
+                      <button onClick={() => startEdit(u)} className="text-gray-500 hover:text-indigo-600 p-2 rounded hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors" title={t('access.edit_permissions')}>
                           <PencilIcon className="w-5 h-5" />
                       </button>
-                      <button onClick={() => removeUser(u.id)} className="text-red-500 hover:text-red-700 p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Revoke Access">
+                      <button onClick={() => removeUser(u.id)} className="text-red-500 hover:text-red-700 p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title={t('access.revoke_title')}>
                           <TrashIcon className="w-5 h-5" />
                       </button>
                   </div>
@@ -231,7 +231,7 @@ export default function AccessTab({ server }) {
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
             <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <ClipboardDocumentListIcon className="w-5 h-5" /> Activity Logs
+            <ClipboardDocumentListIcon className="w-5 h-5" /> {t('access.logs.title')}
             </h3>
             
             {/* Search Input */}
@@ -241,11 +241,11 @@ export default function AccessTab({ server }) {
                 </div>
                 <input
                     type="text"
-                    placeholder="Search logs..."
+                    placeholder={t('access.logs.search_placeholder')}
                     value={search}
                     onChange={(e) => {
                         setSearch(e.target.value);
-                        setPage(1); // Reset to page 1 on search
+                        setPage(1); 
                     }}
                     className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500"
                 />
@@ -261,24 +261,24 @@ export default function AccessTab({ server }) {
           <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
             <thead className="bg-gray-50 dark:bg-slate-900">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">User</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Details</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('access.logs.col_user')}</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('access.logs.col_action')}</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('access.logs.col_details')}</th>
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('access.logs.col_time')}</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
               {logs.length === 0 ? (
                 <tr>
                   <td colSpan="4" className="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
-                    {search ? 'No logs found matching your search.' : 'No activity recorded yet.'}
+                    {search ? t('access.logs.no_search_results') : t('access.logs.no_activity')}
                   </td>
                 </tr>
               ) : (
                 logs.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {log.users?.email || 'System / Unknown'}
+                      {log.users?.email || t('access.logs.system_unknown')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-indigo-600 dark:text-indigo-400 font-medium">
                       {log.action_type}
@@ -300,7 +300,7 @@ export default function AccessTab({ server }) {
         {totalLogs > 0 && (
             <div className="flex items-center justify-between mt-4 px-2">
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                    Showing <span className="font-medium">{(page - 1) * 10 + 1}</span> to <span className="font-medium">{Math.min(page * 10, totalLogs)}</span> of <span className="font-medium">{totalLogs}</span> results
+                    {t('access.logs.showing')} <span className="font-medium">{(page - 1) * 10 + 1}</span> {t('access.logs.to')} <span className="font-medium">{Math.min(page * 10, totalLogs)}</span> {t('access.logs.of')} <span className="font-medium">{totalLogs}</span> {t('access.logs.results')}
                 </div>
                 <div className="flex items-center gap-2">
                     <button
@@ -311,7 +311,7 @@ export default function AccessTab({ server }) {
                         <ChevronLeftIcon className="w-4 h-4" />
                     </button>
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300 px-2">
-                        Page {page} of {totalPages}
+                        {t('access.logs.page')} {page} {t('access.logs.of')} {totalPages}
                     </span>
                     <button
                         onClick={() => setPage(p => Math.min(totalPages, p + 1))}

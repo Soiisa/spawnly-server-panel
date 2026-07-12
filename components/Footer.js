@@ -1,3 +1,4 @@
+// components/Footer.js
 import React from 'react';
 import Link from 'next/link';
 import { useTranslation } from 'next-i18next';
@@ -16,7 +17,7 @@ export default function Footer() {
               <img 
                 src="/logo.png" 
                 alt="Spawnly Logo" 
-                className="h-9 w-auto object-contain transition-transform group-hover:scale-105 filter dark:brightness-100 brightness-0" // Use brightness-0 in light mode if the logo is white text
+                className="h-9 w-auto object-contain transition-transform group-hover:scale-105 filter dark:brightness-100 brightness-0" 
                 onError={(e) => { e.target.src = '/logo.png'; }}
               />
               <span className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Spawnly</span>
@@ -58,6 +59,21 @@ export default function Footer() {
               <li>
                 <Link href="/privacy" className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                   {t('footer.privacy', 'Privacy Policy')}
+                </Link>
+              </li>
+              <li>
+                <Link href="/aup" className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  {t('footer.aup', 'Acceptable Use Policy')}
+                </Link>
+              </li>
+              <li>
+                <Link href="/refund-policy" className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  {t('footer.refund', 'Refund Policy')}
+                </Link>
+              </li>
+              <li>
+                <Link href="/imprint" className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  {t('footer.imprint', 'Imprint')}
                 </Link>
               </li>
             </ul>

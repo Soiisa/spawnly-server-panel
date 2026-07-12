@@ -61,6 +61,14 @@ export default function DashboardTour({ run, userId, onFinish }) {
       continuous
       showProgress
       showSkipButton
+      // Adicionado o 'locale' para traduzir os botões internos da biblioteca
+      locale={{
+        back: t('tour.buttons.back'),
+        close: t('tour.buttons.close'),
+        last: t('tour.buttons.last'),
+        next: t('tour.buttons.next'),
+        skip: t('tour.buttons.skip'),
+      }}
       callback={handleJoyrideCallback}
       styles={{
         options: {

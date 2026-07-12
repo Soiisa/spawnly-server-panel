@@ -1,3 +1,4 @@
+// components/admin/ServerTable.js
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import FileManager from '../FileManager';

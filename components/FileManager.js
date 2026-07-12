@@ -24,15 +24,26 @@ import {
   XMarkIcon,
   PencilIcon,
   ArrowRightOnRectangleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  ArchiveBoxIcon,
+  CircleStackIcon,
+  CommandLineIcon
 } from '@heroicons/react/24/outline';
 
 const getFileIcon = (fileName, isDirectory) => {
   if (isDirectory) return <FolderIcon className="w-6 h-6 text-indigo-400 fill-indigo-50 dark:fill-indigo-900/20" />;
   const ext = fileName.split('.').pop().toLowerCase();
   switch (ext) {
-    case 'json': case 'properties': case 'yml': case 'yaml': case 'toml': case 'conf': case 'ini':
+    case 'json': case 'properties': case 'yml': case 'yaml': case 'toml': case 'conf': case 'ini': case 'cfg': case 'vdf':
       return <CodeBracketIcon className="w-6 h-6 text-emerald-500 dark:text-emerald-400" />;
+    case 'sh': case 'bat': case 'cmd':
+      return <CommandLineIcon className="w-6 h-6 text-indigo-500 dark:text-indigo-400" />;
+    case 'zip': case 'rar': case 'tar': case 'gz': case '7z': case 'vpk':
+      return <ArchiveBoxIcon className="w-6 h-6 text-amber-500 dark:text-amber-400" />;
+    case 'db': case 'sqlite': case 'sav': case 'map': case 'mca': case 'bsp': case 'dem': case 'dat':
+      return <CircleStackIcon className="w-6 h-6 text-blue-500 dark:text-blue-400" />;
+    case 'cs': case 'py': case 'lua': case 'js':
+      return <CodeBracketIcon className="w-6 h-6 text-purple-500 dark:text-purple-400" />;
     case 'log': case 'txt': case 'md':
       return <DocumentTextIcon className="w-6 h-6 text-slate-500 dark:text-slate-400" />;
     case 'jar':
@@ -45,13 +56,11 @@ const getFileIcon = (fileName, isDirectory) => {
 export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const { t } = useTranslation('server');
   
-  // --- State ---
   const [currentPath, setCurrentPath] = useState('');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Upload State (Enhanced)
   const [uploadState, setUploadState] = useState({
     active: false,
     progress: 0,
@@ -73,13 +82,11 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const [filterEnabled, setFilterEnabled] = useState(true);
   const [allFiles, setAllFiles] = useState([]);
   
-  // Drag State
   const [dragActive, setDragActive] = useState(false); 
   const [internalDragFile, setInternalDragFile] = useState(null); 
   const [dropTarget, setDropTarget] = useState(null); 
   const [breadcrumbDropTarget, setBreadcrumbDropTarget] = useState(null);
 
-  // Modals
   const [createModal, setCreateModal] = useState({ open: false, type: 'file' }); 
   const [actionModal, setActionModal] = useState({ open: false, file: null, type: 'rename' });
   const [newItemName, setNewItemName] = useState('');
@@ -91,8 +98,15 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const actionInputRef = useRef(null);
 
   const apiBase = `/api/servers/${server.id}`;
-  const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md', '.dat', '.toml'];
+  
+  const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md', '.dat', '.toml', '.cfg', '.vdf', '.cs', '.py', '.lua', '.sh', '.bat', '.cmd'];
+  
+  // HIDDEN: Specific directories and files to mask
   const maskedItems = ['server.jar', '.git', 'eula.txt', 'file-api.js', 'metrics-server.js', 'properties-api.js', 'status-reporter.js', 'console-server.js', 'startup.sh', 'startup.bat', 'package.json', 'package-lock.json', 'server-installer.jar.log', 'libraries', 'node_modules', 'server-wrapper.js', '.server_status', 'packed-data.zip', 'run.bat', 'run.sh', 'startserver.sh', 'startserver.bat', 'user_jvm_args.txt', '.installed_version', 'vps_system.log', 'bootstrap.sh'].map(item => item.toLowerCase());
+  
+  // HIDDEN: Dynamic executable extensions
+  const HIDDEN_EXTENSIONS = ['.sh', '.bash', '.exe', '.bat', '.cmd', '.elf', '.py', '.pl', '.bin', '.appimage'];
+  
   const specialFiles = ['server.properties'].map(item => item.toLowerCase());
 
   const bigIntReplacer = (key, value) => typeof value === 'bigint' ? value.toString() : value;
@@ -106,11 +120,19 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
 
   useEffect(() => {
     const applyFilter = (list) => {
-      if (!filterEnabled && !isAdmin) return list || []; 
-      if (!filterEnabled && isAdmin) return list || [];
+      // If the user is an admin AND they toggled the filter off, show everything
+      if (!filterEnabled && isAdmin) return list || []; 
+      
       return (list || []).filter(file => {
         const name = file.name.toLowerCase().replace(/\/+$/, '');
-        return !maskedItems.includes(name) && !maskedItems.some(masked => name.startsWith(masked + '/'));
+        
+        // Hide explicitly masked items
+        if (maskedItems.includes(name) || maskedItems.some(masked => name.startsWith(masked + '/'))) return false;
+        
+        // Hide executables based on extension
+        if (HIDDEN_EXTENSIONS.some(ext => name.endsWith(ext))) return false;
+        
+        return true;
       });
     };
     setFiles(applyFilter(allFiles));
@@ -174,13 +196,17 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
         try {
           const nbtData = await read(new Uint8Array(content), { compression: 'gzip', endian: 'big' });
           content = JSON.stringify(nbtData.data, bigIntReplacer, 2);
-        } catch (e) { throw new Error('Invalid NBT data'); }
+        } catch (e) { 
+          throw new Error(t('files.errors.invalid_nbt', { defaultValue: 'Invalid NBT data. This file might be a binary save, not a Minecraft NBT file.' })); 
+        }
       } else if (typeof content !== 'string') {
         content = JSON.stringify(content, bigIntReplacer, 2);
       }
       setEditingFile(file);
       setFileContent(content);
-    } catch (err) { setError(`Could not open file: ${err.message}`); } 
+    } catch (err) { 
+      setError(`${t('files.errors.open_fail', { defaultValue: 'Could not open file' })}: ${err.message}`); 
+    } 
     finally { setLoading(false); }
   };
 
@@ -196,7 +222,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
         body = await write(parsed, { compression: 'gzip', endian: 'big', name: '' });
         contentType = 'application/octet-stream';
       }
-      await axios.put(`${apiBase}/files`, body, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType } });
+      await axios.put(`${apiBase}/file`, body, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType } });
       setEditingFile(null); setFileContent('');
     } catch (err) { setError(`${t('files.save_fail', { defaultValue: 'Failed to save file' })}: ${err.message}`); } 
     finally { setIsSaving(false); }
@@ -206,7 +232,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     if (!window.confirm(t('files.delete_confirm', { name: file.name, defaultValue: `Are you sure you want to delete ${file.name}?` }))) return;
     try {
       const relPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-      await axios.delete(`${apiBase}/files`, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}` } });
+      await axios.delete(`${apiBase}/file`, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}` } });
       fetchFiles(currentPath);
     } catch (err) { setError(`${t('files.delete_fail', { defaultValue: 'Failed to delete file' })}: ${err.message}`); }
   };
@@ -222,7 +248,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     } catch (err) { setError(t('files.download_fail', { defaultValue: 'Failed to download file' })); }
   };
 
-  // --- Overwrite check logic ---
   const checkConflictsAndPrepareUpload = (filesList) => {
     if (filesList.length === 0) return;
 
@@ -253,7 +278,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     performBatchUpload(list);
   };
 
-  // --- External Upload Drag Handlers ---
   const handleDrag = (e) => {
     e.preventDefault(); e.stopPropagation();
     if (e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes('application/x-spawnly-internal')) {
@@ -343,11 +367,11 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
               setUploadState(prev => ({ ...prev, currentFileName: file.name }));
               
               const formData = new FormData();
-              formData.append('fileName', relativePath);
-              formData.append('fileContent', file);
+              formData.append('path', currentPath); 
+              formData.append('file', file); 
 
               try {
-                  await axios.post(`${apiBase}/files?path=${currentPath}`, formData, {
+                  await axios.post(`${apiBase}/file`, formData, {
                       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
                   });
               } catch (err) {
@@ -381,7 +405,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       if (folderInputRef.current) folderInputRef.current.value = '';
   };
 
-  // --- Internal Row Drag Handlers ---
   const handleRowDragStart = (e, file) => {
       setInternalDragFile(file); e.dataTransfer.setData('application/x-spawnly-internal', file.name); e.dataTransfer.effectAllowed = 'move';
   };
@@ -397,7 +420,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       await executeMove(oldPath, newPath);
   };
 
-  // --- Breadcrumb Drag Handlers ---
   const handleBreadcrumbDragOver = (e, path) => {
       e.preventDefault(); if (internalDragFile && path !== currentPath) { setBreadcrumbDropTarget(path); e.dataTransfer.dropEffect = 'move'; }
   };
@@ -417,14 +439,17 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       } catch (err) { setError(t('files.errors.move_fail', { defaultValue: 'Move failed' })); }
   };
 
-  // --- Create/Action Handlers ---
   const openCreateModal = (type) => { setCreateModal({ open: true, type }); setNewItemName(''); setError(null); };
+  
   const handleCreateSubmit = async (e) => {
     e?.preventDefault(); if (!newItemName.trim() || isProcessing) return; setIsProcessing(true);
     const name = newItemName.trim();
     try {
-      if (createModal.type === 'folder') await axios.post(`${apiBase}/files`, { type: 'directory', path: currentPath ? `${currentPath}/${name}` : name }, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
-      else await axios.put(`${apiBase}/files`, '', { params: { path: currentPath ? `${currentPath}/${name}` : name }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' } });
+      if (createModal.type === 'folder') {
+          await axios.post(`${apiBase}/files`, { type: 'directory', path: currentPath ? `${currentPath}/${name}` : name }, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+      } else {
+          await axios.put(`${apiBase}/file`, '', { params: { path: currentPath ? `${currentPath}/${name}` : name }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' } });
+      }
       setCreateModal({ open: false, type: 'file' }); setNewItemName(''); fetchFiles(currentPath);
     } catch (err) { setError(t('files.errors.create_fail', { defaultValue: 'Failed to create item' })); } finally { setIsProcessing(false); }
   };
@@ -455,7 +480,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       {dragActive && (<div className="absolute inset-0 z-50 bg-indigo-500/10 backdrop-blur-sm border-2 border-indigo-500 border-dashed rounded-xl flex flex-col items-center justify-center pointer-events-none"><ArrowUpTrayIcon className="w-16 h-16 text-indigo-600 animate-bounce" /><p className="text-xl font-bold text-indigo-700 mt-4">{t('files.drop_to_upload', { defaultValue: 'Drop files to upload' })}</p></div>)}
       {dragActive && (<div className="absolute inset-0 z-50" onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop} />)}
 
-      {/* Overwrite Confirmation Modal */}
       <AnimatePresence>
         {overwriteModal.open && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -504,10 +528,29 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
           </motion.div>
         )}
       </AnimatePresence>
-      <AnimatePresence>{createModal.open && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"><motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 10 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm overflow-hidden"><div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center"><h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">{createModal.type === 'folder' ? <FolderPlusIcon className="w-5 h-5 text-indigo-500" /> : <PlusIcon className="w-5 h-5 text-indigo-500" />}{createModal.type === 'folder' ? t('files.create_folder', { defaultValue: 'Create Folder' }) : t('files.create_file', { defaultValue: 'Create File' })}</h3><button onClick={() => setCreateModal({ ...createModal, open: false })}><XMarkIcon className="w-5 h-5 text-gray-400" /></button></div><form onSubmit={handleCreateSubmit} className="p-6"><input ref={nameInputRef} type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg dark:text-white mb-4" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setCreateModal({ ...createModal, open: false })} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button><button type="submit" disabled={isProcessing} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('actions.create', { defaultValue: 'Create' })}</button></div></form></motion.div></motion.div>)}</AnimatePresence>
-      <AnimatePresence>{editingFile && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"><motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"><div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center"><div className="flex items-center gap-3"><div className="p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-600 shadow-sm">{getFileIcon(editingFile.name, false)}</div><div><h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{editingFile.name}</h3><p className="text-xs text-gray-500 dark:text-gray-300 font-mono">{currentPath}/{editingFile.name}</p></div></div><div className="flex gap-3"><button onClick={() => { setEditingFile(null); setFileContent(''); }} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-600 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button><button onClick={saveFile} disabled={isSaving} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('files.editor.save_changes', { defaultValue: 'Save Changes' })}</button></div></div><div className="flex-1 relative bg-slate-900"><textarea value={fileContent} onChange={(e) => setFileContent(e.target.value)} className="w-full h-full p-6 font-mono text-sm bg-transparent text-slate-300 border-none outline-none resize-none" spellCheck="false" /></div></motion.div></motion.div>)}</AnimatePresence>
 
-      {/* Floating Upload Progress Widget */}
+      <AnimatePresence>
+        {createModal.open && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 10 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center"><h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">{createModal.type === 'folder' ? <FolderPlusIcon className="w-5 h-5 text-indigo-500" /> : <PlusIcon className="w-5 h-5 text-indigo-500" />}{createModal.type === 'folder' ? t('files.create_folder', { defaultValue: 'Create Folder' }) : t('files.create_file', { defaultValue: 'Create File' })}</h3><button onClick={() => setCreateModal({ ...createModal, open: false })}><XMarkIcon className="w-5 h-5 text-gray-400" /></button></div>
+              <form onSubmit={handleCreateSubmit} className="p-6"><input ref={nameInputRef} type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg dark:text-white mb-4" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setCreateModal({ ...createModal, open: false })} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button><button type="submit" disabled={isProcessing} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('actions.create', { defaultValue: 'Create' })}</button></div></form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editingFile && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
+              <div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center"><div className="flex items-center gap-3"><div className="p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-600 shadow-sm">{getFileIcon(editingFile.name, false)}</div><div><h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{editingFile.name}</h3><p className="text-xs text-gray-500 dark:text-gray-300 font-mono">{currentPath}/{editingFile.name}</p></div></div><div className="flex gap-3"><button onClick={() => { setEditingFile(null); setFileContent(''); }} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-600 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button><button onClick={saveFile} disabled={isSaving} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('files.editor.save_changes', { defaultValue: 'Save Changes' })}</button></div></div>
+              <div className="flex-1 relative bg-slate-900"><textarea value={fileContent} onChange={(e) => setFileContent(e.target.value)} className="w-full h-full p-6 font-mono text-sm bg-transparent text-slate-300 border-none outline-none resize-none" spellCheck="false" /></div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {uploadState.active && (
           <motion.div

@@ -1,5 +1,7 @@
+// components/ModsPluginsTab.js
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { useTranslation } from 'next-i18next';
 import { 
   ArrowDownTrayIcon, 
   MagnifyingGlassIcon, 
@@ -15,6 +17,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function ModsPluginsTab({ server }) {
+  const { t } = useTranslation('server');
   // --- Constants ---
   const HYBRID_TYPES = ['arclight', 'mohist', 'magma'];
   const PLUGIN_TYPES = ['paper', 'spigot', 'purpur', 'folia', 'velocity', 'waterfall', 'bungeecord', 'bukkit'];
@@ -177,7 +180,7 @@ export default function ModsPluginsTab({ server }) {
       }
     } catch (error) {
       console.error('Error fetching catalog:', error);
-      setError(`Failed to load resources: ${error.message}`);
+      setError(t('mods_plugins.errors.fetch_catalog', { error: error.message, defaultValue: `Failed to load resources: ${error.message}` }));
     } finally {
       setLoadingCatalog(false);
       setIsSearching(false);
@@ -280,7 +283,7 @@ export default function ModsPluginsTab({ server }) {
       
       setSelectedVersions(versions);
     } catch (err) {
-      setError(`Failed to load versions: ${err.message}`);
+      setError(t('mods_plugins.errors.fetch_versions', { error: err.message, defaultValue: `Failed to load versions: ${err.message}` }));
     }
   };
 
@@ -296,7 +299,7 @@ export default function ModsPluginsTab({ server }) {
       const token = session?.access_token;
 
       if (!token) {
-          throw new Error("You must be logged in to install content.");
+          throw new Error(t('mods_plugins.messages.login_required', { defaultValue: "You must be logged in to install content." }));
       }
 
       const res = await fetch('/api/servers/install-mod', {
@@ -313,9 +316,9 @@ export default function ModsPluginsTab({ server }) {
         })
       });
       
-      if (!res.ok) throw new Error((await res.json()).error || 'Installation failed');
+      if (!res.ok) throw new Error((await res.json()).error || t('mods_plugins.errors.install_failed', { defaultValue: 'Installation failed' }));
       
-      setSuccess(`Installed ${selectedItem.name} (${version.name}) to /${folder}! Restart server to apply.`);
+      setSuccess(t('mods_plugins.messages.install_success', { name: selectedItem.name, version: version.name, folder, defaultValue: `Installed ${selectedItem.name} (${version.name}) to /${folder}! Restart server to apply.` }));
     } catch (error) {
       setError(error.message);
     } finally {
@@ -355,7 +358,7 @@ export default function ModsPluginsTab({ server }) {
                 : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
-            Mods
+            {t('mods_plugins.tabs.mods', { defaultValue: 'Mods' })}
           </button>
           <button
             onClick={() => setActiveCategory('plugins')}
@@ -365,7 +368,7 @@ export default function ModsPluginsTab({ server }) {
                 : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
-            Plugins
+            {t('mods_plugins.tabs.plugins', { defaultValue: 'Plugins' })}
           </button>
         </div>
 
@@ -373,7 +376,7 @@ export default function ModsPluginsTab({ server }) {
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
-            placeholder={activeCategory === 'plugins' ? "Search Bukkit plugins..." : "Search Mods..."}
+            placeholder={activeCategory === 'plugins' ? t('mods_plugins.search.placeholder_plugins', { defaultValue: "Search Bukkit plugins..." }) : t('mods_plugins.search.placeholder_mods', { defaultValue: "Search Mods..." })}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch(e)}
@@ -385,7 +388,7 @@ export default function ModsPluginsTab({ server }) {
           disabled={loadingCatalog}
           className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-medium shadow-sm transition-colors disabled:opacity-50"
         >
-          {isSearching ? 'Searching...' : 'Search'}
+          {isSearching ? t('mods_plugins.search.searching', { defaultValue: 'Searching...' }) : t('mods_plugins.search.button', { defaultValue: 'Search' })}
         </button>
       </div>
 
@@ -412,13 +415,13 @@ export default function ModsPluginsTab({ server }) {
         {loadingCatalog && currentPage === 1 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
             <div className="animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent mb-3" />
-            <p>Fetching resources...</p>
+            <p>{t('mods_plugins.catalog.loading', { defaultValue: 'Fetching resources...' })}</p>
           </div>
         ) : catalog.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             {activeCategory === 'mods' ? <CpuChipIcon className="w-16 h-16 mb-4 opacity-20" /> : <PuzzlePieceIcon className="w-16 h-16 mb-4 opacity-20" />}
-            <p className="text-lg font-medium text-gray-500 dark:text-gray-400">No resources found</p>
-            <p className="text-sm dark:text-gray-500">Try a different search term or check compatibility</p>
+            <p className="text-lg font-medium text-gray-500 dark:text-gray-400">{t('mods_plugins.catalog.empty_title', { defaultValue: 'No resources found' })}</p>
+            <p className="text-sm dark:text-gray-500">{t('mods_plugins.catalog.empty_desc', { defaultValue: 'Try a different search term or check compatibility' })}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -443,14 +446,14 @@ export default function ModsPluginsTab({ server }) {
                 </div>
                 
                 <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 flex-1 leading-relaxed">
-                  {item.description?.replace(/<\/?[^>]+(>|$)/g, "") || "No description provided."}
+                  {item.description?.replace(/<\/?[^>]+(>|$)/g, "") || t('mods_plugins.item.no_description', { defaultValue: "No description provided." })}
                 </p>
 
                 <button
                   onClick={() => fetchVersions(item)}
                   className="w-full py-2 bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 font-medium rounded-lg text-sm border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors"
                 >
-                  Select Version
+                  {t('mods_plugins.item.select_version', { defaultValue: 'Select Version' })}
                 </button>
               </div>
             ))}
@@ -464,7 +467,7 @@ export default function ModsPluginsTab({ server }) {
               disabled={loadingCatalog}
               className="px-6 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-300 rounded-full text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700/50 shadow-sm transition-all disabled:opacity-50"
             >
-              {loadingCatalog ? 'Loading...' : 'Load More'}
+              {loadingCatalog ? t('mods_plugins.catalog.loading_more', { defaultValue: 'Loading...' }) : t('mods_plugins.catalog.load_more', { defaultValue: 'Load More' })}
             </button>
           </div>
         )}
@@ -482,7 +485,7 @@ export default function ModsPluginsTab({ server }) {
                   <p 
                     onClick={() => selectedItem.websiteUrl && window.open(selectedItem.websiteUrl, '_blank')}
                     className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 cursor-pointer hover:text-indigo-600 hover:bg-indigo-50 rounded p-1 -ml-1 transition-colors"
-                    title="Click to view on CurseForge"
+                    title={t('mods_plugins.modal.view_curseforge_tooltip', { defaultValue: "Click to view on CurseForge" })}
                   >
                     {selectedItem.description}
                   </p>
@@ -501,7 +504,7 @@ export default function ModsPluginsTab({ server }) {
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700 hover:text-indigo-600 transition-colors"
                   >
                     <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
-                    Open in CurseForge
+                    {t('mods_plugins.modal.open_curseforge', { defaultValue: "Open in CurseForge" })}
                   </a>
                 )}
               </div>
@@ -516,7 +519,7 @@ export default function ModsPluginsTab({ server }) {
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
               >
-                Downloads
+                {t('mods_plugins.modal.tab_downloads', { defaultValue: 'Downloads' })}
               </button>
               <button
                 onClick={() => setModalTab('dependencies')}
@@ -526,7 +529,7 @@ export default function ModsPluginsTab({ server }) {
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
               >
-                Dependencies {itemDependencies.length > 0 && `(${itemDependencies.length})`}
+                {t('mods_plugins.modal.tab_dependencies', { defaultValue: 'Dependencies' })} {itemDependencies.length > 0 && `(${itemDependencies.length})`}
               </button>
             </div>
 
@@ -537,7 +540,7 @@ export default function ModsPluginsTab({ server }) {
                   {selectedVersions.length === 0 ? (
                     <div className="py-12 flex flex-col items-center text-gray-400">
                       <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent mb-2" />
-                      <p className="text-sm">Fetching versions...</p>
+                      <p className="text-sm">{t('mods_plugins.modal.loading_versions', { defaultValue: 'Fetching versions...' })}</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -575,7 +578,7 @@ export default function ModsPluginsTab({ server }) {
                             disabled={loadingInstall}
                             className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
                           >
-                            {loadingInstall ? '...' : 'Install'}
+                            {loadingInstall ? t('mods_plugins.modal.installing_btn', { defaultValue: 'Installing...' }) : t('mods_plugins.modal.install_btn', { defaultValue: 'Install' })}
                           </button>
                         </div>
                       ))}
@@ -589,19 +592,19 @@ export default function ModsPluginsTab({ server }) {
                   {loadingDependencies ? (
                      <div className="py-12 flex flex-col items-center text-gray-400">
                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent mb-2" />
-                       <p className="text-sm">Fetching dependency details...</p>
+                       <p className="text-sm">{t('mods_plugins.modal.loading_dependencies', { defaultValue: 'Fetching dependency details...' })}</p>
                      </div>
                   ) : itemDependencies.length === 0 ? (
                     <div className="py-10 text-center text-gray-500 dark:text-gray-400">
                       <CheckCircleIcon className="w-10 h-10 mx-auto text-green-500 opacity-50 mb-2" />
-                      <p>No required dependencies found.</p>
-                      <p className="text-xs text-gray-400">This mod should work standalone.</p>
+                      <p>{t('mods_plugins.modal.empty_dependencies_title', { defaultValue: 'No required dependencies found.' })}</p>
+                      <p className="text-xs text-gray-400">{t('mods_plugins.modal.empty_dependencies_desc', { defaultValue: 'This mod should work standalone.' })}</p>
                     </div>
                   ) : (
                     <>
                       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-3 mb-4 text-xs text-amber-800 dark:text-amber-300 flex gap-2">
                         <ExclamationCircleIcon className="w-4 h-4 shrink-0 mt-0.5" />
-                        <p>These mods are required for <b>{selectedItem.name}</b> to work. Please install them as well.</p>
+                        <p dangerouslySetInnerHTML={{ __html: t('mods_plugins.modal.required_dependencies_html', { name: selectedItem.name, defaultValue: `These mods are required for <b>${selectedItem.name}</b> to work. Please install them as well.` }) }} />
                       </div>
 
                       {itemDependencies.map(dep => (
@@ -615,7 +618,7 @@ export default function ModsPluginsTab({ server }) {
                           <div className="flex-1 min-w-0">
                             <h4 className="font-bold text-gray-900 dark:text-gray-100 text-sm truncate">{dep.name}</h4>
                             <div className="flex gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                              <span>{dep.downloads > 0 ? formatFileSize(dep.downloads) + ' downloads' : 'Dependency'}</span>
+                              <span>{dep.downloads > 0 ? formatFileSize(dep.downloads) + ` ${t('mods_plugins.item.downloads', { defaultValue: 'downloads' })}` : t('mods_plugins.item.dependency', { defaultValue: 'Dependency' })}</span>
                             </div>
                           </div>
                           
@@ -623,7 +626,7 @@ export default function ModsPluginsTab({ server }) {
                             onClick={() => handleViewDependency(dep)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 rounded-lg text-xs font-medium transition-all"
                           >
-                            Select Version <ArrowRightCircleIcon className="w-4 h-4" />
+                            {t('mods_plugins.item.select_version', { defaultValue: 'Select Version' })} <ArrowRightCircleIcon className="w-4 h-4" />
                           </button>
                         </div>
                       ))}

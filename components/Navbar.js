@@ -1,3 +1,5 @@
+// components/Navbar.js
+
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslation } from 'next-i18next';
@@ -29,6 +31,9 @@ export default function Navbar() {
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center space-x-8">
+          <Link href="/games" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-white transition-colors">
+            {t('nav.games', 'Games')}
+          </Link>
           <Link href="/pricing" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-white transition-colors">
             {t('nav.pricing', 'Pricing')}
           </Link>
@@ -81,6 +86,9 @@ export default function Navbar() {
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
         <div className="md:hidden w-full border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950 px-6 py-6 space-y-4 shadow-xl">
+          <Link href="/games" className="block text-base font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors">
+            {t('nav.games', 'Games')}
+          </Link>
           <Link href="/pricing" className="block text-base font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors">
             {t('nav.pricing', 'Pricing')}
           </Link>
