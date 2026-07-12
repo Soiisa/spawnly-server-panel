@@ -6,7 +6,6 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Max log size in characters (approx 50KB) to prevent DB bloat
 const MAX_LOG_SIZE = 50000;
 
 export default async function handler(req, res) {
@@ -15,47 +14,37 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 1. Destructure status and NEW hardware metrics
-  const { serverId, console_log, status, cpu, memory, disk } = req.body;
+  // --- NEW: Destructure the new player variables ---
+  const { serverId, console_log, status, cpu, memory, disk, player_count, max_players, players_online } = req.body;
   const authHeader = req.headers.authorization;
 
-  // Allow empty log if status OR metrics are provided
   if (!serverId || (console_log === undefined && !status && cpu === undefined && memory === undefined)) {
     return res.status(400).json({ error: 'Missing serverId or data' });
   }
 
   try {
-    // 2. Authenticate & Fetch Stats
     const { data: server, error: dbErr } = await supabaseAdmin
       .from('servers')
       .select('rcon_password, running_since, runtime_accumulated_seconds')
       .eq('id', serverId)
       .single();
 
-    if (dbErr || !server) {
-      return res.status(404).json({ error: 'Server not found' });
-    }
+    if (dbErr || !server) return res.status(404).json({ error: 'Server not found' });
+    if (!authHeader || authHeader !== `Bearer ${server.rcon_password}`) return res.status(401).json({ error: 'Unauthorized' });
 
-    if (!authHeader || authHeader !== `Bearer ${server.rcon_password}`) {
-      console.warn(`[Log Ingest] Unauthorized attempt for server ${serverId}`);
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    // 3. Handle Server Table Updates (Status + Metrics)
     const updates = {};
     let shouldUpdateServerTable = false;
 
     if (status) {
-      updates.status = status;
+      updates.game_status = status;  
+      updates.status = 'Running';    
       shouldUpdateServerTable = true;
       const now = new Date();
 
-      // --- CLEAN UP STARTED_AT IF RUNNING, STOPPED, OR CRASHED ---
       if (status === 'Running' || status === 'Stopped' || status === 'Crashed') {
           updates.started_at = null;
       }
 
-      // Stop the billing clock if it was running
       if (server.running_since && (status === 'Stopped' || status === 'Crashed')) {
         const start = new Date(server.running_since);
         const seconds = Math.max(0, Math.floor((now - start) / 1000));
@@ -64,73 +53,38 @@ export default async function handler(req, res) {
       }
     }
 
-    // Inject hardware metrics into the update payload
-    if (cpu !== undefined) {
-      updates.cpu = cpu;
-      shouldUpdateServerTable = true;
-    }
-    if (memory !== undefined) {
-      updates.memory = memory;
-      shouldUpdateServerTable = true;
-    }
-    if (disk !== undefined) {
-      updates.disk = disk;
-      shouldUpdateServerTable = true;
-    }
+    // --- NEW: Inject player counts into Supabase ---
+    if (cpu !== undefined) { updates.cpu = cpu; shouldUpdateServerTable = true; }
+    if (memory !== undefined) { updates.memory = memory; shouldUpdateServerTable = true; }
+    if (disk !== undefined) { updates.disk = disk; shouldUpdateServerTable = true; }
+    if (player_count !== undefined) { updates.player_count = player_count; shouldUpdateServerTable = true; }
+    if (max_players !== undefined) { updates.max_players = max_players; shouldUpdateServerTable = true; }
+    if (players_online !== undefined) { updates.players_online = players_online; shouldUpdateServerTable = true; }
 
-    // Always update last_heartbeat_at if we are receiving metrics
     if (shouldUpdateServerTable) {
       updates.last_heartbeat_at = new Date().toISOString();
       await supabaseAdmin.from('servers').update(updates).eq('id', serverId);
-      
-      if (status) {
-         console.log(`[Log Ingest] Status updated to '${status}' for server ${serverId}`);
-      }
     }
 
-    // 4. Process Logs (Only if content exists)
     if (console_log && console_log.trim().length > 0) {
-      // Fetch Existing Log
-      const { data: currentData } = await supabaseAdmin
-        .from('server_console')
-        .select('console_log')
-        .eq('server_id', serverId)
-        .single();
-
+      const { data: currentData } = await supabaseAdmin.from('server_console').select('console_log').eq('server_id', serverId).single();
       let existingLog = currentData?.console_log || '';
-
-      // Append & Trim
       const separator = existingLog.endsWith('\n') || existingLog === '' ? '' : '\n';
       let newFullLog = existingLog + separator + console_log;
 
       if (newFullLog.length > MAX_LOG_SIZE) {
         newFullLog = newFullLog.substring(newFullLog.length - MAX_LOG_SIZE);
-        // Clean up partial line at the start if cut
         const firstNewline = newFullLog.indexOf('\n');
-        if (firstNewline !== -1 && firstNewline < 100) {
-          newFullLog = newFullLog.substring(firstNewline + 1);
-        }
+        if (firstNewline !== -1 && firstNewline < 100) newFullLog = newFullLog.substring(firstNewline + 1);
       }
 
-      // Update DB
-      const { error: upsertErr } = await supabaseAdmin
-        .from('server_console')
-        .upsert({ 
-          server_id: serverId, 
-          console_log: newFullLog, 
-          updated_at: new Date().toISOString() 
-        }, { onConflict: 'server_id' });
-
-      if (upsertErr) {
-        console.error('[Log Ingest] DB Error:', upsertErr.message);
-        return res.status(500).json({ error: 'Database error' });
-      }
+      await supabaseAdmin.from('server_console').upsert({ 
+          server_id: serverId, console_log: newFullLog, updated_at: new Date().toISOString() 
+      }, { onConflict: 'server_id' });
     }
 
     return res.status(200).json({ success: true });
-
   } catch (err) {
-    console.error('[Log Ingest] Unexpected error:', err.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

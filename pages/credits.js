@@ -109,7 +109,7 @@ const CheckoutForm = ({ amount, onSuccess, onError, t }) => {
 
        <div className="relative flex items-center gap-4 mb-6">
           <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1" />
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('checkout.or_card')}</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('checkout.or_card', { defaultValue: 'Or pay with card' })}</span>
           <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1" />
        </div>
 
@@ -131,7 +131,7 @@ const CheckoutForm = ({ amount, onSuccess, onError, t }) => {
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <>
-              <span>{t('checkout.pay_button', { amount: amount.toFixed(2) })}</span>
+              <span>{t('checkout.pay_button', { amount: amount.toFixed(2), defaultValue: `Pay €${amount.toFixed(2)}` })}</span>
               <ShieldCheckIcon className="w-5 h-5 opacity-70" />
             </>
           )}
@@ -323,7 +323,7 @@ export default function CreditsPage() {
       if (data.url) {
         window.location.href = data.url; 
       } else {
-        throw new Error(data.error || "Failed to create subscription session");
+        throw new Error(data.error || t('errors.sub_create_failed', { defaultValue: 'Failed to create subscription session' }));
       }
     } catch (e) {
       alert(e.message);
@@ -342,7 +342,7 @@ export default function CreditsPage() {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` }
       });
       
-      if (!res.ok) throw new Error("Failed to cancel subscription");
+      if (!res.ok) throw new Error(t('errors.sub_cancel_failed', { defaultValue: "Failed to cancel subscription" }));
       
       setSubscriptionId(null);
       setRecurringAmount(0);
@@ -368,7 +368,7 @@ export default function CreditsPage() {
         body: JSON.stringify({ amount: editSubAmount })
       });
       
-      if (!res.ok) throw new Error((await res.json()).error || "Failed to update subscription");
+      if (!res.ok) throw new Error((await res.json()).error || t('errors.sub_update_failed', { defaultValue: "Failed to update subscription" }));
       
       setRecurringAmount(editSubAmount);
       setIsEditingSub(false);
@@ -392,7 +392,7 @@ export default function CreditsPage() {
       });
       
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to open billing portal");
+      if (!res.ok) throw new Error(data.error || t('errors.portal_open_failed', { defaultValue: "Failed to open billing portal" }));
       
       window.location.href = data.url; 
     } catch (e) {
@@ -510,27 +510,27 @@ export default function CreditsPage() {
           <div onClick={() => setIsOpen(!isOpen)} className="flex items-center justify-between p-4 cursor-pointer bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
             <div className="flex items-center gap-4">
               <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><ServerIcon className="w-6 h-6" /></div>
-              <div><h4 className="font-semibold text-gray-900 dark:text-gray-100">{t('history.session_runtime')}<span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">{fmtSeconds(item.meta.totalSeconds)}</span></h4><div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2"><span>{formatDate(item.startDate)}</span><span>&rarr;</span><span>{formatDate(item.endDate)}</span></div></div>
+              <div><h4 className="font-semibold text-gray-900 dark:text-gray-100">{t('history.session_runtime', { defaultValue: 'Session Runtime' })}<span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">{fmtSeconds(item.meta.totalSeconds)}</span></h4><div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2"><span>{formatDate(item.startDate)}</span><span>&rarr;</span><span>{formatDate(item.endDate)}</span></div></div>
             </div>
-            <div className="flex items-center gap-4"><span className="font-bold text-gray-900 dark:text-gray-100">{item.amount.toFixed(4)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits')}</span></span>{isOpen ? <ChevronUpIcon className="w-5 h-5 text-gray-400" /> : <ChevronDownIcon className="w-5 h-5 text-gray-400" />}</div>
+            <div className="flex items-center gap-4"><span className="font-bold text-gray-900 dark:text-gray-100">{item.amount.toFixed(4)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits', { defaultValue: 'credits' })}</span></span>{isOpen ? <ChevronUpIcon className="w-5 h-5 text-gray-400" /> : <ChevronDownIcon className="w-5 h-5 text-gray-400" />}</div>
           </div>
           {isOpen && (
             <div className="bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 p-4">
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Usage Calculation</p>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">{t('history.usage_calculation', { defaultValue: 'Usage Calculation' })}</p>
                 <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-6 text-sm font-mono bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm">
                     <div className="flex flex-col items-center sm:items-start">
-                        <span className="text-[10px] uppercase text-gray-400 font-sans font-bold tracking-wider mb-1">Time</span>
-                        <span className="text-gray-700 dark:text-gray-200">{(item.meta.totalSeconds / 3600).toFixed(4)} <span className="text-gray-400 text-xs">hrs</span></span>
+                        <span className="text-[10px] uppercase text-gray-400 font-sans font-bold tracking-wider mb-1">{t('history.time', { defaultValue: 'Time' })}</span>
+                        <span className="text-gray-700 dark:text-gray-200">{(item.meta.totalSeconds / 3600).toFixed(4)} <span className="text-gray-400 text-xs">{t('history.hrs', { defaultValue: 'hrs' })}</span></span>
                     </div>
                     <div className="hidden sm:block text-gray-300 dark:text-slate-600">✕</div>
                     <div className="flex flex-col items-center sm:items-start">
-                        <span className="text-[10px] uppercase text-gray-400 font-sans font-bold tracking-wider mb-1">Rate</span>
-                        <span className="text-gray-700 dark:text-gray-200">{item.meta.totalSeconds > 0 ? Math.abs(item.amount / (item.meta.totalSeconds / 3600)).toFixed(2) : '0.00'} <span className="text-gray-400 text-xs">cr/hr</span></span>
+                        <span className="text-[10px] uppercase text-gray-400 font-sans font-bold tracking-wider mb-1">{t('history.rate', { defaultValue: 'Rate' })}</span>
+                        <span className="text-gray-700 dark:text-gray-200">{item.meta.totalSeconds > 0 ? Math.abs(item.amount / (item.meta.totalSeconds / 3600)).toFixed(2) : '0.00'} <span className="text-gray-400 text-xs">{t('history.cr_hr', { defaultValue: 'cr/hr' })}</span></span>
                     </div>
                     <div className="hidden sm:block text-gray-300 dark:text-slate-600">=</div>
                     <div className="flex flex-col items-center sm:items-start">
-                        <span className="text-[10px] uppercase text-gray-400 font-sans font-bold tracking-wider mb-1">Total</span>
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{Math.abs(item.amount).toFixed(4)} <span className="text-indigo-400/70 text-xs">cr</span></span>
+                        <span className="text-[10px] uppercase text-gray-400 font-sans font-bold tracking-wider mb-1">{t('history.total', { defaultValue: 'Total' })}</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{Math.abs(item.amount).toFixed(4)} <span className="text-indigo-400/70 text-xs">{t('history.cr', { defaultValue: 'cr' })}</span></span>
                     </div>
                 </div>
             </div>
@@ -549,7 +549,7 @@ export default function CreditsPage() {
     if (isMonthlyFee && descText) {
         const srvMatch = descText.match(/Server ([a-f0-9-]+)/i);
         if (srvMatch) {
-            descText = `Server: ${srvMatch[1]}`;
+            descText = t('history.server_prefix', { defaultValue: 'Server: {{id}}', id: srvMatch[1] });
         }
     }
 
@@ -566,7 +566,7 @@ export default function CreditsPage() {
           </div>
         </div>
         <span className={`font-bold ${!isNegative ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}>
-            {item.amount > 0 ? '+' : ''}{item.amount.toFixed(2)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits')}</span>
+            {item.amount > 0 ? '+' : ''}{item.amount.toFixed(2)} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{t('units.credits', { defaultValue: 'credits' })}</span>
         </span>
       </div>
     );
@@ -578,18 +578,18 @@ export default function CreditsPage() {
 
       <main className="flex-grow w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <div><h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1><p className="text-gray-600 dark:text-gray-400 mt-1">{t('subtitle')}</p></div>
-          <button onClick={() => setIsBuyModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all flex items-center gap-2 transform active:scale-95"><CurrencyDollarIcon className="w-5 h-5" />{t('buy_credits')}</button>
+          <div><h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('title', { defaultValue: 'Credits & Billing' })}</h1><p className="text-gray-600 dark:text-gray-400 mt-1">{t('subtitle', { defaultValue: 'Manage your balance and view transaction history.' })}</p></div>
+          <button onClick={() => setIsBuyModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all flex items-center gap-2 transform active:scale-95"><CurrencyDollarIcon className="w-5 h-5" />{t('buy_credits', { defaultValue: 'Buy Credits' })}</button>
         </div>
 
         {/* 1. CREDITS CARD */}
         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-gray-200 dark:border-slate-700 p-5 md:p-8 mb-6 flex flex-col sm:flex-row items-center justify-between gap-8 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><CurrencyDollarIcon className="w-64 h-64 text-indigo-900 dark:text-indigo-400" /></div>
           <div className="relative z-10">
-            <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{t('card.title')}</p>
-            <p className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mt-2">{loadingData ? "..." : credits.toLocaleString()} <span className="text-lg font-medium text-gray-400 dark:text-gray-500 ml-3">Credits</span></p>
+            <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{t('card.title', { defaultValue: 'Available Balance' })}</p>
+            <p className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mt-2">{loadingData ? "..." : credits.toLocaleString()} <span className="text-lg font-medium text-gray-400 dark:text-gray-500 ml-3">{t('card.credits_suffix', { defaultValue: 'Credits' })}</span></p>
           </div>
-          <div className="relative z-10 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 rounded-2xl p-5 max-w-xs"><div className="flex items-start gap-4"><SparklesIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400 mt-1 shrink-0" /><div><h4 className="text-sm font-bold text-indigo-900 dark:text-indigo-200">{t('card.info_title')}</h4><p className="text-xs text-indigo-700 dark:text-indigo-400 mt-1.5 leading-relaxed">{t('card.info_desc')}</p></div></div></div>
+          <div className="relative z-10 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 rounded-2xl p-5 max-w-xs"><div className="flex items-start gap-4"><SparklesIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400 mt-1 shrink-0" /><div><h4 className="text-sm font-bold text-indigo-900 dark:text-indigo-200">{t('card.info_title', { defaultValue: 'Credits are Universal' })}</h4><p className="text-xs text-indigo-700 dark:text-indigo-400 mt-1.5 leading-relaxed">{t('card.info_desc', { defaultValue: 'Use your balance across any game or server. Credits are only consumed when your server is running.' })}</p></div></div></div>
         </div>
 
         {/* 2. RECURRING SUBSCRIPTION CARD */}
@@ -616,7 +616,7 @@ export default function CreditsPage() {
                   <div className="flex flex-col w-full xl:w-auto">
                     <div className="flex flex-col sm:flex-row items-center gap-3 animate-in fade-in duration-200 w-full xl:w-auto">
                         <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-500">Amount (€):</span>
+                        <span className="text-sm font-medium text-slate-500">{t('subscription.amount_label', { defaultValue: 'Amount (€):' })}</span>
                         <input
                             type="number"
                             min="5" max="200" step="0.01" 
@@ -642,10 +642,13 @@ export default function CreditsPage() {
                         </button>
                         </div>
                     </div>
+                    {editSubAmount < 5 || editSubAmount > 200 ? (
+                        <span className="text-xs text-red-500 mt-2 text-center sm:text-left">{t('subscription.amount_limit_error', { defaultValue: 'Must be between €5 and €200' })}</span>
+                    ) : null}
                     {/* CONVERSION RATE HELPER */}
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 w-full text-center sm:text-left flex items-center justify-center sm:justify-start gap-1.5">
                         <SparklesIcon className="w-3.5 h-3.5 text-indigo-500" />
-                        {t('subscription.conversion_rate', { defaultValue: '1€ = 100 Credits. You will receive' })} <strong className="text-indigo-600 dark:text-indigo-400">{(editSubAmount * 100).toLocaleString()} Credits</strong> / month.
+                        {t('subscription.conversion_rate', { defaultValue: '1€ = 100 Credits. You will receive' })} <strong className="text-indigo-600 dark:text-indigo-400">{(editSubAmount * 100).toLocaleString()} {t('subscription.credits_label', { defaultValue: 'Credits' })}</strong> {t('subscription.per_month', { defaultValue: '/ month' })}.
                     </p>
                   </div>
                 ) : (
@@ -657,9 +660,9 @@ export default function CreditsPage() {
                             <CheckCircleIcon className="w-4 h-4" /> {t('subscription.active', { defaultValue: 'Active' })}
                         </p>
                         <p className="font-bold text-slate-900 dark:text-white">
-                            €{Number(recurringAmount).toFixed(2)} / month
+                            €{Number(recurringAmount).toFixed(2)} {t('subscription.per_month', { defaultValue: '/ month' })}
                             <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold ml-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 px-2 py-0.5 rounded-full inline-block mt-1 sm:mt-0">
-                                {(recurringAmount * 100).toLocaleString()} Credits
+                                {(recurringAmount * 100).toLocaleString()} {t('subscription.credits_label', { defaultValue: 'Credits' })}
                             </span>
                         </p>
                         </div>
@@ -709,7 +712,7 @@ export default function CreditsPage() {
               <div className="flex flex-col w-full xl:w-auto">
                   <div className="flex flex-col sm:flex-row gap-3 w-full items-center">
                     <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-slate-500">Amount (€):</span>
+                    <span className="text-sm font-medium text-slate-500">{t('subscription.amount_label', { defaultValue: 'Amount (€):' })}</span>
                     <input
                         type="number"
                         min="5" max="200" step="0.01" 
@@ -718,9 +721,7 @@ export default function CreditsPage() {
                         className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg text-sm font-bold py-2 px-3 focus:ring-indigo-500 dark:text-white w-24 text-center"
                     />
                     </div>
-                    {selectedSubAmount < 5 || selectedSubAmount > 200 ? (
-                    <span className="text-xs text-red-500 text-center">Must be between €5 and €200</span>
-                    ) : null}
+                    
                     <button
                     onClick={handleSubscribe}
                     disabled={subCheckoutLoading || selectedSubAmount < 5 || selectedSubAmount > 200}
@@ -730,10 +731,13 @@ export default function CreditsPage() {
                     {t('subscription.subscribe', { defaultValue: 'Subscribe' })}
                     </button>
                   </div>
+                  {selectedSubAmount < 5 || selectedSubAmount > 200 ? (
+                    <span className="text-xs text-red-500 mt-2 text-center sm:text-left">{t('subscription.amount_limit_error', { defaultValue: 'Must be between €5 and €200' })}</span>
+                  ) : null}
                   {/* CONVERSION RATE HELPER */}
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 w-full text-center sm:text-left flex items-center justify-center sm:justify-start gap-1.5">
                     <SparklesIcon className="w-3.5 h-3.5 text-indigo-500" />
-                    {t('subscription.conversion_rate', { defaultValue: '1€ = 100 Credits. You will receive' })} <strong className="text-indigo-600 dark:text-indigo-400">{(selectedSubAmount * 100).toLocaleString()} Credits</strong> / month.
+                    {t('subscription.conversion_rate', { defaultValue: '1€ = 100 Credits. You will receive' })} <strong className="text-indigo-600 dark:text-indigo-400">{(selectedSubAmount * 100).toLocaleString()} {t('subscription.credits_label', { defaultValue: 'Credits' })}</strong> {t('subscription.per_month', { defaultValue: '/ month' })}.
                   </p>
               </div>
             )}
@@ -741,8 +745,8 @@ export default function CreditsPage() {
         </div>
 
         <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">{t('history.title')}</h2>
-          {loadingData ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div></div> : error ? <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-200 text-center">{error}</div> : transactions.length === 0 ? <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-gray-200 dark:border-slate-700"><ReceiptRefundIcon className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" /><p className="text-gray-500 dark:text-gray-400 font-medium">{t('history.empty')}</p></div> : <div className="space-y-4">{groupedTransactions().map((item) => <HistoryItem key={item.id} item={item} />)}</div>}
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">{t('history.title', { defaultValue: 'Transaction History' })}</h2>
+          {loadingData ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div></div> : error ? <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-200 text-center">{error}</div> : transactions.length === 0 ? <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-gray-200 dark:border-slate-700"><ReceiptRefundIcon className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" /><p className="text-gray-500 dark:text-gray-400 font-medium">{t('history.empty', { defaultValue: 'No transactions found.' })}</p></div> : <div className="space-y-4">{groupedTransactions().map((item) => <HistoryItem key={item.id} item={item} />)}</div>}
         </div>
       </main>
 
@@ -766,26 +770,26 @@ export default function CreditsPage() {
                 <div className="bg-indigo-50 dark:bg-indigo-900/10 rounded-3xl p-6 md:p-8 mb-8 text-center border border-indigo-100 dark:border-indigo-900/30">
                     <div className={`inline-block px-4 py-1.5 rounded-full mb-4 transition-colors ${bonusGet > 0 ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400'}`}>
                         <span className="text-xs font-bold uppercase tracking-widest">
-                            {bonusGet > 0 ? t('modal.bonus_active', { percent: activePercent }) : t('modal.current_offer')}
+                            {bonusGet > 0 ? t('modal.bonus_active', { percent: activePercent }) : t('modal.current_offer', { defaultValue: 'Current Offer' })}
                         </span>
                     </div>
                     <div className="flex items-center justify-center gap-2 mb-2"><span className="text-5xl md:text-6xl font-black text-slate-900 dark:text-white tracking-tighter">{totalGet.toLocaleString()}</span></div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{t('modal.credits_received')}</p>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{t('modal.credits_received', { defaultValue: 'Credits Received' })}</p>
                     {bonusGet > 0 && (
                         <div className="mt-4 text-xs font-medium text-green-600 dark:text-green-400 flex items-center justify-center gap-1">
                             <SparklesIcon className="w-4 h-4" />
-                            <span>{t('modal.bonus_breakdown', { base: Math.round(depositAmount * 100), bonus: bonusGet })}</span>
+                            <span>{t('modal.bonus_breakdown', { base: Math.round(depositAmount * 100), bonus: bonusGet, defaultValue: 'Base: {{base}} + Bonus: {{bonus}}' })}</span>
                         </div>
                     )}
                 </div>
 
                 <div className="mb-8">
-                    <div className="flex justify-between text-xs font-bold text-gray-400 uppercase mb-4 tracking-widest"><span>3€</span><span>{t('modal.drag_adjust')}</span><span>50€</span></div>
+                    <div className="flex justify-between text-xs font-bold text-gray-400 uppercase mb-4 tracking-widest"><span>3€</span><span>{t('modal.drag_adjust', { defaultValue: 'Drag to Adjust' })}</span><span>50€</span></div>
                     <input type="range" min="3" max="50" step="0.01" value={depositAmount} onChange={(e) => setDepositAmount(Number(e.target.value))} className="w-full h-6 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500 transition-all touch-action-manipulation" />
                 </div>
 
                 <div>
-                    <p className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-widest">{t('modal.quick_select')}</p>
+                    <p className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-widest">{t('modal.quick_select', { defaultValue: 'Quick Select' })}</p>
                     <div className="grid grid-cols-4 gap-3">
                         {[5, 10, 20, 50].map((amt) => (
                         <button key={amt} onClick={() => setDepositAmount(amt)} className={`py-2.5 rounded-xl border font-bold text-sm transition-all transform active:scale-95 ${depositAmount === amt ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-indigo-300'}`}>€{amt}</button>
@@ -798,13 +802,13 @@ export default function CreditsPage() {
             <div className="w-full md:w-[400px] bg-slate-50 dark:bg-slate-950/50 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-800 p-5 md:p-8 flex flex-col md:overflow-y-auto">
                 <button onClick={() => setIsBuyModalOpen(false)} className="hidden md:block self-end p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors mb-4"><XMarkIcon className="w-6 h-6" /></button>
 
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><CreditCardIcon className="w-5 h-5 text-indigo-500" />{t('checkout.summary_title')}</h3>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2"><CreditCardIcon className="w-5 h-5 text-indigo-500" />{t('checkout.summary_title', { defaultValue: 'Checkout Summary' })}</h3>
 
                 <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 mb-6 shadow-sm">
-                    <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">{t('checkout.amount')}</span><span className="font-mono text-slate-900 dark:text-white">€{depositAmount.toFixed(2)}</span></div>
-                    {bonusGet > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>{t('checkout.bonus_applied')}</span><span className="font-mono">+{activePercent}%</span></div>}
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 dark:text-slate-400">{t('checkout.amount', { defaultValue: 'Amount' })}</span><span className="font-mono text-slate-900 dark:text-white">€{depositAmount.toFixed(2)}</span></div>
+                    {bonusGet > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>{t('checkout.bonus_applied', { defaultValue: 'Bonus Applied' })}</span><span className="font-mono">+{activePercent}%</span></div>}
                     <div className="h-px bg-slate-100 dark:bg-slate-800 my-2" />
-                    <div className="flex justify-between items-center"><span className="font-bold text-slate-900 dark:text-white">{t('checkout.total')}</span><span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">€{depositAmount.toFixed(2)}</span></div>
+                    <div className="flex justify-between items-center"><span className="font-bold text-slate-900 dark:text-white">{t('checkout.total', { defaultValue: 'Total Due' })}</span><span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">€{depositAmount.toFixed(2)}</span></div>
                 </div>
 
                 <div className="mt-auto pb-4 md:pb-0">
@@ -814,17 +818,17 @@ export default function CreditsPage() {
                                 <div className="flex items-center h-5 mt-0.5"><input id="eu-refund-waiver" type="checkbox" checked={agreedToRefundWaiver} onChange={(e) => setAgreedToRefundWaiver(e.target.checked)} className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 dark:bg-slate-700 dark:border-slate-600 cursor-pointer" /></div>
                                 <div className="ml-1 text-xs leading-relaxed"><label htmlFor="eu-refund-waiver" className="font-medium text-slate-600 dark:text-slate-300 cursor-pointer">{t('checkout.refund_waiver', { defaultValue: 'I acknowledge that by purchasing immediate access to digital credits, I waive my 14-day right of withdrawal under EU consumer protection regulations.' })}</label></div>
                              </div>
-                             <button onClick={handleInitiatePayment} disabled={depositAmount < 3 || depositAmount > 50 || !agreedToRefundWaiver} className="w-full py-4 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-slate-900 font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-3 transform active:scale-95">{t('checkout.continue_btn')}</button>
+                             <button onClick={handleInitiatePayment} disabled={depositAmount < 3 || depositAmount > 50 || !agreedToRefundWaiver} className="w-full py-4 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-slate-900 font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-3 transform active:scale-95">{t('checkout.continue_btn', { defaultValue: 'Continue to Payment' })}</button>
                          </>
                     ) : (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                             <div className="flex items-center justify-between mb-4"><span className="text-xs font-bold uppercase text-slate-400 tracking-wider">{t('checkout.payment_details')}</span><button onClick={() => setClientSecret(null)} className="text-xs text-indigo-500 hover:underline">{t('checkout.change_amount')}</button></div>
+                             <div className="flex items-center justify-between mb-4"><span className="text-xs font-bold uppercase text-slate-400 tracking-wider">{t('checkout.payment_details', { defaultValue: 'Payment Details' })}</span><button onClick={() => setClientSecret(null)} className="text-xs text-indigo-500 hover:underline">{t('checkout.change_amount', { defaultValue: 'Change Amount' })}</button></div>
                              <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe', variables: { colorPrimary: '#4f46e5', fontSizeBase: '14px' } } }}>
                                 <CheckoutForm amount={depositAmount} onSuccess={() => setIsBuyModalOpen(false)} onError={(msg) => alert(msg)} t={t} />
                              </Elements>
                         </div>
                     )}
-                    <p className="text-center text-[10px] text-slate-400 mt-4 flex items-center justify-center gap-1"><ShieldCheckIcon className="w-3 h-3" />{t('checkout.secure_msg')}</p>
+                    <p className="text-center text-[10px] text-slate-400 mt-4 flex items-center justify-center gap-1"><ShieldCheckIcon className="w-3 h-3" />{t('checkout.secure_msg', { defaultValue: 'Payments are securely processed by Stripe.' })}</p>
                 </div>
             </div>
 

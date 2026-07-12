@@ -14,7 +14,8 @@ import {
   ServerIcon,
   ChatBubbleLeftRightIcon,
   DocumentTextIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  CloudArrowUpIcon // <-- Added Icon
 } from "@heroicons/react/24/outline";
 
 export default function AdminDashboard() {
@@ -22,6 +23,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('users'); 
+  const [updating, setUpdating] = useState(false); // <-- Added State for OTA Updates
 
   const router = useRouter();
 
@@ -54,6 +56,30 @@ export default function AdminDashboard() {
     }
     
     if (showLoading) setLoading(false);
+  };
+
+  // --- NEW: OTA Fleet Update Logic ---
+  const triggerFleetUpdate = async () => {
+    if (!confirm('WARNING: Push an OTA update to ALL active servers?\n\nThis will instantly download the latest core scripts from your S3 bucket and gracefully restart the background wrappers on every running game server.')) return;
+    
+    setUpdating(true);
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/admin/fleet-update', { 
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            alert(`✅ Update Broadcast Complete!\n\nSuccessfully Patched: ${data.results.success.length} servers\nFailed/Offline: ${data.results.failed.length} servers`);
+        } else {
+            alert(`Error: ${data.error}`);
+        }
+    } catch (err) {
+        alert('Failed to trigger fleet update network request.');
+    }
+    setUpdating(false);
   };
 
   const revenue24h = useMemo(() => {
@@ -107,7 +133,16 @@ export default function AdminDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-            {/* NEW Invoices Link */}
+            {/* NEW: OTA Fleet Update Button */}
+            <button 
+                onClick={triggerFleetUpdate}
+                disabled={updating}
+                className="bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-400 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm disabled:opacity-50"
+            >
+                <CloudArrowUpIcon className={`h-4 w-4 ${updating ? 'animate-bounce' : ''}`} />
+                <span className="hidden sm:inline">{updating ? 'Pushing OTA...' : 'Push OTA Update'}</span>
+            </button>
+
             <Link 
                 href="/admin/invoices" 
                 className="bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"

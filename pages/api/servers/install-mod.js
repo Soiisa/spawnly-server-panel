@@ -6,7 +6,6 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Allowed domains for mod/plugin downloads to prevent SSRF
 const ALLOWED_DOMAINS = [
   'cdn.modrinth.com',
   'edge.forgecdn.net',
@@ -17,7 +16,8 @@ const ALLOWED_DOMAINS = [
   'cdn.getbukkit.org',
   'buk.kit',
   'spigotmc.org',
-  'api.spiget.org'
+  'api.spiget.org',
+  'umod.org'
 ];
 
 export default async function handler(req, res) {
@@ -42,46 +42,86 @@ export default async function handler(req, res) {
   if (server.user_id !== user.id) return res.status(403).json({ error: 'Forbidden', detail: 'You do not own this server' });
 
   const isMinecraft = !server.game || server.game === 'minecraft';
+  const isRust = server.game === 'rust';
+  const isSatisfactory = server.game === 'satisfactory';
   const fileApiPort = 3005;
+
+  // ========================================================================
+  // ============================ RUST MOD LOGIC ============================
+  // ========================================================================
+  if (isRust) {
+      if (!downloadUrl || !folder) return res.status(400).json({ error: 'downloadUrl and folder required for Rust.' });
+      if (!server.ipv4) return res.status(400).json({ error: 'Server lacks an assigned public IPv4 address.' });
+
+      try {
+          const urlObj = new URL(downloadUrl);
+          if (!ALLOWED_DOMAINS.some(domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain))) {
+              return res.status(400).json({ error: 'Download domain not allowed' });
+          }
+
+          console.log(`[Install-Mod] Downloading Rust Plugin from: ${downloadUrl}`);
+          const fileRes = await fetch(downloadUrl, { redirect: 'follow' });
+          if (!fileRes.ok) throw new Error(`Failed to download plugin from uMod: ${fileRes.status}`);
+
+          // Extract filename from uMod headers, fallback to slug.cs
+          let finalFilename = filename || `${modSlug}.cs`;
+          const disposition = fileRes.headers.get('content-disposition');
+          if (disposition && disposition.includes('filename=')) {
+              finalFilename = disposition.split('filename=')[1].replace(/"/g, '');
+          }
+
+          const buffer = Buffer.from(await fileRes.arrayBuffer());
+          const nodeEndpoint = `http://${server.ipv4}:${fileApiPort}/api/file?path=${folder}/${finalFilename}`;
+          
+          console.log(`[Install-Mod] Uploading ${finalFilename} directly to VPS Daemon`);
+          const targetRes = await fetch(nodeEndpoint, {
+              method: 'PUT',
+              headers: { 
+                  'Authorization': `Bearer ${server.rcon_password}`,
+                  'Content-Type': 'application/octet-stream'
+              },
+              body: buffer
+          });
+
+          if (!targetRes.ok) throw new Error(`VPS Daemon rejected upload: ${targetRes.status}`);
+
+          await supabaseAdmin.from('server_audit_logs').insert({
+              server_id: serverId, user_id: user.id, action_type: 'install_mod',
+              details: JSON.stringify({ game: 'rust', plugin: finalFilename }),
+              created_at: new Date().toISOString()
+          });
+
+          return res.status(200).json({ success: true, message: 'Plugin installed. Oxide will auto-compile it instantly.' });
+      } catch (err) {
+          console.error(`[Install-Mod] Rust failure:`, err.message);
+          return res.status(500).json({ error: 'Plugin installation failed.', detail: err.message });
+      }
+  }
 
   // ========================================================================
   // ======================== SATISFACTORY MOD LOGIC ========================
   // ========================================================================
-  if (!isMinecraft) {
-      if (!modSlug || !modVersion) return res.status(400).json({ error: 'modSlug and modVersion are required for Steam modifications.' });
+  if (isSatisfactory) {
+      if (!modSlug || !modVersion) return res.status(400).json({ error: 'modSlug and modVersion are required.' });
       if (!server.ipv4) return res.status(400).json({ error: 'Server lacks an assigned public IPv4 address.' });
 
-      const nodeEndpoint = `http://${server.ipv4}:${fileApiPort}/api/install-ficsit`;
-
       try {
-          console.log(`[Install-Mod] Dispatching HTTP POST to Steam VPS: ${nodeEndpoint}`);
-          const targetRes = await fetch(nodeEndpoint, {
+          const targetRes = await fetch(`http://${server.ipv4}:${fileApiPort}/api/install-ficsit`, {
               method: 'POST',
-              headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${server.rcon_password}` // FIXED: Pass the password as a Bearer token
-              },
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${server.rcon_password}` },
               body: JSON.stringify({ modSlug, modVersion })
           });
 
-          if (!targetRes.ok) {
-              const errorData = await targetRes.json().catch(() => ({}));
-              throw new Error(errorData.error || `VPS Daemon aborted with status: ${targetRes.status}`);
-          }
-
-          const resultData = await targetRes.json();
+          if (!targetRes.ok) throw new Error(`VPS Daemon aborted with status: ${targetRes.status}`);
           
           await supabaseAdmin.from('server_audit_logs').insert({
-              server_id: serverId,
-              user_id: user.id,
-              action_type: 'install_mod',
-              details: JSON.stringify({ game: server.game, modSlug, modVersion }),
+              server_id: serverId, user_id: user.id, action_type: 'install_mod',
+              details: JSON.stringify({ game: 'satisfactory', modSlug, modVersion }),
               created_at: new Date().toISOString()
           });
 
-          return res.status(200).json({ success: true, message: 'Mod installed locally via daemon.', log: resultData.log });
+          return res.status(200).json({ success: true, message: 'Mod installed locally via daemon.', log: (await targetRes.json()).log });
       } catch (err) {
-          console.error(`[Install-Mod] Steam HTTP failure:`, err.message);
           return res.status(500).json({ error: 'Mod installation command aborted.', detail: err.message });
       }
   }
@@ -89,45 +129,33 @@ export default async function handler(req, res) {
   // ========================================================================
   // ========================= MINECRAFT MOD LOGIC ==========================
   // ========================================================================
-  if (!downloadUrl || !filename || !folder) return res.status(400).json({ error: 'downloadUrl, filename, and folder required for Minecraft.' });
+  if (isMinecraft) {
+      if (!downloadUrl || !filename || !folder) return res.status(400).json({ error: 'downloadUrl, filename, and folder required.' });
 
-  try {
-    const urlObj = new URL(downloadUrl);
-    const isAllowed = ALLOWED_DOMAINS.some(domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain));
-    if (!isAllowed) return res.status(400).json({ error: 'Download domain not allowed' });
-  } catch (e) { return res.status(400).json({ error: 'Invalid URL format' }); }
+      try {
+        const urlObj = new URL(downloadUrl);
+        const isAllowed = ALLOWED_DOMAINS.some(domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain));
+        if (!isAllowed) return res.status(400).json({ error: 'Download domain not allowed' });
+      } catch (e) { return res.status(400).json({ error: 'Invalid URL format' }); }
 
-  if (filename.includes('..') || filename.includes('/') || filename.includes('\\') || folder.includes('..')) return res.status(400).json({ error: 'Invalid path' });
-  
-  const allowedFolders = ['mods', 'plugins', 'libraries', 'config'];
-  if (!allowedFolders.includes(folder)) return res.status(400).json({ error: 'Invalid target folder' });
+      if (filename.includes('..') || filename.includes('/') || filename.includes('\\') || folder.includes('..')) return res.status(400).json({ error: 'Invalid path' });
+      const allowedFolders = ['mods', 'plugins', 'libraries', 'config'];
+      if (!allowedFolders.includes(folder)) return res.status(400).json({ error: 'Invalid target folder' });
 
-  const s3Config = { accessKeyId: process.env.AWS_ACCESS_KEY_ID, secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY, region: process.env.AWS_REGION, endpoint: process.env.S3_ENDPOINT || undefined, s3ForcePathStyle: !!process.env.S3_ENDPOINT };
-  const s3 = new AWS.S3(s3Config);
+      const s3 = new AWS.S3({ accessKeyId: process.env.AWS_ACCESS_KEY_ID, secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY, region: process.env.AWS_REGION, endpoint: process.env.S3_ENDPOINT || undefined, s3ForcePathStyle: !!process.env.S3_ENDPOINT });
 
-  try {
-    console.log(`[Install-Mod] Downloading from: ${downloadUrl}`);
-    const fileRes = await fetch(downloadUrl, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': '*/*',
-            'Referer': 'https://www.google.com/'
-        },
-        redirect: 'follow'
-    });
-
-    if (!fileRes.ok) throw new Error(`Failed to download file: ${fileRes.statusText} (${fileRes.status})`);
-    
-    const buffer = Buffer.from(await fileRes.arrayBuffer());
-    const key = `servers/${serverId}/${folder}/${filename}`;
-
-    await s3.putObject({ Bucket: process.env.S3_BUCKET, Key: key, Body: buffer, ContentType: 'application/java-archive' }).promise();
-
-    await supabaseAdmin.from('server_audit_logs').insert({ server_id: serverId, user_id: user.id, action_type: 'install_mod', details: JSON.stringify({ folder, filename, url: downloadUrl }), created_at: new Date().toISOString() });
-
-    return res.status(200).json({ success: true });
-  } catch (err) {
-    console.error('[Install-Mod] Error:', err.message);
-    return res.status(500).json({ error: 'Failed to install', detail: err.message });
+      try {
+        const fileRes = await fetch(downloadUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, redirect: 'follow' });
+        if (!fileRes.ok) throw new Error(`Failed to download file: ${fileRes.statusText}`);
+        
+        const buffer = Buffer.from(await fileRes.arrayBuffer());
+        await s3.putObject({ Bucket: process.env.S3_BUCKET, Key: `servers/${serverId}/${folder}/${filename}`, Body: buffer, ContentType: 'application/java-archive' }).promise();
+        await supabaseAdmin.from('server_audit_logs').insert({ server_id: serverId, user_id: user.id, action_type: 'install_mod', details: JSON.stringify({ folder, filename, url: downloadUrl }), created_at: new Date().toISOString() });
+        return res.status(200).json({ success: true });
+      } catch (err) {
+        return res.status(500).json({ error: 'Failed to install', detail: err.message });
+      }
   }
+
+  return res.status(400).json({ error: 'Mod installation is not supported for this game type via this endpoint.' });
 }

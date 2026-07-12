@@ -1,14 +1,15 @@
 // pages/api/servers/provision.js
+
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
 import { verifyServerAccess } from '../../../lib/accessControl'; 
-import { getMonthlyCreditCost, getHourlyCreditCost, getHetznerType } from '../../../lib/config'; // <-- NEW
+import { getMonthlyCreditCost, getHourlyCreditCost, getHetznerType } from '../../../lib/config'; 
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
-const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN;
+const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -16,6 +17,12 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DEFAULT_SSH_KEY = process.env.HETZNER_DEFAULT_SSH_KEY || 'default-spawnly-key';
 const SLEEPER_SECRET = process.env.SLEEPER_SECRET;
 const DOMAIN_SUFFIX = '.spawnly.net';
+
+const REGION_MAPPING = {
+    'EU': ['nbg1', 'fsn1', 'hel1'], // Nuremberg, Falkenstein, Helsinki
+    'NA': ['ash', 'hil'],           // Ashburn (VA), Hillsboro (OR)
+    'ASIA': ['sin']                 // Singapore
+};
 
 let appUrl = process.env.APP_BASE_URL || process.env.NEXTAUTH_URL;
 if (!appUrl && process.env.VERCEL_URL) appUrl = `https://${process.env.VERCEL_URL}`;
@@ -263,9 +270,9 @@ async function provisionSteamServer(serverRow, version, ssh_keys, res) {
         console.log(`\n\n=== [STEAM PROVISION] STARTING PROVISION FOR SERVER: ${serverRow.id} ===`);
         
         const serverRamGb = Number(serverRow.ram || 4);
-        // Uses Config mappings dynamically
         const serverType = getHetznerType(serverRamGb, serverRow.billing_type === 'monthly');
         const locationToUse = serverRow.location || 'nbg1';
+        const gameType = serverRow.game?.toLowerCase() || 'satisfactory';
 
         const isFirstTimeMonthly = serverRow.billing_type === 'monthly' && !serverRow.last_billed_at;
         const monthlyCost = isFirstTimeMonthly ? getMonthlyCreditCost(serverRamGb) : 0;
@@ -307,21 +314,141 @@ async function provisionSteamServer(serverRow, version, ssh_keys, res) {
         };
         const s5cmdOpt = s3Config.S3_ENDPOINT ? `--endpoint-url ${s3Config.S3_ENDPOINT}` : '';
 
-        // 2. Setup Hetzner Firewall for Steam
+        // 2. Setup Hetzner Dynamic Firewall
         let firewallId = null;
+        const fwRules = [
+            { direction: 'in', protocol: 'tcp', port: '22', source_ips: ['0.0.0.0/0', '::/0'] },
+            { direction: 'in', protocol: 'tcp', port: '8888', source_ips: ['0.0.0.0/0', '::/0'] },
+            { direction: 'in', protocol: 'tcp', port: '3003-3007', source_ips: ['0.0.0.0/0', '::/0'] } 
+        ];
+
+        if (gameType === 'rust') {
+            fwRules.push(
+                { direction: 'in', protocol: 'tcp', port: '28015', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '28015', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '28016', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'arma3') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '2302-2306', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '2302-2306', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '27014-27016', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'palworld') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '8211', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '25575', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'valheim') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '2456-2457', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'project_zomboid') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '16261-16262', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '16261-16262', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (['cs2', 'gmod', 'tf2', 'l4d2'].includes(gameType)) {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '27015', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '27015', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (['ark_se', 'ark_sa'].includes(gameType)) {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '7777-7778', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '27015', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '27020', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '32330', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'arma_reforger') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '2001', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'factorio') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '34197', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '27015', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'space_engineers') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '27016', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '27016', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'seven_days_to_die') {
+            fwRules.push(
+                { direction: 'in', protocol: 'tcp', port: '26900', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '26900-26903', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'conan_exiles') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '7777-7778', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '27015', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'dayz') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '2302', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '27016', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'enshrouded') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '15636-15637', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'sons_of_the_forest') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '8766', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '27016', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '9700', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'v_rising') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '9876-9877', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'core_keeper') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '27015-27016', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'squad') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '7787', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '27165-27166', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '27165', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'insurgency_sandstorm') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '27102', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '27131', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'tcp', port: '27015', source_ips: ['0.0.0.0/0', '::/0'] } // RCON Added
+            );
+        } else if (gameType === 'unturned') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '27015-27017', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'dst') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '10999', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'terraria') {
+            fwRules.push(
+                { direction: 'in', protocol: 'tcp', port: '7777', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else if (gameType === 'stardew_valley') {
+            fwRules.push(
+                { direction: 'in', protocol: 'udp', port: '24642', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        } else {
+            fwRules.push(
+                { direction: 'in', protocol: 'tcp', port: '7777', source_ips: ['0.0.0.0/0', '::/0'] },
+                { direction: 'in', protocol: 'udp', port: '7777', source_ips: ['0.0.0.0/0', '::/0'] }
+            );
+        }
+
         try {
             const fwResponse = await fetch(`${HETZNER_API_BASE}/firewalls`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: `fw-${serverRow.subdomain || serverRow.id}-${Date.now()}`,
-                    rules: [
-                        { direction: 'in', protocol: 'tcp', port: '22', source_ips: ['0.0.0.0/0', '::/0'] },
-                        { direction: 'in', protocol: 'tcp', port: '7777', source_ips: ['0.0.0.0/0', '::/0'] },
-                        { direction: 'in', protocol: 'udp', port: '7777', source_ips: ['0.0.0.0/0', '::/0'] },
-                        { direction: 'in', protocol: 'tcp', port: '8888', source_ips: ['0.0.0.0/0', '::/0'] },
-                        { direction: 'in', protocol: 'tcp', port: '3003-3007', source_ips: ['0.0.0.0/0', '::/0'] } 
-                    ]
+                    rules: fwRules
                 })
             });
             if (fwResponse.ok) {
@@ -335,16 +462,260 @@ async function provisionSteamServer(serverRow, version, ssh_keys, res) {
             'satisfactory': 1690800,
             'palworld': 2394010,
             'rust': 258550,
-            'valheim': 1006090
+            'valheim': 896660, 
+            'arma3': 233780,
+            'project_zomboid': 380870,
+            'gmod': 4020,
+            'cs2': 730,
+            'ark_se': 376030,
+            'ark_sa': 2430930,
+            'arma_reforger': 1874900,
+            'factorio': 427520,
+            'space_engineers': 298740,
+            'seven_days_to_die': 294420,
+            'conan_exiles': 443030,
+            'dayz': 223350,
+            'enshrouded': 2278520,
+            'sons_of_the_forest': 2465200,
+            'v_rising': 1829350,
+            'core_keeper': 1963720,
+            'squad': 403240,
+            'insurgency_sandstorm': 581330,
+            'unturned': 1110390,
+            'tf2': 232250,
+            'l4d2': 222860,
+            'dst': 343050
         };
-        const appId = steamAppIds[serverRow.game?.toLowerCase()] || 1690800;
+        const appId = steamAppIds[gameType] || 1690800;
 
-        const requestedBranch = version && version.toLowerCase() !== 'public' ? version : '';
+        const requestedBranch = version && !['public', 'community'].includes(version.toLowerCase()) ? version : '';
         const betaFlag = requestedBranch ? `-beta ${requestedBranch}` : '';
 
         const rconPassword = serverRow.rcon_password || generateRconPassword();
 
-        // 4. Construct Steam Cloud-Init Payload
+        let steamLogin = "+login anonymous";
+        if (gameType === 'arma3') {
+            steamLogin = "+login spawnlyserverhosting SpawnlyHosting";
+        }
+
+        // ========================================================================
+        // --- GAME-SPECIFIC INITIALIZATION SCHEMAS ---
+        // Pre-creates configs, profiles, and parameters so no engine crashes.
+        // Uses `- |` for proper YAML multiline parsing.
+        // ========================================================================
+        let gameSpecificSetup = "";
+        if (gameType === 'satisfactory') {
+            gameSpecificSetup = `  - curl -sL "https://github.com/satisfactorymodding/ficsit-cli/releases/latest/download/ficsit_linux_amd64" -o /usr/local/bin/ficsit-cli || true
+  - chmod +x /usr/local/bin/ficsit-cli 2>/dev/null || true
+  - mkdir -p /home/spawnly/.config/Epic/FactoryGame/Saved/SaveGames
+  - ln -s /home/spawnly/.config/Epic/FactoryGame/Saved/SaveGames /home/spawnly/server/SaveGames`;
+        } else if (gameType === 'rust') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/server/my_server_identity`;
+        } else if (gameType === 'arma3') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/profile`;
+        } else if (gameType === 'project_zomboid') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/Zomboid/Server
+  - |
+    cat << 'EOF' > /home/spawnly/Zomboid/Server/Spawnly.ini
+    PlayerAllowedToOwnMultipleFactionHouses=false
+    FactionServerAdminOwner=false
+    OldInfectedSurvivalMode=false
+    Public=true
+    PublicName=Spawnly Project Zomboid Hosting Server
+    MaxPlayers=16
+    PingLimit=400
+    EOF`;
+        } else if (gameType === 'palworld') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/.steam/sdk64\n  - /usr/games/steamcmd +login anonymous +app_update 1007 +quit\n  - cp /home/spawnly/Steam/steamapps/common/Steamworks\\ SDK\\ Redist/linux64/steamclient.so /home/spawnly/.steam/sdk64/`;
+        } else if (gameType === 'arma_reforger') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/profile
+  - |
+    cat << 'EOF' > /home/spawnly/server/server.json
+    {
+        "dedicatedServerId": "spawnly-server",
+        "region": "EU",
+        "game": {
+            "name": "Spawnly Arma Reforger Server",
+            "password": "",
+            "scenarioId": "{59AD59368755F41A}Missions/21_GM_Eden.conf",
+            "maxPlayers": 16,
+            "visible": true,
+            "crossPlatform": true,
+            "gameProperties": {
+                "serverMaxViewDistance": 2500,
+                "fastValidation": true,
+                "networkViewDistance": 1000,
+                "battlEye": true
+            }
+        }
+    }
+    EOF`;
+        } else if (gameType === 'factorio') {
+             gameSpecificSetup = `  - wget -qO /tmp/factorio.tar.xz https://factorio.com/get-download/latest/headless/linux64
+  - tar -xf /tmp/factorio.tar.xz -C /home/spawnly/
+  - mv /home/spawnly/factorio/* /home/spawnly/server/
+  - rm -rf /home/spawnly/factorio
+  - mkdir -p /home/spawnly/server/saves
+  - chown -R spawnly:spawnly /home/spawnly/server
+  - su - spawnly -c "/home/spawnly/server/bin/x64/factorio --create /home/spawnly/server/saves/world.zip"`;
+        } else if (gameType === 'cs2') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/game/csgo/cfg
+  - |
+    cat << 'EOF' > /home/spawnly/server/game/csgo/cfg/server.cfg
+    hostname "Spawnly Counter-Strike 2 Dedicated Server"
+    sv_cheats 0
+    mp_autoteambalance 1
+    mp_limitteams 1
+    EOF`;
+        } else if (gameType === 'gmod') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/garrysmod/cfg
+  - |
+    cat << 'EOF' > /home/spawnly/server/garrysmod/cfg/server.cfg
+    hostname "Spawnly Garry's Mod Dedicated Server"
+    sbox_maxprops 150
+    sbox_maxragdolls 5
+    sbox_maxnpcs 10
+    sbox_maxballoons 10
+    EOF`;
+        } else if (gameType === 'space_engineers') {
+             gameSpecificSetup = `  - mkdir -p /usr/share/wine/mono
+  - wget -qO /tmp/wine-mono.tar.xz https://dl.winehq.org/wine/wine-mono/6.1.1/wine-mono-6.1.1-x86.tar.xz
+  - tar -xf /tmp/wine-mono.tar.xz -C /usr/share/wine/mono/
+  - mkdir -p /home/spawnly/.wine/drive_c/users/spawnly/AppData/Roaming/SpaceEngineersDedicated
+  - |
+    cat << 'EOF' > /home/spawnly/.wine/drive_c/users/spawnly/AppData/Roaming/SpaceEngineersDedicated/SpaceEngineers-Dedicated.cfg
+    <?xml version="1.0" encoding="utf-8"?>
+    <MyConfigDedicated xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <SessionSettings>
+        <GameMode>Survival</GameMode>
+        <InventorySizeMultiplier>10</InventorySizeMultiplier>
+        <BlocksInventorySizeMultiplier>1</BlocksInventorySizeMultiplier>
+        <MaxPlayers>16</MaxPlayers>
+      </SessionSettings>
+      <ServerName>Spawnly Dedicated Space Engineers</ServerName>
+      <WorldName>SpawnlyWorld</WorldName>
+    </MyConfigDedicated>
+    EOF`;
+        } else if (gameType === 'tf2') {
+            gameSpecificSetup = `  - mkdir -p /home/spawnly/server/tf/cfg
+  - |
+    cat << 'EOF' > /home/spawnly/server/tf/cfg/server.cfg
+    hostname "Spawnly TF2 Dedicated Server"
+    sv_password ""
+    rcon_password "${rconPassword}"
+    EOF`;
+        } else if (gameType === 'l4d2') {
+            gameSpecificSetup = `  - mkdir -p /home/spawnly/server/left4dead2/cfg
+  - |
+    cat << 'EOF' > /home/spawnly/server/left4dead2/cfg/server.cfg
+    hostname "Spawnly L4D2 Dedicated Server"
+    sv_password ""
+    rcon_password "${rconPassword}"
+    EOF`;
+        } else if (gameType === 'enshrouded') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/savegame`;
+        } else if (gameType === 'v_rising') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/Settings`;
+        } else if (gameType === 'conan_exiles') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/ConanSandbox/Saved/Config/WindowsServer`;
+        } else if (gameType === 'sons_of_the_forest') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/userdata`;
+        } else if (gameType === 'dayz') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/profile`;
+        } else if (gameType === 'seven_days_to_die') {
+             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/UserData`;
+        } else if (gameType === 'terraria') {
+            gameSpecificSetup = `  - wget -qO /tmp/tshock.zip https://github.com/Pryaxis/TShock/releases/download/v5.2.0/TShock-5.2-for-Terraria-1.4.4.9-linux-x64-Release.zip
+  - unzip -o /tmp/tshock.zip -d /home/spawnly/server/
+  - tar -xf /home/spawnly/server/TShock-Beta-linux-x64-Release.tar -C /home/spawnly/server/ || true
+  - rm -f /home/spawnly/server/TShock-Beta-linux-x64-Release.tar
+  - mkdir -p /home/spawnly/server/saves
+  - chown -R spawnly:spawnly /home/spawnly/server`;
+        } else if (gameType === 'stardew_valley') {
+            gameSpecificSetup = `  - echo "Downloading Stardew Headless Wrapper placeholder..."
+  - mkdir -p /home/spawnly/server/saves
+  - chown -R spawnly:spawnly /home/spawnly/server`;
+        }
+
+        // START OF L4D2 BYPASS FIX
+        let steamCmdRun = `  - su - spawnly -c "for i in 1 2 3; do /usr/games/steamcmd @sSteamCmdForcePlatformType linux +force_install_dir /home/spawnly/server ${steamLogin} +app_update ${appId} ${betaFlag} validate +quit && break; echo 'SteamCMD retry'; sleep 5; done"`;
+        
+        // Factorio/Terraria/Stardew bypasses SteamCMD completely to avoid the "No subscription" error or pull external
+        if (['factorio', 'terraria', 'stardew_valley'].includes(gameType)) {
+            steamCmdRun = `  - echo "Skipping SteamCMD for ${gameType} (using standalone execution)"`;
+        } else if (gameType === 'l4d2') {
+            // Apply the Windows bypass natively inside cloud-init for L4D2 so initial provision doesn't crash
+            steamCmdRun = `  - su - spawnly -c "/usr/games/steamcmd @sSteamCmdForcePlatformType windows +force_install_dir /home/spawnly/server ${steamLogin} +app_update ${appId} +quit || true"
+  - su - spawnly -c "for i in 1 2 3; do /usr/games/steamcmd @sSteamCmdForcePlatformType linux +force_install_dir /home/spawnly/server ${steamLogin} +app_update ${appId} ${betaFlag} validate +quit && break; echo 'SteamCMD retry'; sleep 5; done"`;
+        }
+        // END OF L4D2 BYPASS FIX
+
+        let ufwRules = `  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22
+  - ufw allow OpenSSH
+  - ufw allow 8888/tcp
+  - ufw allow 3003:3007/tcp`;
+
+        if (gameType === 'rust') {
+            ufwRules += `\n  - ufw allow 28015/tcp\n  - ufw allow 28015/udp\n  - ufw allow 28016/tcp`;
+        } else if (gameType === 'arma3') {
+            ufwRules += `\n  - ufw allow 2302:2306/udp\n  - ufw allow 2302:2306/tcp\n  - ufw allow 27014:27016/udp`;
+        } else if (gameType === 'palworld') {
+            ufwRules += `\n  - ufw allow 8211/udp\n  - ufw allow 25575/tcp`;
+        } else if (gameType === 'valheim') {
+            ufwRules += `\n  - ufw allow 2456:2457/udp`;
+        } else if (gameType === 'project_zomboid') {
+            ufwRules += `\n  - ufw allow 16261:16262/udp\n  - ufw allow 16261:16262/tcp`;
+        } else if (['cs2', 'gmod', 'tf2', 'l4d2'].includes(gameType)) {
+            ufwRules += `\n  - ufw allow 27015/udp\n  - ufw allow 27015/tcp`;
+        } else if (['ark_se', 'ark_sa'].includes(gameType)) {
+            ufwRules += `\n  - ufw allow 7777:7778/udp\n  - ufw allow 27015/udp\n  - ufw allow 27020/tcp\n  - ufw allow 32330/tcp`;
+        } else if (gameType === 'arma_reforger') {
+            ufwRules += `\n  - ufw allow 2001/udp`;
+        } else if (gameType === 'factorio') {
+            ufwRules += `\n  - ufw allow 34197/udp\n  - ufw allow 27015/tcp`;
+        } else if (gameType === 'space_engineers') {
+            ufwRules += `\n  - ufw allow 27016/udp\n  - ufw allow 27016/tcp`;
+        } else if (gameType === 'seven_days_to_die') {
+            ufwRules += `\n  - ufw allow 26900/tcp\n  - ufw allow 26900:26903/udp`;
+        } else if (gameType === 'conan_exiles') {
+            ufwRules += `\n  - ufw allow 7777:7778/udp\n  - ufw allow 27015/udp`;
+        } else if (gameType === 'dayz') {
+            ufwRules += `\n  - ufw allow 2302/udp\n  - ufw allow 27016/udp`;
+        } else if (gameType === 'enshrouded') {
+            ufwRules += `\n  - ufw allow 15636:15637/udp`;
+        } else if (gameType === 'sons_of_the_forest') {
+            ufwRules += `\n  - ufw allow 8766/udp\n  - ufw allow 27016/udp\n  - ufw allow 9700/udp`;
+        } else if (gameType === 'v_rising') {
+            ufwRules += `\n  - ufw allow 9876:9877/udp`;
+        } else if (gameType === 'core_keeper') {
+            ufwRules += `\n  - ufw allow 27015:27016/udp`;
+        } else if (gameType === 'squad') {
+            ufwRules += `\n  - ufw allow 7787/udp\n  - ufw allow 27165:27166/udp\n  - ufw allow 27165/tcp`;
+        } else if (gameType === 'insurgency_sandstorm') {
+            ufwRules += `\n  - ufw allow 27102/udp\n  - ufw allow 27131/udp\n  - ufw allow 27015/tcp`; // INSURGENCY RCON Added
+        } else if (gameType === 'unturned') {
+            ufwRules += `\n  - ufw allow 27015:27017/udp`;
+        } else if (gameType === 'dst') {
+            ufwRules += `\n  - ufw allow 10999/udp`;
+        } else if (gameType === 'terraria') {
+            ufwRules += `\n  - ufw allow 7777/tcp`;
+        } else if (gameType === 'stardew_valley') {
+            ufwRules += `\n  - ufw allow 24642/udp`;
+        } else {
+            ufwRules += `\n  - ufw allow 7777/tcp\n  - ufw allow 7777/udp`;
+        }
+        ufwRules += `\n  - ufw --force enable`;
+
+        // Build the dependency list dynamically based on the game
+        let aptPackages = "nodejs lib32gcc-s1 steamcmd unzip ufw wine xvfb";
+        if (gameType === 'dst') {
+            aptPackages += " libcurl4-gnutls-dev:i386";
+        } else if (gameType === 'terraria') {
+            aptPackages += " dotnet-runtime-6.0";
+        }
+
         const cloudInitPayload = `#cloud-config
 users:
   - name: spawnly
@@ -374,30 +745,14 @@ runcmd:
   - echo steam steam/question select "I AGREE" | debconf-set-selections
   - echo steam steam/license note '' | debconf-set-selections
   - curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs lib32gcc-s1 steamcmd unzip ufw
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y ${aptPackages}
   
   - curl -sL https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz | tar -xzf - -C /usr/local/bin/ s5cmd
-  - curl -sL "https://github.com/satisfactorymodding/ficsit-cli/releases/latest/download/ficsit_linux_amd64" -o /usr/local/bin/ficsit-cli || true
-  - chmod +x /usr/local/bin/ficsit-cli 2>/dev/null || true
-
   - mkdir -p /home/spawnly/server
-
-  - mkdir -p /home/spawnly/.config/Epic/FactoryGame/Saved/SaveGames
-  - ln -s /home/spawnly/.config/Epic/FactoryGame/Saved/SaveGames /home/spawnly/server/SaveGames
-  
+${gameSpecificSetup}
   - chown -R spawnly:spawnly /home/spawnly
-
-  - ufw default deny incoming
-  - ufw default allow outgoing
-  - ufw allow 22
-  - ufw allow OpenSSH
-  - ufw allow 7777/tcp
-  - ufw allow 7777/udp
-  - ufw allow 8888/tcp
-  - ufw allow 3003:3007/tcp
-  - ufw --force enable
-
-  - su - spawnly -c "for i in 1 2 3; do /usr/games/steamcmd @sSteamCmdForcePlatformType linux +force_install_dir /home/spawnly/server +login anonymous +app_update ${appId} ${betaFlag} validate +quit && break; echo 'SteamCMD retry'; sleep 5; done"
+${ufwRules}
+${steamCmdRun}
 
   - env AWS_ACCESS_KEY_ID="${s3Config.AWS_ACCESS_KEY_ID}" AWS_SECRET_ACCESS_KEY="${s3Config.AWS_SECRET_ACCESS_KEY}" AWS_REGION="${s3Config.AWS_REGION || 'eu-central-1'}" /usr/local/bin/s5cmd ${s5cmdOpt} cp s3://${s3Config.S3_BUCKET}/scripts/steam-wrapper.js /home/spawnly/steam-wrapper.js
   - env AWS_ACCESS_KEY_ID="${s3Config.AWS_ACCESS_KEY_ID}" AWS_SECRET_ACCESS_KEY="${s3Config.AWS_SECRET_ACCESS_KEY}" AWS_REGION="${s3Config.AWS_REGION || 'eu-central-1'}" /usr/local/bin/s5cmd ${s5cmdOpt} cp s3://${s3Config.S3_BUCKET}/scripts/file-api.js /home/spawnly/file-api.js
@@ -416,8 +771,10 @@ runcmd:
     User=spawnly
     WorkingDirectory=/home/spawnly
     Environment=SERVER_ID=${serverRow.id}
+    Environment=GAME_TYPE=${gameType}
     Environment=NEXTJS_API_URL=${APP_BASE_URL.replace(/\/+$/, '')}/api/servers/log
     Environment=RCON_PASSWORD=${rconPassword}
+    Environment=SERVER_VERSION=${version || 'public'}
     ExecStart=/usr/bin/node /home/spawnly/steam-wrapper.js
     Restart=on-failure
 
@@ -454,7 +811,7 @@ runcmd:
   - systemctl start game-server steam-file-api
 `;
 
-        // 5. Fetch SSH Keys
+        // 6. Fetch SSH Keys
         let sshKeysToUse = Array.isArray(ssh_keys) && ssh_keys.length > 0 ? ssh_keys : [];
         if (sshKeysToUse.length === 0 && DEFAULT_SSH_KEY) {
             try {
@@ -489,8 +846,8 @@ runcmd:
         } 
         
         if (requiresCreation) {
-            const locationsToTry = ['nbg1', 'fsn1', 'hel1'];
-            if (locationsToTry.includes(locationToUse)) locationsToTry.sort((x, y) => x === locationToUse ? -1 : y === locationToUse ? 1 : 0);
+            // NEW FALLBACK LOGIC
+            const locationsToTry = REGION_MAPPING[locationToUse] || REGION_MAPPING['EU'];
             
             const payload = { 
                 name: serverRow.name, 
@@ -504,9 +861,13 @@ runcmd:
             for (const loc of locationsToTry) {
                 payload.location = loc;
                 try {
+                    console.log(`[Steam Provision] Attempting to create node in datacenter: ${loc}`);
                     createRes = await axios.post(`${HETZNER_API_BASE}/servers`, payload, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' } });
-                    break; 
-                } catch (err) { lastError = err; }
+                    break; // Success! Break out of the loop
+                } catch (err) { 
+                    console.warn(`[Steam Provision] Capacity failed in ${loc}, falling back to next available region...`);
+                    lastError = err; 
+                }
             }
         }
 
@@ -534,7 +895,7 @@ runcmd:
 
         const hetznerServer = createRes.data.server;
         
-        // 6. Setup Cloudflare DNS A-Record for Steam Game
+        // 7. Setup Cloudflare DNS A-Record for Steam Game
         let dnsWarning = null;
         let subdomainResult = null;
         const ipv4 = hetznerServer?.public_net?.ipv4?.ip || null;
@@ -553,7 +914,8 @@ runcmd:
         const updatePayload = { 
             hetzner_id: hetznerServer.id, 
             ipv4: ipv4, 
-            status: 'Initializing', 
+            status: 'Running', // The VPS hardware is running
+            game_status: requiresCreation ? 'Installing' : 'Starting', // <--- ADD THIS LINE
             rcon_password: rconPassword,
             current_session_id: uuidv4(),
             cost_per_hour: hourlyCost 
@@ -594,10 +956,8 @@ runcmd:
 async function provisionServer(serverRow, version, ssh_keys, res) {
   try {
     const serverRam = Number(serverRow.ram || 2);
-    // Convert to MB and safely leave room for the OS (1024MB or 512MB buffer)
     const heapMb = Math.floor(serverRam > 2 ? (serverRam * 1024) - 1024 : (serverRam * 1024) - 512);
 
-    // Uses Config mappings dynamically
     const serverType = getHetznerType(serverRam, serverRow.billing_type === 'monthly');
 
     const locationToUse = serverRow.location || 'nbg1';
@@ -1238,11 +1598,12 @@ runcmd:
     } 
     
     if (requiresCreation) {
-        const locationsToTry = ['nbg1', 'fsn1', 'hel1'];
-        if (locationsToTry.includes(locationToUse)) locationsToTry.sort((x, y) => x === locationToUse ? -1 : y === locationToUse ? 1 : 0);
+        // NEW FALLBACK LOGIC
+        const locationsToTry = REGION_MAPPING[locationToUse] || REGION_MAPPING['EU'];
         
         for (const loc of locationsToTry) {
           try {
+            console.log(`[MC Provision] Attempting to create node in datacenter: ${loc}`);
             createRes = await axios.post(`${HETZNER_API_BASE}/servers`, { 
                 name: serverRow.name, 
                 server_type: serverType, 
@@ -1251,8 +1612,11 @@ runcmd:
                 ssh_keys: sshKeysToUse, 
                 location: loc 
             }, { headers: { Authorization: `Bearer ${HETZNER_TOKEN}`, 'Content-Type': 'application/json' } });
-            break;
-          } catch (err) { lastError = err; }
+            break; // Success! Break out of the loop
+          } catch (err) { 
+              console.warn(`[MC Provision] Capacity failed in ${loc}, falling back to next available region...`);
+              lastError = err; 
+          }
         }
     }
 
@@ -1308,6 +1672,7 @@ runcmd:
         hetzner_id: finalServer?.id || null, 
         ipv4: ipv4, 
         status: finalServer?.status === 'running' ? 'Running' : 'Initializing', 
+        game_status: requiresCreation ? 'Installing' : 'Starting', // <--- ADD THIS LINE
         rcon_password: rconPassword, 
         needs_file_deletion: false, 
         pending_backup_restore: null, 
@@ -1370,7 +1735,6 @@ export default async function handler(req, res) {
   
   let requiredCredits = 0.1;
   if (isFirstTimeMonthly) {
-      // Dynamic mapping via Config
       requiredCredits = getMonthlyCreditCost(serverRamGb);
   }
 

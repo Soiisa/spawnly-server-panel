@@ -87,13 +87,20 @@ export default async function handler(req, res) {
           return res.status(200).json({ received: true });
       }
 
-      if (session.mode === 'subscription' && session.payment_status === 'paid') {
-         const euroAmount = parseFloat(session.metadata.euro_amount);
-         const totalCreditsToAdd = parseInt(session.metadata.credit_amount, 10);
-         
+      // session.amount_total is in cents, this gives us the EXACT amount paid after coupons!
+      const actualPaidEuro = session.amount_total / 100; 
+      
+      // We still give them the FULL credits stored in the metadata from before the discount
+      const totalCreditsToAdd = parseInt(session.metadata.credit_amount, 10);
+
+      // Support 'no_payment_required' in case they use a 100% off coupon!
+      const isPaid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
+
+      // A. Handle Subscriptions
+      if (session.mode === 'subscription' && isPaid) {
          await supabaseAdmin.from('profiles').update({ 
              recurring_stripe_subscription_id: session.subscription,
-             recurring_purchase_amount: euroAmount
+             recurring_purchase_amount: actualPaidEuro // Save the discounted recurring price
          }).eq('id', userId);
          console.log(`🔗 Linked Subscription ${session.subscription} to User ${userId}`);
 
@@ -101,9 +108,21 @@ export default async function handler(req, res) {
             supabaseAdmin, 
             userId, 
             totalCreditsToAdd, 
-            `Auto-Refill Subscription (First Month): €${euroAmount.toFixed(2)}`
+            `Auto-Refill Subscription: €${actualPaidEuro.toFixed(2)}`
+         );
+      } 
+      // B. Handle One-Time Normal Credit Purchases (With Coupons)
+      else if (session.mode === 'payment' && isPaid) {
+         console.log(`💳 One-Time Checkout Payment successful for User ${userId}`);
+         
+         await depositCredits(
+            supabaseAdmin, 
+            userId, 
+            totalCreditsToAdd, 
+            `Stripe Deposit (One-Time Checkout): €${actualPaidEuro.toFixed(2)}`
          );
       }
+
       return res.status(200).json({ received: true });
     }
 

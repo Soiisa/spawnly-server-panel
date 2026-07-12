@@ -1,8 +1,11 @@
 // pages/api/servers/[serverId]/file.js
-
 import { createClient } from '@supabase/supabase-js';
 import AWS from 'aws-sdk';
 import path from 'path';
+import formidable from 'formidable-serverless';
+import FormData from 'form-data'; 
+import fs from 'fs';
+import axios from 'axios';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -25,11 +28,21 @@ const s3 = new AWS.S3({
   s3ForcePathStyle: !!S3_ENDPOINT,
 });
 
+export const config = { api: { bodyParser: false } };
+
+async function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
 export default async function handler(req, res) {
   const { serverId } = req.query;
   const s3Prefix = `servers/${serverId}/`;
 
-  // --- MODIFICATION: Select user_id ---
   const { data: server, error } = await supabaseAdmin
     .from('servers')
     .select('rcon_password, ipv4, status, subdomain, user_id')
@@ -38,7 +51,6 @@ export default async function handler(req, res) {
 
   if (error || !server) return res.status(404).json({ error: 'Server not found' });
 
-  // --- MODIFICATION: Dual Authentication ---
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -50,37 +62,28 @@ export default async function handler(req, res) {
   } else {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (user && !authError) {
-      if (server.user_id === user.id) {
-        isAuthorized = true;
-      } else {
-        const { data: profile } = await supabaseAdmin
-            .from('profiles')
-            .select('is_admin')
-            .eq('id', user.id)
-            .single();
+      if (server.user_id === user.id) isAuthorized = true;
+      else {
+        const { data: profile } = await supabaseAdmin.from('profiles').select('is_admin').eq('id', user.id).single();
         if (profile?.is_admin) isAuthorized = true;
       }
     }
   }
 
   if (!isAuthorized) return res.status(401).json({ error: 'Unauthorized' });
-  // --- END MODIFICATION ---
 
-  // Handle GET /file - download file
+  let relPath = req.query.path || '';
+  if (relPath.indexOf('\0') !== -1) return res.status(400).json({ error: 'Invalid path' });
+  let safePath = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '');
+  if (safePath.includes('..')) return res.status(400).json({ error: 'Path traversal detected' });
+  relPath = safePath.replace(/^\/+/, '');
+  const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
+
+  // ==========================================
+  // GET: Download File
+  // ==========================================
   if (req.method === 'GET') {
     try {
-      let relPath = req.query.path;
-      if (!relPath) return res.status(400).json({ error: 'Missing path' });
-      
-      if (relPath.indexOf('\0') !== -1) return res.status(400).json({ error: 'Invalid path' });
-      let safePath = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '');
-      if (safePath.includes('..')) return res.status(400).json({ error: 'Path traversal detected' });
-      relPath = safePath.replace(/^\/+/, '');
-      
-      const s3Key = path.join(s3Prefix, relPath).replace(/\\/g, '/');
-      
-      if (!s3Key.startsWith(s3Prefix)) return res.status(400).json({ error: 'Access denied: Path outside server scope' });
-
       let content;
       if (server.status === 'Running' && server.ipv4) {
         try {
@@ -88,36 +91,121 @@ export default async function handler(req, res) {
             headers: { 'Authorization': `Bearer ${server.rcon_password}` },
             timeout: 10000, 
           });
-
           if (response.ok) {
              const arrayBuffer = await response.arrayBuffer();
              content = Buffer.from(arrayBuffer);
-             
-             // Sync to S3
-             s3.putObject({
-                Bucket: S3_BUCKET,
-                Key: s3Key,
-                Body: content,
-                ContentType: 'application/octet-stream',
-             }).promise().catch(err => console.error('Failed to sync to S3:', err));
+             s3.putObject({ Bucket: S3_BUCKET, Key: s3Key, Body: content, ContentType: 'application/octet-stream' }).promise().catch(()=>{});
           }
-        } catch (fetchError) {
-          console.error('Game server fetch failed:', fetchError.message);
-        }
+        } catch (e) {}
       }
-
       if (!content) {
         const s3Response = await s3.getObject({ Bucket: S3_BUCKET, Key: s3Key }).promise();
         content = s3Response.Body;
       }
-
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Content-Disposition', `attachment; filename="${path.basename(s3Key)}"`);
       return res.status(200).send(content);
-    } catch (error) {
-      if (error.code === 'NoSuchKey') return res.status(404).json({ error: 'File not found' });
-      return res.status(500).json({ error: 'Failed to download file', detail: error.message });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Download failed' }); }
+  }
+
+  // ==========================================
+  // PUT: Save/Edit File
+  // ==========================================
+  if (req.method === 'PUT') {
+    try {
+      const body = await getRawBody(req);
+      await s3.putObject({ Bucket: S3_BUCKET, Key: s3Key, Body: body, ContentType: req.headers['content-type'] }).promise();
+      
+      if (server.status === 'Running' && server.ipv4) {
+         try { 
+             await fetch(`http://${server.subdomain}.spawnly.net:3005/api/file?path=${encodeURIComponent(relPath)}`, { 
+                 method: 'PUT', 
+                 headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': req.headers['content-type'] }, 
+                 body: body 
+             }); 
+         } catch(e) {}
+      }
+      return res.status(200).json({ success: true });
+    } catch (e) { return res.status(500).json({ error: 'Update failed' }); }
+  }
+
+  // ==========================================
+  // DELETE: Remove File
+  // ==========================================
+  if (req.method === 'DELETE') {
+    try {
+      await s3.deleteObject({ Bucket: S3_BUCKET, Key: s3Key }).promise();
+      if (server.status === 'Running' && server.ipv4) {
+          try {
+              await fetch(`http://${server.subdomain}.spawnly.net:3005/api/file?path=${encodeURIComponent(relPath)}`, {
+                  method: 'DELETE',
+                  headers: { 'Authorization': `Bearer ${server.rcon_password}` }
+              });
+          } catch(e) {}
+      }
+      return res.status(200).json({ success: true });
+    } catch (e) { return res.status(500).json({ error: 'Delete failed' }); }
+  }
+
+  // ==========================================
+  // POST: Upload File
+  // ==========================================
+  if (req.method === 'POST') {
+    const form = new formidable.IncomingForm();
+    return new Promise((resolve) => {
+      form.parse(req, async (err, fields, files) => {
+        if (err || !files.file) {
+            return resolve(res.status(400).json({ error: 'Bad Request' }));
+        }
+
+        try {
+          const targetDir = fields.path || '';
+          const uploadedFile = files.file;
+          const safeFileName = path.basename(uploadedFile.name || uploadedFile.originalFilename || 'upload');
+          const uploadS3Key = path.posix.join(s3Prefix, targetDir, safeFileName);
+          
+          const fileBuffer = await fs.promises.readFile(uploadedFile.path);
+
+          // 1. Upload to S3
+          await s3.putObject({ 
+            Bucket: S3_BUCKET, 
+            Key: uploadS3Key, 
+            Body: fileBuffer, 
+            ContentType: uploadedFile.type || 'application/octet-stream' 
+          }).promise();
+          
+          // 2. Upload to active VPS using Axios
+          if (server.status === 'Running' && server.ipv4) {
+              const targetUrl = `http://${server.subdomain}.spawnly.net:3005/api/file`;
+              
+              const formData = new FormData();
+              formData.append('path', targetDir);
+              formData.append('file', fs.createReadStream(uploadedFile.path), {
+                  filename: safeFileName,
+                  contentType: uploadedFile.type || 'application/octet-stream'
+              });
+              
+              try {
+                  await axios.post(targetUrl, formData, {
+                      headers: { 
+                          'Authorization': `Bearer ${server.rcon_password}`,
+                          ...formData.getHeaders()
+                      },
+                      maxContentLength: Infinity,
+                      maxBodyLength: Infinity
+                  });
+              } catch (vpsErr) { 
+                  // Silently fail if VPS upload fails, S3 is already updated.
+              }
+          }
+
+          resolve(res.status(200).json({ success: true, path: path.posix.join(targetDir, safeFileName) }));
+
+        } catch (error) { 
+          resolve(res.status(500).json({ error: 'Upload failed' })); 
+        }
+      });
+    });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

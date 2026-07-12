@@ -1,11 +1,11 @@
 // pages/pricing.js
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { 
   CheckCircleIcon, 
-  CpuChipIcon,
   CircleStackIcon,
   BoltIcon,
   ShieldCheckIcon,
@@ -16,10 +16,10 @@ import {
 import { useTranslation, Trans } from "next-i18next"; 
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
 
-// NEW: Import the centralized source of truth
 import { GAME_REGISTRY as CORE_GAME_REGISTRY, getAvailableRamTiers, getMonthlyCreditCost } from "../lib/config";
 
 export default function Pricing() {
+  const router = useRouter();
   const { t } = useTranslation('pricing'); 
   const [game, setGame] = useState("minecraft");
   const [billingType, setBillingType] = useState("hourly");
@@ -27,45 +27,33 @@ export default function Pricing() {
 
   const monthlyTiers = getAvailableRamTiers();
 
-  // Merge the centralized game config with Frontend UI aesthetics (Icons, Colors, Translations)
   const GAME_REGISTRY = useMemo(() => {
+    // We keep UI extras here for translations
     const uiExtras = {
-      minecraft: {
-        icon: CircleStackIcon,
-        color: 'text-green-500',
-        subtitle: t('games.minecraft.subtitle', 'Java & Bedrock')
-      },
-      satisfactory: {
-        icon: WrenchScrewdriverIcon,
-        color: 'text-orange-500',
-        subtitle: t('games.satisfactory.subtitle', 'Factory Building')
-      },
-      rust: {
-        icon: ShieldCheckIcon,
-        color: 'text-red-500',
-        subtitle: t('games.rust.subtitle', 'Multiplayer Survival')
-      },
-      palworld: {
-        icon: GlobeAltIcon,
-        color: 'text-blue-500',
-        subtitle: t('games.palworld.subtitle', 'Monster Catching')
-      }
+      minecraft: { subtitle: t('games.minecraft.subtitle', 'Java & Bedrock') },
+      satisfactory: { subtitle: t('games.satisfactory.subtitle', 'Factory Building') },
+      rust: { subtitle: t('games.rust.subtitle', 'Multiplayer Survival') },
+      palworld: { subtitle: t('games.palworld.subtitle', 'Monster Catching') }
     };
 
     const merged = {};
     for (const [key, coreConfig] of Object.entries(CORE_GAME_REGISTRY)) {
       merged[key] = {
-        ...coreConfig, // Includes minRam, allowHourly, defaultPort, etc.
+        ...coreConfig,
         name: t(`games.${key}.name`, { defaultValue: coreConfig.name }),
         subtitle: uiExtras[key]?.subtitle || t('games.generic.subtitle', 'Multiplayer Server'),
-        icon: uiExtras[key]?.icon || CpuChipIcon, 
-        color: uiExtras[key]?.color || 'text-indigo-500' 
       };
     }
     return merged;
   }, [t]);
 
-  // Enforce Game Minimums and Billing restrictions when selections change
+  // Hook to catch the query parameter from index page buttons
+  useEffect(() => {
+    if (router.isReady && router.query.game && CORE_GAME_REGISTRY[router.query.game]) {
+      setGame(router.query.game);
+    }
+  }, [router.isReady, router.query.game]);
+
   useEffect(() => {
     const gameConfig = GAME_REGISTRY[game] || GAME_REGISTRY.minecraft;
     const minRamForGame = gameConfig.minRam || 2;
@@ -97,7 +85,6 @@ export default function Pricing() {
     }
   };
 
-  // Uses exactly 1 credit per hour per GB (matches config standard) or specific monthly array mapping
   const estimatedCost = billingType === 'hourly' 
     ? ram 
     : getMonthlyCreditCost(ram);    
@@ -205,40 +192,53 @@ export default function Pricing() {
                   </p>
                 </div>
 
-                {/* Game Selection */}
+                {/* Graphical Game Selection Grid */}
                 <div>
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4 block">
                     {t('calculator.select_game', { defaultValue: '1. Select Environment' })}
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {Object.entries(GAME_REGISTRY).map(([key, config]) => {
-                      const GameIcon = config.icon;
-                      const isActive = game === key;
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => setGame(key)}
-                          className={`relative flex items-start gap-4 p-5 rounded-2xl border transition-all duration-200 text-left ${
-                            isActive
-                              ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-500/10 ring-1 ring-blue-500'
-                              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-950/50'
-                          }`}
-                        >
-                          <div className={`p-2 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800 ${isActive ? config.color : 'text-slate-400'}`}>
-                            <GameIcon className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <h3 className={`font-bold ${isActive ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
-                              {config.name}
-                            </h3>
-                            <p className="text-xs text-slate-500 font-medium mt-0.5">{config.subtitle}</p>
-                          </div>
-                          {isActive && (
-                            <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                          )}
-                        </button>
-                      );
-                    })}
+                  <div 
+                    className="max-h-[290px] overflow-y-auto pr-2 -mr-2"
+                    style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}
+                  >
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-2">
+                      {Object.entries(GAME_REGISTRY).map(([key, config]) => {
+                        const isActive = game === key;
+                        return (
+                          <button
+                            key={key}
+                            disabled={config.disabled}
+                            onClick={() => setGame(key)}
+                            className={`relative flex flex-col items-center gap-3 p-4 rounded-2xl border transition-all duration-200 text-center ${
+                              isActive
+                                ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-500/10 ring-1 ring-blue-500'
+                                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-950/50'
+                            } ${config.disabled ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                          >
+                            <div className={`w-12 h-12 flex-shrink-0 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-center overflow-hidden`}>
+                              {config.logo ? (
+                                  <img src={config.logo} alt={config.name} className="w-full h-full object-cover" />
+                              ) : (
+                                  <div className="w-full h-full bg-slate-200 dark:bg-slate-700" />
+                              )}
+                            </div>
+                            <div className="w-full">
+                              <h3 className={`font-bold text-sm line-clamp-1 ${isActive ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                                {config.name}
+                              </h3>
+                              {config.disabled ? (
+                                  <p className="text-[10px] text-orange-500 font-bold uppercase tracking-wider mt-0.5">Coming Soon</p>
+                              ) : (
+                                  <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5 line-clamp-1">{config.subtitle}</p>
+                              )}
+                            </div>
+                            {isActive && (
+                              <div className="absolute top-3 right-3 w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -285,7 +285,9 @@ export default function Pricing() {
 
                   {/* Recommendation Box */}
                   <div className="mt-8 bg-slate-50 dark:bg-slate-950/50 rounded-xl p-5 border border-slate-200 dark:border-slate-800 flex items-start gap-3">
-                    <CpuChipIcon className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div className="p-2 bg-blue-100 dark:bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400 flex-shrink-0">
+                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
                         {t('calculator.recommendation_title', { defaultValue: 'Deployment Recommendation' })}

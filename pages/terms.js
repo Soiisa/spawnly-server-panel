@@ -5,8 +5,7 @@ import Footer from "../components/Footer";
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 export default function TermsOfService() {
-  // Hardcoded to reflect the actual date the text was finalized
-  const lastUpdated = "April 3, 2026";
+  const lastUpdated = "July 9, 2026";
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -22,11 +21,10 @@ export default function TermsOfService() {
 
           <div className="prose prose-slate dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 space-y-6">
             
-            {/* SECTION 1: IDENTITY & ELIGIBILITY */}
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">1. Service Provider & Eligibility</h2>
               <p>
-                These Terms of Service ("Terms") constitute a legally binding agreement made between you, whether personally or on behalf of an entity ("you") and <strong>Spawnly</strong> ("we," "us," or "our"), a commercial designation operated by <strong>[YOUR FULL LEGAL NAME]</strong> (Empresário em Nome Individual) under the laws of Portugal.
+                These Terms of Service ("Terms") constitute a legally binding agreement made between you, whether personally or on behalf of an entity ("you") and <strong>Spawnly</strong> ("we," "us," or "our"), a commercial designation operated by <strong>RODRIGO SANTOS SOUSA</strong> (Empresário em Nome Individual) under the laws of Portugal.
                 By registering for an account, you agree that you have read, understood, and agreed to be bound by all of these Terms.
               </p>
               <p className="mt-2">
@@ -37,7 +35,7 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">2. Service Provision & Infrastructure</h2>
               <p>
-                Spawnly provides managed hosting services for Minecraft. You acknowledge and agree that:
+                Spawnly provides managed hosting services for multiplayer games. You acknowledge and agree that:
               </p>
               <ul className="list-disc pl-5 space-y-1">
                 <li>We utilize third-party infrastructure providers, primarily <strong>Hetzner Online GmbH</strong> (Compute) and <strong>Amazon Web Services</strong> (Storage).</li>
@@ -47,19 +45,23 @@ export default function TermsOfService() {
             </section>
 
             <section>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">3. Billing, Credits, and Payments</h2>
-              <ul className="list-disc pl-5 space-y-2">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">3. Billing, Subscriptions, and Modifications</h2>
+              <p>Services are purchased via a proprietary "Credit" system. Credits are a digital license to use our platform and have no monetary value outside of the Spawnly ecosystem.</p>
+              <ul className="list-disc pl-5 space-y-3 mt-2">
                 <li>
-                  <strong>Credit System:</strong> Services are purchased via a proprietary "Credit" system. Credits are a digital license to use our platform and have no monetary value outside of the Spawnly ecosystem.
+                  <strong>Hourly Servers (Pay-As-You-Go):</strong> Usage is calculated and deducted from your credit balance in real-time (per minute) while server instances are in an active "Running" state.
                 </li>
                 <li>
-                  <strong>Pay-As-You-Go:</strong> Usage is calculated and deducted from your balance in real-time (per minute) while server instances are in a "Running" state.
+                  <strong>Monthly Servers:</strong> Certain games are restricted to Monthly Billing. These servers deduct a flat fee of credits upfront for a 30-day reservation. If a Monthly server is cancelled or deleted before the 30-day period ends, no credits are refunded.
                 </li>
                 <li>
-                  <strong>Negative Balance:</strong> We allow a grace period of 1 hour for negative balances. If your balance remains negative, your services will be suspended immediately.
+                  <strong>Server Modifications (Upgrades & Downgrades):</strong> If you choose to scale your server resources up or down, the system will calculate the pro-rated difference. Upgrades will immediately deduct the required additional Credits. Downgrades will issue a pro-rated return of Credits back to your Spawnly account balance. <strong>Under no circumstances are these pro-rated credit returns convertible to fiat currency (cash) or refundable to your original payment method.</strong>
                 </li>
                 <li>
-                  <strong>Inactive Storage Fees:</strong> We reserve the right to charge a storage fee (deducted from Credits) for stopped servers that consume significant disk space for over 30 days.
+                  <strong>Automatic Credit Refills (Subscriptions):</strong> You may opt-in to an automatic subscription that refills your Credits. By enabling this, you authorize our payment processor (Stripe) to continuously charge your saved payment method when your balance falls below a threshold or on a scheduled interval. You may cancel this authorization at any time via your billing dashboard.
+                </li>
+                <li>
+                  <strong>Negative Balances & Fees:</strong> We allow a grace period of 1 hour for negative balances. If your balance remains negative, your services will be suspended. We reserve the right to charge an inactive storage fee for stopped servers that consume significant disk space for over 30 days.
                 </li>
               </ul>
             </section>
@@ -109,7 +111,6 @@ export default function TermsOfService() {
               </p>
             </section>
 
-            {/* SECTION 8: GOVERNING LAW (UPDATED) */}
             <section>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">8. Governing Law & Dispute Resolution</h2>
               <p>

@@ -17,7 +17,8 @@ const ALLOWED_HOSTS = [
   'api.spiget.org',
   'api.github.com',
   'ci.md-5.net',
-  'api.ficsit.app'
+  'api.ficsit.app',
+  'umod.org' // Added to allow Rust plugin repository searches
 ];
 
 export default async function handler(req, res) {

@@ -23,10 +23,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid amount.' });
     }
 
-    // --- FIX: Round out the floating point decimal so Stripe logic doesn't break
+    // --- FIX: Calculate Base Credits and Only Apply Bonuses to One-Time Purchases ---
     const baseCredits = Math.round(amount * 100);
-    const bonusTier = bonusesConfig.bonuses.find(b => amount >= b.min_euro);
-    const bonusCredits = bonusTier ? Math.floor(baseCredits * (bonusTier.bonus_percent / 100)) : 0;
+    let bonusCredits = 0;
+    let bonusTier = null;
+
+    if (!isSubscription) {
+      bonusTier = bonusesConfig.bonuses.find(b => amount >= b.min_euro);
+      bonusCredits = bonusTier ? Math.floor(baseCredits * (bonusTier.bonus_percent / 100)) : 0;
+    }
+
     const totalCredits = baseCredits + bonusCredits;
 
     const origin = req.headers.origin || process.env.NEXT_PUBLIC_SITE_URL || 'https://spawnly.net';
@@ -50,7 +56,7 @@ export default async function handler(req, res) {
         },
       ],
       mode: isSubscription ? 'subscription' : 'payment',
-      allow_promotion_codes: true, 
+      allow_promotion_codes: true, // Promos allowed on both subscriptions and one-time
       success_url: `${origin}/credits?payment_success=true`,
       cancel_url: `${origin}/credits?payment_canceled=true`,
       metadata: { 

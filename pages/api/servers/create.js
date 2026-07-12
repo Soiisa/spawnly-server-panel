@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import AWS from 'aws-sdk';
 import crypto from 'crypto';
+import { GAME_REGISTRY, getHetznerType } from '../../../lib/config';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -22,12 +23,6 @@ const s3 = new AWS.S3({
   endpoint: S3_ENDPOINT || undefined,
   s3ForcePathStyle: !!S3_ENDPOINT,
 });
-
-// --- NEW: Backend Game Registry Verification ---
-const GAME_REGISTRY = {
-  minecraft: { defaultSoftware: 'vanilla', defaultVersion: null },
-  satisfactory: { defaultSoftware: 'steamcmd', defaultVersion: 'public' }
-};
 
 // Sanitize subdomain to be DNS-friendly
 const sanitizeSubdomain = (name) => {
@@ -111,11 +106,12 @@ export default async function handler(req, res) {
   }
   const authenticatedUserId = user.id;
 
-  let { name, game = 'minecraft', software, version, ram = 4, costPerHour = 0, subdomain, billing_type = 'hourly', location = 'nbg1' } = req.body;
+  // Set default location to EU
+  let { name, game = 'minecraft', software, version, ram = 4, costPerHour = 0, subdomain, billing_type = 'hourly', location = 'EU' } = req.body;
   
   if (!name) return res.status(400).json({ error: 'Missing required fields: name' });
 
-  // --- NEW: Validate against Game Registry ---
+  // --- Validate against shared Game Registry ---
   const validGame = GAME_REGISTRY[game] ? game : 'minecraft';
   const finalSoftware = software || GAME_REGISTRY[validGame].defaultSoftware;
   let finalVersion = version || GAME_REGISTRY[validGame].defaultVersion;
@@ -134,22 +130,14 @@ export default async function handler(req, res) {
 
   const finalBillingType = ['hourly', 'monthly'].includes(billing_type) ? billing_type : 'hourly';
   let finalLocation = location;
+  
+  // If hourly, lock them to EU just to be safe as NA/Asia often don't have hourly ARM capacity
   if (finalBillingType === 'hourly') {
-    finalLocation = 'nbg1'; 
+    finalLocation = 'EU'; 
   }
 
-  let instanceType = 'cx23';
-  if (finalBillingType === 'monthly') {
-    if (ram <= 3) instanceType = 'cx22';
-    else if (ram <= 7) instanceType = 'cx32';
-    else if (ram <= 15) instanceType = 'cx42';
-    else instanceType = 'cx52'; 
-  } else {
-    if (ram <= 3) instanceType = 'cx23';
-    else if (ram <= 7) instanceType = 'cx33';
-    else if (ram <= 15) instanceType = 'cx43';
-    else instanceType = 'cx53'; 
-  }
+  // Utilize the exact same logic the frontend sees
+  const instanceType = getHetznerType(ram, finalBillingType === 'monthly');
 
   try {
     const { data: existing } = await supabaseAdmin
@@ -201,8 +189,7 @@ export default async function handler(req, res) {
       created_at: new Date().toISOString()
     });
 
-    // --- NON-BREAKING FORK: Initialize S3 Files ONLY if game is Minecraft ---
-    // For Satisfactory (SteamCMD), we skip this completely. The new provisioner will handle config files natively on the disk.
+    // Initialize S3 Files ONLY if game is Minecraft
     if (validGame === 'minecraft') {
       const s3Prefix = `servers/${data.id}/`;
       

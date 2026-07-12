@@ -1,98 +1,67 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { getGamesList } from '../lib/gamesList'; // <--- IMPORT ADDED
 
 export default function Home() {
   const { t } = useTranslation('landing');
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const scrollContainerRef = useRef(null);
 
-  // Drag and Swipe State
-  const [dragStartX, setDragStartX] = useState(0);
-  const [dragOffset, setDragOffset] = useState(0);
+  // Drag-to-scroll state & refs
   const [isDragging, setIsDragging] = useState(false);
+  const startX = useRef(0);
+  const scrollLeft = useRef(0);
+  const dragDistance = useRef(0);
 
-  // Array of games wrapped in useMemo so translations update when language changes
-  const featuredGames = useMemo(() => [
-    {
-      id: 'minecraft',
-      name: 'Minecraft',
-      edition: t('carousel.minecraft.edition', 'Java & Bedrock Edition'),
-      description: t('carousel.minecraft.desc', 'Instantly deploy high-performance servers with full plugin and modpack support.'),
-      image: '/games/minecraft-bg.jpg',
-      accent: 'text-green-400',
-      btnBg: 'bg-green-500',
-      btnHover: 'hover:bg-green-600'
-    },
-    {
-      id: 'satisfactory',
-      name: 'Satisfactory',
-      edition: t('carousel.satisfactory.edition', '1.0 Dedicated Servers'),
-      description: t('carousel.satisfactory.desc', 'Build massive factories without lag. Optimized for continuous background processing.'),
-      image: '/games/satisfactory-bg.jpg',
-      accent: 'text-orange-400',
-      btnBg: 'bg-orange-500',
-      btnHover: 'hover:bg-orange-600'
-    },
-    {
-      id: 'rust',
-      name: 'Rust',
-      edition: t('carousel.rust.edition', 'Vanilla & Modded'),
-      description: t('carousel.rust.desc', 'Survive the wipe with extreme NVMe performance for seamless monument loading.'),
-      image: '/games/rust-bg.jpg',
-      accent: 'text-red-500',
-      btnBg: 'bg-red-600',
-      btnHover: 'hover:bg-red-700'
+  // --- MASSIVE CLEANUP ---
+  // We now pull the centralized games list which already includes 
+  // the perfect translation keys from your landing.json file!
+  const featuredGames = useMemo(() => getGamesList(t), [t]);
+
+  // Desktop navigation for the carousel arrows
+  const scroll = (direction) => {
+    if (scrollContainerRef.current) {
+      const { current } = scrollContainerRef;
+      const scrollAmount = current.clientWidth * 0.7; 
+      current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
     }
-  ], [t]);
+  };
 
-  // Handlers for Deck Navigation
-  const nextSlide = useCallback(() => {
-    setCurrentIndex((prev) => (prev === featuredGames.length - 1 ? 0 : prev + 1));
-  }, [featuredGames.length]);
-
-  const prevSlide = useCallback(() => {
-    setCurrentIndex((prev) => (prev === 0 ? featuredGames.length - 1 : prev - 1));
-  }, [featuredGames.length]);
-
-  // Drag Handlers
-  const handleDragStart = (e) => {
+  // --- Drag to Scroll Handlers ---
+  const handleMouseDown = (e) => {
     setIsDragging(true);
-    setDragStartX(e.type.includes('mouse') ? e.clientX : e.touches[0].clientX);
+    dragDistance.current = 0;
+    startX.current = e.pageX - scrollContainerRef.current.offsetLeft;
+    scrollLeft.current = scrollContainerRef.current.scrollLeft;
+    // Disable scroll snapping while actively dragging for fluidity
+    scrollContainerRef.current.style.scrollSnapType = 'none';
   };
 
-  const handleDragMove = (e) => {
-    if (!isDragging) return;
-    const currentX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
-    setDragOffset(currentX - dragStartX);
-  };
-
-  const handleDragEnd = () => {
+  const handleMouseLeaveOrUp = () => {
     setIsDragging(false);
-    if (dragOffset > 50) {
-      prevSlide(); 
-    } else if (dragOffset < -50) {
-      nextSlide(); 
+    // Re-enable scroll snapping when released
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.style.scrollSnapType = 'x mandatory';
     }
-    setDragOffset(0);
   };
 
-  // Helper to calculate 3D card classes based on its position relative to the center
-  const getCardClasses = (index) => {
-    const total = featuredGames.length;
-    const diff = (index - currentIndex + total) % total;
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const x = e.pageX - scrollContainerRef.current.offsetLeft;
+    const walk = (x - startX.current) * 1.5; // Multiply for faster scrolling
+    dragDistance.current = Math.abs(walk);
+    scrollContainerRef.current.scrollLeft = scrollLeft.current - walk;
+  };
 
-    if (diff === 0) {
-      return `z-30 scale-100 translate-x-0 opacity-100 shadow-2xl`;
-    } else if (diff === 1) {
-      return `z-20 scale-90 translate-x-[15%] md:translate-x-[30%] opacity-50 blur-[2px] cursor-pointer hover:opacity-80`;
-    } else if (diff === total - 1) {
-      return `z-20 scale-90 -translate-x-[15%] md:-translate-x-[30%] opacity-50 blur-[2px] cursor-pointer hover:opacity-80`;
-    } else {
-      return `z-10 scale-75 opacity-0 pointer-events-none`;
+  // Prevent navigating if the user was just dragging the carousel
+  const handleLinkClick = (e) => {
+    if (dragDistance.current > 10) {
+      e.preventDefault();
     }
   };
 
@@ -181,75 +150,101 @@ export default function Home() {
           </div>
         </section>
 
-        {/* === INTERACTIVE 3D GAME DECK === */}
-        <section className="py-24 bg-slate-100 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800/50 overflow-hidden">
-          <div className="w-full px-6 md:px-12 lg:px-24">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">{t('carousel.title', 'Deploy Your Next Adventure')}</h2>
-              <p className="text-slate-500 dark:text-slate-400 flex items-center justify-center gap-2">
-                <svg className="w-5 h-5 animate-bounce-x" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
-                {t('carousel.drag_instruction', 'Drag left or right to explore')}
-              </p>
+        {/* === STEAM BIG PICTURE STYLE CAROUSEL === */}
+        <section className="py-20 bg-slate-950 border-b border-slate-900 relative overflow-hidden">
+          {/* Deep dark gradient to force the "Big Picture" aesthetic regardless of system theme */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#0e1420] to-[#0a0f18] pointer-events-none"></div>
+          
+          <div className="w-full relative z-10">
+            <div className="px-6 md:px-12 lg:px-24 mb-6 flex justify-between items-end">
+              <div>
+                <h2 className="text-3xl md:text-4xl font-bold text-white mb-2 tracking-tight">
+                  {t('carousel.title', 'Library')}
+                </h2>
+                <p className="text-slate-400 text-lg">
+                  {t('carousel.subtitle', 'Select a title to deploy your dedicated server.')}
+                </p>
+              </div>
+              
+              {/* Desktop Navigation Arrows */}
+              <div className="hidden md:flex gap-3">
+                <button 
+                  onClick={() => scroll('left')} 
+                  className="p-3 rounded-full bg-slate-800/80 text-white hover:bg-slate-700 hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="Scroll left"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <button 
+                  onClick={() => scroll('right')} 
+                  className="p-3 rounded-full bg-slate-800/80 text-white hover:bg-slate-700 hover:text-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="Scroll right"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+                </button>
+              </div>
             </div>
 
-            {/* Deck Container */}
+            {/* Horizontal Scrolling Container with Mouse Drag Events */}
             <div 
-              className="relative w-full max-w-6xl mx-auto h-[500px] flex items-center justify-center cursor-grab active:cursor-grabbing select-none perspective-1000"
-              onMouseDown={handleDragStart}
-              onMouseMove={handleDragMove}
-              onMouseUp={handleDragEnd}
-              onMouseLeave={handleDragEnd}
-              onTouchStart={handleDragStart}
-              onTouchMove={handleDragMove}
-              onTouchEnd={handleDragEnd}
+              ref={scrollContainerRef}
+              onMouseDown={handleMouseDown}
+              onMouseLeave={handleMouseLeaveOrUp}
+              onMouseUp={handleMouseLeaveOrUp}
+              onMouseMove={handleMouseMove}
+              className={`flex gap-6 overflow-x-auto snap-x snap-mandatory px-6 md:px-12 lg:px-24 pb-12 pt-4 custom-scrollbar ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
-              {featuredGames.map((game, index) => {
-                const isCenter = index === currentIndex;
-                
-                return (
-                  <div
-                    key={game.id}
-                    onClick={() => {
-                      if (!isCenter) setCurrentIndex(index);
-                    }}
-                    className={`absolute w-[85%] md:w-[60%] lg:w-[50%] h-[450px] rounded-2xl overflow-hidden border border-slate-300 dark:border-slate-700 transition-all duration-500 ease-out ${getCardClasses(index)}`}
-                    style={{
-                      transform: isCenter && isDragging ? `translateX(${dragOffset}px) scale(1)` : '',
-                    }}
-                  >
-                    <img
-                      src={game.image}
-                      alt={game.name}
-                      className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent pointer-events-none"></div>
+              {featuredGames.map((game) => (
+                <div 
+                  key={game.id}
+                  className="group relative flex-none w-[85vw] sm:w-[55vw] md:w-[45vw] lg:w-[32vw] xl:w-[28vw] aspect-[16/9] snap-center rounded-xl overflow-hidden bg-slate-900 block transition-all duration-300 transform hover:scale-[1.03] border-2 border-transparent hover:border-blue-500 focus-within:border-blue-500 focus-within:scale-[1.03] shadow-lg hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] focus-within:shadow-[0_0_30px_rgba(59,130,246,0.3)] select-none"
+                >
+                  <img
+                    src={game.image}
+                    alt={game.name}
+                    draggable={false}
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none transition-transform duration-700 group-hover:scale-105 group-focus-within:scale-105"
+                  />
+                  {/* Vignette Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/50 to-transparent opacity-90 transition-opacity duration-300 group-hover:opacity-80 group-focus-within:opacity-80 pointer-events-none"></div>
 
-                    {/* Card Content */}
-                    <div className="absolute bottom-0 left-0 w-full p-8 md:p-10 pointer-events-none">
-                      <h3 className="text-4xl md:text-5xl font-black text-white tracking-tight mb-2">
+                  <div className="absolute inset-0 p-6 flex flex-col justify-end">
+                    <div className="transform transition-transform duration-300 translate-y-12 group-hover:translate-y-0 group-focus-within:translate-y-0">
+                      <h3 className="text-2xl md:text-3xl font-bold text-white mb-1 drop-shadow-lg">
                         {game.name}
                       </h3>
-                      <p className={`text-lg font-semibold ${game.accent} mb-4`}>
+                      <p className={`text-sm font-semibold ${game.accent} mb-3 drop-shadow-md`}>
                         {game.edition}
                       </p>
                       
-                      <div className={`transition-opacity duration-300 ${isCenter ? 'opacity-100' : 'opacity-0'}`}>
-                        <p className="text-slate-300 text-sm md:text-base mb-6 max-w-md">
+                      <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-300 delay-75">
+                        <p className="text-slate-300 text-sm mb-4 line-clamp-2">
                           {game.description}
                         </p>
-                        <Link 
-                          href="/register" 
-                          className={`pointer-events-auto inline-block px-8 py-3 text-white font-bold rounded-lg shadow-lg transition-colors ${game.btnBg} ${game.btnHover}`}
-                          onMouseDown={(e) => e.stopPropagation()} 
-                          onTouchStart={(e) => e.stopPropagation()}
-                        >
-                          {t('carousel.host_button', 'Host {{game}}', { game: game.name })}
-                        </Link>
+                        <div className="flex gap-3">
+                          <Link 
+                            href={`/register?game=${game.id}`}
+                            onClick={handleLinkClick}
+                            draggable={false}
+                            className={`flex-1 px-4 py-2 text-white text-sm font-bold rounded shadow-md transition-colors text-center ${game.btnBg} ${game.btnHover}`}
+                          >
+                            {t('carousel.host_button', { defaultValue: 'Host {{game}}', game: game.name })}
+                          </Link>
+                          <Link 
+                            href={`/pricing?game=${game.id}`}
+                            onClick={handleLinkClick}
+                            draggable={false}
+                            className="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded shadow-md transition-colors text-center border border-slate-600"
+                          >
+                            {t('carousel.pricing_button', { defaultValue: 'View Pricing' })}
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -446,6 +441,9 @@ export default function Home() {
         }
         .animate-bounce-x {
           animation: bounce-x 1.5s infinite ease-in-out;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          display: none;
         }
       `}} />
     </div>

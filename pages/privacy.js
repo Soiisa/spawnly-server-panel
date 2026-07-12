@@ -5,8 +5,7 @@ import Footer from "../components/Footer";
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 export default function PrivacyPolicy() {
-  // Hardcoded to reflect the actual date the text was finalized
-  const lastUpdated = "April 3, 2026";
+  const lastUpdated = "July 9, 2026";
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -34,9 +33,9 @@ export default function PrivacyPolicy() {
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">2. Data We Collect</h2>
               <ul className="list-disc pl-5 space-y-2">
                 <li><strong>Identity Data:</strong> Email address, encrypted passwords, and OAuth provider IDs (Google).</li>
-                <li><strong>Financial Data:</strong> Transaction history and payment identifiers. <strong>Note:</strong> We do not store full credit card numbers; these are handled directly by Stripe.</li>
+                <li><strong>Financial Data:</strong> Transaction history, subscription statuses, and payment identifiers. <strong>Note:</strong> We do not store full credit card numbers; these and recurring billing tokens are handled directly and securely by Stripe.</li>
                 <li><strong>Technical Data:</strong> IP addresses, browser type, login timestamps, and server resource usage logs (CPU/RAM metrics).</li>
-                <li><strong>User Content:</strong> Minecraft world files, properties files, and server logs uploaded to our infrastructure.</li>
+                <li><strong>User Content:</strong> Game world files, properties files, and server logs uploaded to our infrastructure.</li>
               </ul>
             </section>
 
@@ -66,7 +65,7 @@ export default function PrivacyPolicy() {
                     </tr>
                     <tr>
                       <td className="p-3"><strong>Stripe</strong></td>
-                      <td className="p-3">Payment Processing</td>
+                      <td className="p-3">Payment Processing & Subscription Management</td>
                       <td className="p-3">Global</td>
                     </tr>
                     <tr>
@@ -86,8 +85,8 @@ export default function PrivacyPolicy() {
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">4. How We Use Your Data</h2>
               <p>We use your data solely to:</p>
               <ul className="list-disc pl-5">
-                <li>Provision and manage Minecraft server instances.</li>
-                <li>Process payments and maintain billing ledgers.</li>
+                <li>Provision and manage game server instances.</li>
+                <li>Process payments, manage automatic credit refills, and maintain billing ledgers.</li>
                 <li>Prevent fraud and abuse (e.g., detecting multiple accounts to bypass free tier restrictions).</li>
                 <li>Comply with legal obligations (e.g., tax laws).</li>
               </ul>
@@ -107,7 +106,7 @@ export default function PrivacyPolicy() {
               <ul className="list-disc pl-5 space-y-1">
                 <li><strong>Access:</strong> Request a copy of the personal data we hold about you.</li>
                 <li><strong>Rectification:</strong> Correct inaccurate data.</li>
-                <li><strong>Erasure ("Right to be Forgotten"):</strong> Request deletion of your account and all associated data, provided we have no legal obligation to keep it (e.g., tax records).</li>
+                <li><strong>Erasure ("Right to be Forgotten"):</strong> Request deletion of your account, active subscriptions, and all associated data, provided we have no legal obligation to keep it.</li>
                 <li><strong>Portability:</strong> Receive your data in a structured, commonly used format.</li>
               </ul>
               <p className="mt-2">

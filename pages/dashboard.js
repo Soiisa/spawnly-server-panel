@@ -25,6 +25,9 @@ import {
   UsersIcon 
 } from '@heroicons/react/24/outline';
 
+// Import the central config
+import { GAME_REGISTRY } from "../lib/config";
+
 // --- Helper for Displaying Software/Version ---
 const getDisplayInfo = (server, t) => {
   if (!server) return { software: t('software.unknown'), version: t('software.unknown') };
@@ -67,7 +70,7 @@ export default function Dashboard() {
   const [runTour, setRunTour] = useState(false);
   const [tourPending, setTourPending] = useState(false);
 
-  // --- NEW STATE FOR USERNAME MODAL ---
+  // --- STATE FOR USERNAME MODAL ---
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
@@ -80,7 +83,8 @@ export default function Dashboard() {
   const pollingIntervalRef = useRef(null);
   const realtimeChannelRef = useRef(null);
 
-  const transitionalStates = ['Initializing', 'Starting', 'Stopping', 'Restarting'];
+  // Added new Installing/Provisioning states
+  const transitionalStates = ['Initializing', 'Starting', 'Stopping', 'Restarting', 'Provisioning', 'Installing'];
 
   useEffect(() => {
     mountedRef.current = true;
@@ -151,7 +155,7 @@ export default function Dashboard() {
       .channel(`user-servers-${user.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'servers', filter: `user_id=eq.${user.id}` }, (payload) => {
         if (!mountedRef.current) return;
-        setServers((prev) => prev.map((s) => (s.id === payload.new.id ? payload.new : s)));
+        setServers((prev) => prev.map((s) => (s.id === payload.new.id ? { ...s, ...payload.new } : s)));
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'servers', filter: `user_id=eq.${user.id}` }, (payload) => {
         if (!mountedRef.current) return;
@@ -184,7 +188,7 @@ export default function Dashboard() {
   // Start polling if transitional
   useEffect(() => {
     if (!user?.id || isPolling) return;
-    const hasTransitional = servers.some((s) => transitionalStates.includes(s.status));
+    const hasTransitional = servers.some((s) => transitionalStates.includes(s.status) || transitionalStates.includes(s.game_status));
     if (hasTransitional) startPolling();
   }, [servers, user?.id, isPolling]);
 
@@ -272,7 +276,6 @@ export default function Dashboard() {
     router.push("/login");
   };
 
-  // Handle Saving the Username with Uniqueness Check
   const handleSaveUsername = async (e) => {
     e.preventDefault();
     setSavingUsername(true);
@@ -282,7 +285,7 @@ export default function Dashboard() {
       const { data: existingUser } = await supabase
         .from('profiles')
         .select('id')
-        .ilike('username', usernameInput) // Case insensitive check
+        .ilike('username', usernameInput)
         .maybeSingle();
 
       if (existingUser && existingUser.id !== user.id) {
@@ -327,7 +330,7 @@ export default function Dashboard() {
     if (!user) return;
     const cost = parseFloat(serverData.costPerHour);
     
-    // Optimistic UI
+    // Optimistic UI - Mark it as 'Installing' right out of the gate
     const tempServerId = `temp-${Date.now()}`;
     const optimisticServer = {
       id: tempServerId,
@@ -337,12 +340,13 @@ export default function Dashboard() {
       version: serverData.version || null,
       ram: serverData.ram || 4,
       cost_per_hour: cost,
-      status: "Stopped",
+      status: "Installing", // NEW
+      game_status: "Installing", // NEW
       user_id: user.id,
       created_at: new Date().toISOString(),
       hetzner_id: null,
       ipv4: null,
-      billing_type: serverData.billing_type // Track it optimistically 
+      billing_type: serverData.billing_type
     };
 
     setServers((prev) => [optimisticServer, ...prev]);
@@ -395,13 +399,23 @@ export default function Dashboard() {
   };
 
   const handleStartServer = async (server) => {
+    const isProvisioning = !server.hetzner_id;
+
+    // Optimistic UI lock
+    setServers(prev => prev.map(s => s.id === server.id ? { 
+        ...s, 
+        status: isProvisioning ? 'Installing' : 'Starting',
+        game_status: isProvisioning ? 'Installing' : 'Starting',
+        isLocalProvisioning: isProvisioning 
+    } : s));
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
       const token = session.access_token;
 
-      const endpoint = !server.hetzner_id ? '/api/servers/provision' : '/api/servers/action';
-      const body = !server.hetzner_id ? { serverId: server.id } : { serverId: server.id, action: 'start' };
+      const endpoint = isProvisioning ? '/api/servers/provision' : '/api/servers/action';
+      const body = isProvisioning ? { serverId: server.id } : { serverId: server.id, action: 'start' };
       
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -414,10 +428,15 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(await res.text());
     } catch (err) {
       setError(`${t('messages.error_start')}: ${err.message}`); 
+      // Rollback on error
+      fetchServers(user.id);
     }
   };
 
   const handleStopServer = async (serverId) => {
+    // Optimistic UI lock
+    setServers(prev => prev.map(s => s.id === serverId ? { ...s, game_status: 'Stopping' } : s));
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
@@ -433,6 +452,7 @@ export default function Dashboard() {
       });
     } catch (err) {
       setError(t('messages.error_stop')); 
+      fetchServers(user.id);
     }
   };
 
@@ -455,7 +475,6 @@ export default function Dashboard() {
          onFinish={() => setRunTour(false)} 
       />
 
-      {/* --- NEW USERNAME SETUP MODAL --- */}
       {showUsernameModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl max-w-md w-full border border-gray-200 dark:border-slate-700">
@@ -528,7 +547,7 @@ export default function Dashboard() {
             <div className="p-3 bg-green-50 text-green-600 rounded-xl"><PlayIcon className="w-6 h-6" /></div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.active_now')}</p> 
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.filter(s => s.status === 'Running').length}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{servers.filter(s => (s.game_status || s.status) === 'Running').length}</p>
             </div>
           </div>
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
@@ -541,7 +560,6 @@ export default function Dashboard() {
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><CurrencyDollarIcon className="w-6 h-6" /></div>
             <div>
-              {/* --- FIXED: Exclude Monthly servers from Hourly Cost metric --- */}
               <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{t('stats.hourly_cost')}</p> 
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {servers.filter(s => s.billing_type !== 'monthly').reduce((a, b) => a + (b.cost_per_hour || 0), 0).toFixed(2)}
@@ -578,17 +596,33 @@ export default function Dashboard() {
               const { software, version } = getDisplayInfo(server, t);
               const isShared = server.isShared === true;
               
+              // Smart UI Flow Logic mirroring [id].js
+              const vpsStatus = server.status || 'Unknown';
+              let gameStatus = server.game_status || server.status || 'Stopped';
+              if (vpsStatus === 'Installing' || vpsStatus === 'Provisioning' || server.isLocalProvisioning) {
+                  gameStatus = 'Installing';
+              }
+              const isGameRunning = gameStatus === 'Running';
+              const isGameStopped = gameStatus === 'Stopped';
+              const isGameBusy = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting', 'Installing'].includes(gameStatus);
+
+              // Fetch Game Config for Logo
+              const gameConfig = GAME_REGISTRY[server.game || 'minecraft'] || GAME_REGISTRY.minecraft;
+              
               return (
               <div key={server.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col group hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors">
                 
                 <div className="p-6 border-b border-gray-100 dark:border-slate-700">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center text-indigo-600 relative">
-                        {server.game === 'minecraft' ? <div className="font-bold">M</div> : <ServerIcon className="w-6 h-6" />}
+                      <div className="w-10 h-10 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden flex-shrink-0">
+                        {gameConfig.logo ? (
+                          <img src={gameConfig.logo} alt={gameConfig.name} className="w-full h-full object-cover" />
+                        ) : (
+                           <ServerIcon className="w-6 h-6 text-gray-400" />
+                        )}
                       </div>
                       <div>
-                        {/* --- FIXED: Add Billing Type Badge below name --- */}
                         <div className="flex items-center gap-2 mb-1">
                             <h3 className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 transition-colors cursor-pointer" onClick={() => !server.id.startsWith('temp') && router.push(`/server/${server.id}`)}>
                             {server.name}
@@ -611,7 +645,8 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    <ServerStatusIndicator server={server} />
+                    {/* Injecting gameStatus properly for the visual dot indicator */}
+                    <ServerStatusIndicator server={{...server, status: gameStatus}} />
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4 text-sm">
@@ -627,15 +662,15 @@ export default function Dashboard() {
                 </div>
 
                 <div className="p-4 bg-gray-50 dark:bg-slate-700 flex items-center gap-2 mt-auto">
-                  {server.status === "Stopped" ? (
+                  {isGameStopped ? (
                     <button 
                       onClick={() => handleStartServer(server)}
                       disabled={server.id.startsWith('temp')}
-                      className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                      className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                     >
                       <PlayIcon className="w-4 h-4" /> {t('server_card.start')} 
                     </button>
-                  ) : server.status === "Running" ? (
+                  ) : isGameRunning ? (
                     <button 
                       onClick={() => handleStopServer(server.id)}
                       className="flex-1 flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/20 dark:hover:border-red-600 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -643,9 +678,23 @@ export default function Dashboard() {
                       <StopIcon className="w-4 h-4" /> {t('server_card.stop')} 
                     </button>
                   ) : (
-                    <button disabled className="flex-1 flex items-center justify-center gap-2 bg-gray-200 dark:bg-slate-600 text-gray-500 py-2 rounded-lg text-sm font-medium cursor-not-allowed">
-                      <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                      {t('server_card.processing')} 
+                    <button disabled className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium cursor-not-allowed transition-all ${
+                        gameStatus === 'Installing' 
+                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800' 
+                        : gameStatus === 'Starting'
+                        ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800'
+                        : 'bg-gray-200 dark:bg-slate-600 text-gray-500 border border-transparent'
+                    }`}>
+                      <div className={`w-4 h-4 border-2 border-t-transparent rounded-full animate-spin ${
+                          gameStatus === 'Installing' ? 'border-amber-500 dark:border-amber-400' 
+                          : gameStatus === 'Starting' ? 'border-indigo-500 dark:border-indigo-400' 
+                          : 'border-gray-400'
+                      }`} />
+                      {gameStatus === 'Installing' 
+                        ? t('status.installing', 'Installing...') 
+                        : gameStatus === 'Starting' 
+                          ? t('status.booting', 'Starting...') 
+                          : t('server_card.processing', 'Processing...')}
                     </button>
                   )}
 
