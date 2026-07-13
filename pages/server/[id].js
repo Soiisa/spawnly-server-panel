@@ -11,7 +11,7 @@ import {
   CurrencyDollarIcon, ClockIcon, ServerIcon, SignalIcon, UserGroupIcon, 
   PuzzlePieceIcon, PencilSquareIcon, CheckIcon, XMarkIcon, ArchiveBoxIcon, 
   CalendarDaysIcon, TrashIcon, ShieldCheckIcon, BanknotesIcon, PlusIcon,
-  ArrowsPointingOutIcon, ExclamationTriangleIcon
+  ArrowsPointingOutIcon, ExclamationTriangleIcon, CalendarIcon
 } from '@heroicons/react/24/outline';
 
 // Components
