@@ -51,7 +51,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Upload State (Enhanced)
+  // Upload State
   const [uploadState, setUploadState] = useState({
     active: false,
     progress: 0,
@@ -95,7 +95,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const maskedItems = ['server.jar', '.git', 'eula.txt', 'file-api.js', 'metrics-server.js', 'properties-api.js', 'status-reporter.js', 'console-server.js', 'startup.sh', 'startup.bat', 'package.json', 'package-lock.json', 'server-installer.jar.log', 'libraries', 'node_modules', 'server-wrapper.js', '.server_status', 'packed-data.zip', 'run.bat', 'run.sh', 'startserver.sh', 'startserver.bat', 'user_jvm_args.txt', '.installed_version', 'vps_system.log', 'bootstrap.sh'].map(item => item.toLowerCase());
   const specialFiles = ['server.properties'].map(item => item.toLowerCase());
 
-  // --- ADDED: Executable Extension Masking ---
+  // --- Executable Extension Masking ---
   const HIDDEN_EXTENSIONS = ['.sh', '.bash', '.exe', '.bat', '.cmd', '.elf', '.py', '.pl', '.bin', '.appimage'];
 
   const bigIntReplacer = (key, value) => typeof value === 'bigint' ? value.toString() : value;
@@ -204,7 +204,13 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
         body = await write(parsed, { compression: 'gzip', endian: 'big', name: '' });
         contentType = 'application/octet-stream';
       }
-      await axios.put(`${apiBase}/files`, body, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType } });
+      
+      // FIX: Ensure we use /file instead of /files to prevent the 405 Method Not Allowed error
+      await axios.put(`${apiBase}/file`, body, { 
+          params: { path: relPath }, 
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType } 
+      });
+      
       setEditingFile(null); setFileContent('');
     } catch (err) { setError(`${t('files.save_fail', { defaultValue: 'Failed to save file' })}: ${err.message}`); } 
     finally { setIsSaving(false); }
@@ -214,7 +220,11 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     if (!window.confirm(t('files.delete_confirm', { name: file.name, defaultValue: `Are you sure you want to delete ${file.name}?` }))) return;
     try {
       const relPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-      await axios.delete(`${apiBase}/files`, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}` } });
+      
+      // FIX: Route to /files for deleting directories, and /file for deleting single files
+      const endpoint = file.isDirectory ? '/files' : '/file';
+      
+      await axios.delete(`${apiBase}${endpoint}`, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}` } });
       fetchFiles(currentPath);
     } catch (err) { setError(`${t('files.delete_fail', { defaultValue: 'Failed to delete file' })}: ${err.message}`); }
   };
@@ -353,11 +363,13 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
               setUploadState(prev => ({ ...prev, currentFileName: file.name }));
               
               const formData = new FormData();
-              formData.append('fileName', relativePath);
-              formData.append('fileContent', file);
+              // FIX: Provide the explicit path mappings the backend expects
+              formData.append('webkitRelativePath', relativePath);
+              formData.append('file', file);
 
               try {
-                  await axios.post(`${apiBase}/files?path=${currentPath}`, formData, {
+                  // FIX: Target /file instead of /files
+                  await axios.post(`${apiBase}/file?path=${encodeURIComponent(currentPath)}`, formData, {
                       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
                   });
               } catch (err) {
@@ -434,8 +446,13 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     e?.preventDefault(); if (!newItemName.trim() || isProcessing) return; setIsProcessing(true);
     const name = newItemName.trim();
     try {
-      if (createModal.type === 'folder') await axios.post(`${apiBase}/files`, { type: 'directory', path: currentPath ? `${currentPath}/${name}` : name }, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
-      else await axios.put(`${apiBase}/files`, '', { params: { path: currentPath ? `${currentPath}/${name}` : name }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' } });
+      if (createModal.type === 'folder') {
+          // Directories go to /files
+          await axios.post(`${apiBase}/files`, { type: 'directory', path: currentPath ? `${currentPath}/${name}` : name }, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+      } else {
+          // Empty files go to /file to avoid 405 error
+          await axios.put(`${apiBase}/file`, '', { params: { path: currentPath ? `${currentPath}/${name}` : name }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' } });
+      }
       setCreateModal({ open: false, type: 'file' }); setNewItemName(''); fetchFiles(currentPath);
     } catch (err) { setError(t('files.errors.create_fail', { defaultValue: 'Failed to create item' })); } finally { setIsProcessing(false); }
   };
