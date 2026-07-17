@@ -116,8 +116,6 @@ export default async function handler(req, res) {
   if (req.method === 'PUT') {
     try {
       const body = await getRawBody(req);
-      
-      // 1. Save to S3 Backup Storage
       await s3.putObject({ 
           Bucket: S3_BUCKET, 
           Key: s3Key, 
@@ -125,28 +123,20 @@ export default async function handler(req, res) {
           ContentType: req.headers['content-type'] || 'text/plain' 
       }).promise();
       
-      // 2. Save directly to the running VPS
       if (server.status === 'Running' && server.ipv4) {
          try { 
-             // Using Axios to safely transmit raw Buffer objects
              await axios.put(`http://${server.ipv4}:3005/api/file?path=${encodeURIComponent(relPath)}`, body, {
                  headers: { 
                      'Authorization': `Bearer ${server.rcon_password}`,
-                     // FORCE octet-stream so the VPS express.json() doesn't swallow the stream!
                      'Content-Type': 'application/octet-stream' 
                  },
                  maxContentLength: Infinity,
                  maxBodyLength: Infinity
              });
-         } catch(e) {
-             console.error('[VPS Save Error]', e.message);
-         }
+         } catch(e) { console.error('[VPS Save Error]', e.message); }
       }
       return res.status(200).json({ success: true });
-    } catch (e) { 
-        console.error('[Panel Save Error]', e);
-        return res.status(500).json({ error: 'Update failed' }); 
-    }
+    } catch (e) { return res.status(500).json({ error: 'Update failed' }); }
   }
 
   // ==========================================
@@ -161,74 +151,75 @@ export default async function handler(req, res) {
                   method: 'DELETE',
                   headers: { 'Authorization': `Bearer ${server.rcon_password}` }
               });
-          } catch(e) {
-              console.error('[VPS Delete Error]', e.message);
-          }
+          } catch(e) { console.error('[VPS Delete Error]', e.message); }
       }
       return res.status(200).json({ success: true });
     } catch (e) { return res.status(500).json({ error: 'Delete failed' }); }
   }
 
-// ==========================================
-  // POST: Upload File (Supports Folders & Multiple Files)
+  // ==========================================
+  // POST: Smart Routing (Uploads vs Directory Creation)
   // ==========================================
   if (req.method === 'POST') {
-    // Increase the max file size to 2GB to safely handle large folder drops
-    const form = new formidable.IncomingForm({
-        maxFileSize: 2000 * 1024 * 1024,
+    const contentType = req.headers['content-type'] || '';
+
+    if (contentType.includes('multipart/form-data')) {
+      const form = new formidable.IncomingForm({
+        maxFileSize: 2000 * 1024 * 1024, // 2GB limit to handle large files like MP4 videos
         keepExtensions: true
-    });
+      });
 
-    return new Promise((resolve) => {
-      form.parse(req, async (err, fields, files) => {
-        if (err || !files.file) {
-            return resolve(res.status(400).json({ error: 'Bad Request: No files detected' }));
-        }
+      return new Promise((resolve) => {
+        form.parse(req, async (err, fields, files) => {
+          if (err) {
+            console.error('[Panel Formidable Error]', err);
+            return resolve(res.status(500).json({ error: 'Form parsing failed', detail: err.message }));
+          }
 
-        try {
-          const baseTargetDir = (Array.isArray(fields.path) ? fields.path[0] : fields.path) || '';
-          
-          // Ensure we always process an array, whether the frontend sent 1 file or 50
-          const uploadedFiles = Array.isArray(files.file) ? files.file : [files.file];
-          const uploadedPaths = [];
+          const fileKeys = Object.keys(files);
+          if (fileKeys.length === 0) return resolve(res.status(400).json({ error: 'Bad Request: No files detected' }));
 
-          // Process each file in the dropped folder
-          for (const uploadedFile of uploadedFiles) {
+          const uploadedFiles = [];
+          for (const key of fileKeys) {
+            const f = files[key];
+            if (Array.isArray(f)) uploadedFiles.push(...f);
+            else uploadedFiles.push(f);
+          }
+
+          try {
+            const baseTargetDir = (Array.isArray(fields.path) ? fields.path[0] : fields.path) || '';
+            const uploadedPaths = [];
+
+            for (const uploadedFile of uploadedFiles) {
               const rawFileName = uploadedFile.originalFilename || uploadedFile.name || 'upload';
-              
-              // 1. Preserve the folder structure from the Drag-and-Drop
-              // Example rawFileName: "MyWorld/Data/level.dat"
               const sanitizedRelativePath = rawFileName.replace(/\0/g, '').replace(/(\.\.\/|\.\.\\)/g, '').replace(/^\/+/, '');
               
-              const subFolder = path.posix.dirname(sanitizedRelativePath); // Ex: "MyWorld/Data"
-              const finalFileName = path.posix.basename(sanitizedRelativePath); // Ex: "level.dat"
+              const subFolder = path.posix.dirname(sanitizedRelativePath);
+              const finalFileName = path.posix.basename(sanitizedRelativePath);
               
-              // Combine the frontend target directory with the dropped subfolders
               const finalTargetDir = subFolder !== '.' ? path.posix.join(baseTargetDir, subFolder) : baseTargetDir;
-              const uploadS3Key = path.posix.join(s3Prefix, finalTargetDir, finalFileName);
+              const uploadS3Key = path.posix.join(s3Prefix, finalTargetDir, finalFileName).replace(/\\/g, '/');
               
               const filePath = uploadedFile.filepath || uploadedFile.path;
               const fileMime = uploadedFile.mimetype || uploadedFile.type || 'application/octet-stream';
               
-              // Load file into memory to prevent streaming drops
-              const fileBuffer = await fs.promises.readFile(filePath);
+              if (!filePath) continue;
 
-              // 2. Upload to S3 Backup preserving the structure
+              // 1. Upload to S3 Backup using Streams (Prevents Out of Memory crashes)
               await s3.putObject({ 
                 Bucket: S3_BUCKET, 
                 Key: uploadS3Key, 
-                Body: fileBuffer, 
+                Body: fs.createReadStream(filePath), 
                 ContentType: fileMime 
               }).promise();
               
-              // 3. Upload to the active Game Server
+              // 2. Upload to the active Game Server
               if (server.status === 'Running' && server.ipv4) {
                   const targetUrl = `http://${server.ipv4}:3005/api/file`;
-                  
                   const formData = new FormData();
-                  // The VPS file-api.js will automatically do `mkdir -p` for this finalTargetDir!
+                  
                   formData.append('path', finalTargetDir);
-                  formData.append('file', fileBuffer, {
+                  formData.append('file', fs.createReadStream(filePath), {
                       filename: finalFileName,
                       contentType: fileMime
                   });
@@ -246,19 +237,41 @@ export default async function handler(req, res) {
                       console.error(`[VPS Upload Error - ${finalFileName}]`, vpsErr.message);
                   }
               }
-
               uploadedPaths.push(path.posix.join(finalTargetDir, finalFileName));
+            }
+            resolve(res.status(200).json({ success: true, paths: uploadedPaths }));
+          } catch (error) { 
+            console.error('[Panel Upload Error]', error);
+            resolve(res.status(500).json({ error: 'Folder upload failed completely', detail: error.message })); 
           }
-
-          // Return all successful paths back to the frontend to refresh the UI
-          resolve(res.status(200).json({ success: true, paths: uploadedPaths }));
-
-        } catch (error) { 
-          console.error('[Panel Upload Error]', error);
-          resolve(res.status(500).json({ error: 'Folder upload failed completely' })); 
-        }
+        });
       });
-    });
+    } else {
+      // JSON Block for creating directories
+      try {
+        const bodyBuffer = await getRawBody(req);
+        const { type, path: newDirName } = JSON.parse(bodyBuffer.toString());
+        if (type !== 'directory' || !newDirName) return res.status(400).json({ error: 'Invalid operation' });
+        
+        const safeRelPath = path.normalize(newDirName || '').replace(/^(\.\.(\/|\\|$))+/, '').replace(/^\/+/, '').replace(/\/+$/, '');
+        if (safeRelPath.includes('..')) return res.status(400).json({ error: 'Invalid path' });
+
+        if (server.status === 'Running' && server.ipv4) {
+           try {
+             await fetch(`http://${server.ipv4}:3005/api/directory`, { 
+                 method: 'POST', 
+                 headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': 'application/json' }, 
+                 body: JSON.stringify({ path: safeRelPath }) 
+             });
+           } catch(e) { console.error('[VPS Mkdir Error]', e.message); }
+        }
+        await s3.putObject({ Bucket: S3_BUCKET, Key: path.posix.join(s3Prefix, safeRelPath) + '/', Body: '' }).promise();
+        return res.status(200).json({ success: true, path: safeRelPath });
+      } catch (err) { 
+        console.error('[Mkdir Error]', err);
+        return res.status(500).json({ error: 'Failed to create directory' }); 
+      }
+    }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
