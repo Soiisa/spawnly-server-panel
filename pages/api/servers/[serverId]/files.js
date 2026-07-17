@@ -1,8 +1,11 @@
 // pages/api/servers/[serverId]/files.js
-
 import { createClient } from '@supabase/supabase-js';
 import AWS from 'aws-sdk';
 import path from 'path';
+import formidable from 'formidable-serverless';
+import FormData from 'form-data'; 
+import fs from 'fs';
+import axios from 'axios';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -91,9 +94,7 @@ export default async function handler(req, res) {
         try {
           const response = await fetch(`http://${server.ipv4}:3005/api/files?path=${encodeURIComponent(relPath)}`, { headers: { 'Authorization': `Bearer ${server.rcon_password}` }, timeout: 5000 });
           if (response.ok) return res.status(200).json(await response.json());
-        } catch (fetchError) {
-            console.error('[VPS List Error]', fetchError.message);
-        }
+        } catch (fetchError) { console.error('[VPS List Error]', fetchError.message); }
       }
       const s3Response = await s3.listObjectsV2({ Bucket: S3_BUCKET, Prefix: s3Path, Delimiter: '/' }).promise();
       const files = [];
@@ -101,34 +102,6 @@ export default async function handler(req, res) {
       if (s3Response.Contents) s3Response.Contents.forEach(o => { if(o.Key !== s3Path) files.push({ name: path.basename(o.Key), isDirectory: false, size: o.Size, modified: o.LastModified.toISOString() }); });
       return res.status(200).json({ path: relPath, files });
     } catch (s3Error) { return res.status(200).json({ path: relPath, files: [] }); }
-  }
-
-  // ==========================================
-  // POST: Create Directory
-  // ==========================================
-  if (req.method === 'POST') {
-      try {
-        const bodyBuffer = await getRawBody(req);
-        const { type, path: newDirName } = JSON.parse(bodyBuffer.toString());
-        if (type !== 'directory' || !newDirName) return res.status(400).json({ error: 'Invalid operation' });
-        
-        let safeRelPath;
-        try { safeRelPath = sanitizePath(newDirName); } catch (e) { return res.status(400).json({ error: 'Invalid path' }); }
-
-        if (server.status === 'Running' && server.ipv4) {
-           try {
-             await fetch(`http://${server.ipv4}:3005/api/directory`, { 
-                 method: 'POST', 
-                 headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': 'application/json' }, 
-                 body: JSON.stringify({ path: safeRelPath }) 
-             });
-           } catch(e) {
-               console.error('[VPS Mkdir Error]', e.message);
-           }
-        }
-        await s3.putObject({ Bucket: S3_BUCKET, Key: path.posix.join(s3Prefix, safeRelPath) + '/', Body: '' }).promise();
-        return res.status(200).json({ success: true, path: safeRelPath });
-      } catch (err) { return res.status(500).json({ error: 'Failed' }); }
   }
 
   // ==========================================
@@ -149,9 +122,7 @@ export default async function handler(req, res) {
                     headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ oldPath: safeOld, newPath: safeNew })
                  });
-             } catch(e) {
-                 console.error('[VPS Rename Error]', e.message);
-             }
+             } catch(e) { console.error('[VPS Rename Error]', e.message); }
           } else {
              const oldKey = path.posix.join(s3Prefix, safeOld);
              const newKey = path.posix.join(s3Prefix, safeNew);
@@ -167,19 +138,15 @@ export default async function handler(req, res) {
   // ==========================================
   if (req.method === 'DELETE') {
       try {
-          // 1. Delete from running VPS
           if (server.status === 'Running' && server.ipv4) {
               try {
                   await fetch(`http://${server.ipv4}:3005/api/files?path=${encodeURIComponent(relPath)}`, {
                       method: 'DELETE',
                       headers: { 'Authorization': `Bearer ${server.rcon_password}` }
                   });
-              } catch(e) {
-                  console.error('[VPS Delete Folder Error]', e.message);
-              }
+              } catch(e) { console.error('[VPS Delete Folder Error]', e.message); }
           }
 
-          // 2. Delete all S3 objects under this folder's prefix
           const listParams = { Bucket: S3_BUCKET, Prefix: s3Path };
           const listedObjects = await s3.listObjectsV2(listParams).promise();
           
@@ -190,15 +157,130 @@ export default async function handler(req, res) {
               };
               await s3.deleteObjects(deleteParams).promise();
           } else {
-              // Deletes the empty directory marker itself
               await s3.deleteObject({ Bucket: S3_BUCKET, Key: s3Path }).promise();
           }
-
           return res.status(200).json({ success: true });
       } catch (e) { 
           console.error('[Panel Delete Error]', e);
           return res.status(500).json({ error: 'Delete failed' }); 
       }
+  }
+
+  // ==========================================
+  // POST: Smart Routing (Uploads vs Directory Creation)
+  // ==========================================
+  if (req.method === 'POST') {
+    const contentType = req.headers['content-type'] || '';
+
+    if (contentType.includes('multipart/form-data')) {
+      const form = new formidable.IncomingForm({
+        maxFileSize: 2000 * 1024 * 1024,
+        keepExtensions: true
+      });
+
+      return new Promise((resolve) => {
+        form.parse(req, async (err, fields, files) => {
+          if (err) {
+            console.error('[Panel Formidable Error]', err);
+            return resolve(res.status(500).json({ error: 'Form parsing failed', detail: err.message }));
+          }
+
+          const fileKeys = Object.keys(files);
+          if (fileKeys.length === 0) return resolve(res.status(400).json({ error: 'Bad Request: No files detected' }));
+
+          const uploadedFiles = [];
+          for (const key of fileKeys) {
+            const f = files[key];
+            if (Array.isArray(f)) uploadedFiles.push(...f);
+            else uploadedFiles.push(f);
+          }
+
+          try {
+            const baseTargetDir = (Array.isArray(fields.path) ? fields.path[0] : fields.path) || '';
+            const uploadedPaths = [];
+
+            for (const uploadedFile of uploadedFiles) {
+              const rawFileName = uploadedFile.originalFilename || uploadedFile.name || 'upload';
+              const sanitizedRelativePath = rawFileName.replace(/\0/g, '').replace(/(\.\.\/|\.\.\\)/g, '').replace(/^\/+/, '');
+              
+              const subFolder = path.posix.dirname(sanitizedRelativePath);
+              const finalFileName = path.posix.basename(sanitizedRelativePath);
+              
+              const finalTargetDir = subFolder !== '.' ? path.posix.join(baseTargetDir, subFolder) : baseTargetDir;
+              const uploadS3Key = path.posix.join(s3Prefix, finalTargetDir, finalFileName).replace(/\\/g, '/');
+              
+              const filePath = uploadedFile.filepath || uploadedFile.path;
+              const fileMime = uploadedFile.mimetype || uploadedFile.type || 'application/octet-stream';
+              
+              if (!filePath) continue;
+
+              // 1. Upload to S3 Backup using Streams
+              await s3.putObject({ 
+                Bucket: S3_BUCKET, 
+                Key: uploadS3Key, 
+                Body: fs.createReadStream(filePath), 
+                ContentType: fileMime 
+              }).promise();
+              
+              // 2. Upload to the active Game Server
+              if (server.status === 'Running' && server.ipv4) {
+                  const targetUrl = `http://${server.ipv4}:3005/api/file`;
+                  const formData = new FormData();
+                  
+                  formData.append('path', finalTargetDir);
+                  formData.append('file', fs.createReadStream(filePath), {
+                      filename: finalFileName,
+                      contentType: fileMime
+                  });
+                  
+                  try {
+                      await axios.post(targetUrl, formData, {
+                          headers: { 
+                              'Authorization': `Bearer ${server.rcon_password}`,
+                              ...formData.getHeaders()
+                          },
+                          maxContentLength: Infinity,
+                          maxBodyLength: Infinity
+                      });
+                  } catch (vpsErr) { 
+                      console.error(`[VPS Upload Error - ${finalFileName}]`, vpsErr.message);
+                  }
+              }
+              uploadedPaths.push(path.posix.join(finalTargetDir, finalFileName));
+            }
+            resolve(res.status(200).json({ success: true, paths: uploadedPaths }));
+          } catch (error) { 
+            console.error('[Panel Upload Error]', error);
+            resolve(res.status(500).json({ error: 'Folder upload failed completely', detail: error.message })); 
+          }
+        });
+      });
+    } else {
+      // JSON Block for creating directories
+      try {
+        const bodyBuffer = await getRawBody(req);
+        const { type, path: newDirName } = JSON.parse(bodyBuffer.toString());
+        if (type !== 'directory' || !newDirName) return res.status(400).json({ error: 'Invalid operation' });
+        
+        let safeRelPath;
+        try { safeRelPath = sanitizePath(newDirName); } catch (e) { return res.status(400).json({ error: 'Invalid path' }); }
+
+        if (server.status === 'Running' && server.ipv4) {
+           try {
+             await fetch(`http://${server.ipv4}:3005/api/directory`, { 
+                 method: 'POST', 
+                 headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': 'application/json' }, 
+                 body: JSON.stringify({ path: safeRelPath }) 
+             });
+           } catch(e) { console.error('[VPS Mkdir Error]', e.message); }
+        }
+        await s3.putObject({ Bucket: S3_BUCKET, Key: path.posix.join(s3Prefix, safeRelPath) + '/', Body: '' }).promise();
+        return res.status(200).json({ success: true, path: safeRelPath });
+      } catch (err) { 
+        console.error('[Mkdir Error]', err);
+        return res.status(500).json({ error: 'Failed to create directory' }); 
+      }
+    }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
