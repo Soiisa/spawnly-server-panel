@@ -89,9 +89,11 @@ export default async function handler(req, res) {
     try {
       if (server.status === 'Running' && server.ipv4) {
         try {
-          const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/files?path=${encodeURIComponent(relPath)}`, { headers: { 'Authorization': `Bearer ${server.rcon_password}` }, timeout: 5000 });
+          const response = await fetch(`http://${server.ipv4}:3005/api/files?path=${encodeURIComponent(relPath)}`, { headers: { 'Authorization': `Bearer ${server.rcon_password}` }, timeout: 5000 });
           if (response.ok) return res.status(200).json(await response.json());
-        } catch (fetchError) {}
+        } catch (fetchError) {
+            console.error('[VPS List Error]', fetchError.message);
+        }
       }
       const s3Response = await s3.listObjectsV2({ Bucket: S3_BUCKET, Prefix: s3Path, Delimiter: '/' }).promise();
       const files = [];
@@ -115,12 +117,14 @@ export default async function handler(req, res) {
 
         if (server.status === 'Running' && server.ipv4) {
            try {
-             await fetch(`http://${server.subdomain}.spawnly.net:3005/api/directory`, { 
+             await fetch(`http://${server.ipv4}:3005/api/directory`, { 
                  method: 'POST', 
                  headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': 'application/json' }, 
                  body: JSON.stringify({ path: safeRelPath }) 
              });
-           } catch(e) {}
+           } catch(e) {
+               console.error('[VPS Mkdir Error]', e.message);
+           }
         }
         await s3.putObject({ Bucket: S3_BUCKET, Key: path.posix.join(s3Prefix, safeRelPath) + '/', Body: '' }).promise();
         return res.status(200).json({ success: true, path: safeRelPath });
@@ -128,7 +132,7 @@ export default async function handler(req, res) {
   }
 
   // ==========================================
-  // PATCH: Rename File
+  // PATCH: Rename File/Folder
   // ==========================================
   if (req.method === 'PATCH') {
       try {
@@ -140,12 +144,14 @@ export default async function handler(req, res) {
 
           if (server.status === 'Running' && server.ipv4) {
              try {
-                 await fetch(`http://${server.subdomain}.spawnly.net:3005/api/files`, {
+                 await fetch(`http://${server.ipv4}:3005/api/files`, {
                     method: 'PATCH',
                     headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ oldPath: safeOld, newPath: safeNew })
                  });
-             } catch(e) {}
+             } catch(e) {
+                 console.error('[VPS Rename Error]', e.message);
+             }
           } else {
              const oldKey = path.posix.join(s3Prefix, safeOld);
              const newKey = path.posix.join(s3Prefix, safeNew);
@@ -154,6 +160,45 @@ export default async function handler(req, res) {
           }
           return res.status(200).json({ success: true });
       } catch (e) { return res.status(500).json({ error: 'Rename failed' }); }
+  }
+
+  // ==========================================
+  // DELETE: Remove Directory
+  // ==========================================
+  if (req.method === 'DELETE') {
+      try {
+          // 1. Delete from running VPS
+          if (server.status === 'Running' && server.ipv4) {
+              try {
+                  await fetch(`http://${server.ipv4}:3005/api/files?path=${encodeURIComponent(relPath)}`, {
+                      method: 'DELETE',
+                      headers: { 'Authorization': `Bearer ${server.rcon_password}` }
+                  });
+              } catch(e) {
+                  console.error('[VPS Delete Folder Error]', e.message);
+              }
+          }
+
+          // 2. Delete all S3 objects under this folder's prefix
+          const listParams = { Bucket: S3_BUCKET, Prefix: s3Path };
+          const listedObjects = await s3.listObjectsV2(listParams).promise();
+          
+          if (listedObjects.Contents.length > 0) {
+              const deleteParams = {
+                  Bucket: S3_BUCKET,
+                  Delete: { Objects: listedObjects.Contents.map(({ Key }) => ({ Key })) }
+              };
+              await s3.deleteObjects(deleteParams).promise();
+          } else {
+              // Deletes the empty directory marker itself
+              await s3.deleteObject({ Bucket: S3_BUCKET, Key: s3Path }).promise();
+          }
+
+          return res.status(200).json({ success: true });
+      } catch (e) { 
+          console.error('[Panel Delete Error]', e);
+          return res.status(500).json({ error: 'Delete failed' }); 
+      }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
