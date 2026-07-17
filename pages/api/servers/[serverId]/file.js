@@ -165,8 +165,9 @@ export default async function handler(req, res) {
 
     if (contentType.includes('multipart/form-data')) {
       const form = new formidable.IncomingForm({
-        maxFileSize: 2000 * 1024 * 1024, // 2GB limit to handle large files
-        keepExtensions: true
+        maxFileSize: 2000 * 1024 * 1024,
+        keepExtensions: true,
+        preservePath: true // MAGIC FLAG: Tells formidable not to strip the folder structure!
       });
 
       return new Promise((resolve) => {
@@ -187,19 +188,34 @@ export default async function handler(req, res) {
           }
 
           try {
-            // FIX: Check the URL query parameters (req.query.path) if the form body doesn't contain the path
+            // Support arrays in case frontend loops multiple files with multiple path strings
             const rawPathField = fields.path || fields.dirPath || req.query.path || '';
-            const baseTargetDir = Array.isArray(rawPathField) ? rawPathField[0] : rawPathField;
+            const pathArray = Array.isArray(rawPathField) ? rawPathField : [rawPathField];
             
+            // Support frontends that explicitly send relativePath as a separate field
+            const relPathField = fields.relativePath || fields.webkitRelativePath || '';
+            const relPathArray = Array.isArray(relPathField) ? relPathField : [relPathField];
+
             const uploadedPaths = [];
 
-            for (const uploadedFile of uploadedFiles) {
-              const rawFileName = uploadedFile.originalFilename || uploadedFile.name || 'upload';
+            for (let i = 0; i < uploadedFiles.length; i++) {
+              const uploadedFile = uploadedFiles[i];
+              
+              // Match base path by array index (fallback to index 0)
+              const baseTargetDir = pathArray[i] !== undefined ? pathArray[i] : (pathArray[0] || '');
+              
+              // Try to grab explicit frontend relative path (if passed)
+              const frontendRelPath = relPathArray[i] !== undefined ? relPathArray[i] : (relPathArray[0] || '');
+              
+              // Use frontendRelPath OR the filename (which preservePath: true keeps intact)
+              const rawFileName = frontendRelPath || uploadedFile.originalFilename || uploadedFile.name || 'upload';
+              
               const sanitizedRelativePath = rawFileName.replace(/\0/g, '').replace(/(\.\.\/|\.\.\\)/g, '').replace(/^\/+/, '');
               
               const subFolder = path.posix.dirname(sanitizedRelativePath);
               const finalFileName = path.posix.basename(sanitizedRelativePath);
               
+              // Combine base target directory with the extracted subfolder
               const finalTargetDir = subFolder !== '.' ? path.posix.join(baseTargetDir, subFolder) : baseTargetDir;
               const uploadS3Key = path.posix.join(s3Prefix, finalTargetDir, finalFileName).replace(/\\/g, '/');
               
@@ -208,11 +224,13 @@ export default async function handler(req, res) {
               
               if (!filePath) continue;
 
-              // 1. Upload to S3 Backup using Streams
+              const fileBuffer = await fs.promises.readFile(filePath);
+
+              // 1. Upload to S3 Backup preserving the structure
               await s3.putObject({ 
                 Bucket: S3_BUCKET, 
                 Key: uploadS3Key, 
-                Body: fs.createReadStream(filePath), 
+                Body: fileBuffer, 
                 ContentType: fileMime 
               }).promise();
               
@@ -221,9 +239,9 @@ export default async function handler(req, res) {
                   const targetUrl = `http://${server.ipv4}:3005/api/file`;
                   const formData = new FormData();
                   
-                  // Forward the corrected target directory to the VPS daemon
+                  // The VPS file-api.js will automatically `mkdir -p` this subfolder!
                   formData.append('path', finalTargetDir);
-                  formData.append('file', fs.createReadStream(filePath), {
+                  formData.append('file', fileBuffer, {
                       filename: finalFileName,
                       contentType: fileMime
                   });
