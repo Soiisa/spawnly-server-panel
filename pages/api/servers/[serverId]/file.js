@@ -87,7 +87,7 @@ export default async function handler(req, res) {
       let content;
       if (server.status === 'Running' && server.ipv4) {
         try {
-          const response = await fetch(`http://${server.subdomain}.spawnly.net:3005/api/file?path=${encodeURIComponent(relPath)}`, {
+          const response = await fetch(`http://${server.ipv4}:3005/api/file?path=${encodeURIComponent(relPath)}`, {
             headers: { 'Authorization': `Bearer ${server.rcon_password}` },
             timeout: 10000, 
           });
@@ -96,7 +96,9 @@ export default async function handler(req, res) {
              content = Buffer.from(arrayBuffer);
              s3.putObject({ Bucket: S3_BUCKET, Key: s3Key, Body: content, ContentType: 'application/octet-stream' }).promise().catch(()=>{});
           }
-        } catch (e) {}
+        } catch (e) {
+            console.error('[VPS Download Error]', e.message);
+        }
       }
       if (!content) {
         const s3Response = await s3.getObject({ Bucket: S3_BUCKET, Key: s3Key }).promise();
@@ -114,19 +116,37 @@ export default async function handler(req, res) {
   if (req.method === 'PUT') {
     try {
       const body = await getRawBody(req);
-      await s3.putObject({ Bucket: S3_BUCKET, Key: s3Key, Body: body, ContentType: req.headers['content-type'] }).promise();
       
+      // 1. Save to S3 Backup Storage
+      await s3.putObject({ 
+          Bucket: S3_BUCKET, 
+          Key: s3Key, 
+          Body: body, 
+          ContentType: req.headers['content-type'] || 'text/plain' 
+      }).promise();
+      
+      // 2. Save directly to the running VPS
       if (server.status === 'Running' && server.ipv4) {
          try { 
-             await fetch(`http://${server.subdomain}.spawnly.net:3005/api/file?path=${encodeURIComponent(relPath)}`, { 
-                 method: 'PUT', 
-                 headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': req.headers['content-type'] }, 
-                 body: body 
-             }); 
-         } catch(e) {}
+             // Using Axios to safely transmit raw Buffer objects
+             await axios.put(`http://${server.ipv4}:3005/api/file?path=${encodeURIComponent(relPath)}`, body, {
+                 headers: { 
+                     'Authorization': `Bearer ${server.rcon_password}`,
+                     // FORCE octet-stream so the VPS express.json() doesn't swallow the stream!
+                     'Content-Type': 'application/octet-stream' 
+                 },
+                 maxContentLength: Infinity,
+                 maxBodyLength: Infinity
+             });
+         } catch(e) {
+             console.error('[VPS Save Error]', e.message);
+         }
       }
       return res.status(200).json({ success: true });
-    } catch (e) { return res.status(500).json({ error: 'Update failed' }); }
+    } catch (e) { 
+        console.error('[Panel Save Error]', e);
+        return res.status(500).json({ error: 'Update failed' }); 
+    }
   }
 
   // ==========================================
@@ -137,11 +157,13 @@ export default async function handler(req, res) {
       await s3.deleteObject({ Bucket: S3_BUCKET, Key: s3Key }).promise();
       if (server.status === 'Running' && server.ipv4) {
           try {
-              await fetch(`http://${server.subdomain}.spawnly.net:3005/api/file?path=${encodeURIComponent(relPath)}`, {
+              await fetch(`http://${server.ipv4}:3005/api/file?path=${encodeURIComponent(relPath)}`, {
                   method: 'DELETE',
                   headers: { 'Authorization': `Bearer ${server.rcon_password}` }
               });
-          } catch(e) {}
+          } catch(e) {
+              console.error('[VPS Delete Error]', e.message);
+          }
       }
       return res.status(200).json({ success: true });
     } catch (e) { return res.status(500).json({ error: 'Delete failed' }); }
@@ -174,9 +196,9 @@ export default async function handler(req, res) {
             ContentType: uploadedFile.type || 'application/octet-stream' 
           }).promise();
           
-          // 2. Upload to active VPS using Axios
+          // 2. Upload to active VPS using IP address
           if (server.status === 'Running' && server.ipv4) {
-              const targetUrl = `http://${server.subdomain}.spawnly.net:3005/api/file`;
+              const targetUrl = `http://${server.ipv4}:3005/api/file`;
               
               const formData = new FormData();
               formData.append('path', targetDir);
@@ -195,13 +217,14 @@ export default async function handler(req, res) {
                       maxBodyLength: Infinity
                   });
               } catch (vpsErr) { 
-                  // Silently fail if VPS upload fails, S3 is already updated.
+                  console.error('[VPS Upload Error]', vpsErr.message);
               }
           }
 
           resolve(res.status(200).json({ success: true, path: path.posix.join(targetDir, safeFileName) }));
 
         } catch (error) { 
+          console.error('[Panel Upload Error]', error);
           resolve(res.status(500).json({ error: 'Upload failed' })); 
         }
       });
