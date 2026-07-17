@@ -169,63 +169,93 @@ export default async function handler(req, res) {
     } catch (e) { return res.status(500).json({ error: 'Delete failed' }); }
   }
 
-  // ==========================================
-  // POST: Upload File
+// ==========================================
+  // POST: Upload File (Supports Folders & Multiple Files)
   // ==========================================
   if (req.method === 'POST') {
-    const form = new formidable.IncomingForm();
+    // Increase the max file size to 2GB to safely handle large folder drops
+    const form = new formidable.IncomingForm({
+        maxFileSize: 2000 * 1024 * 1024,
+        keepExtensions: true
+    });
+
     return new Promise((resolve) => {
       form.parse(req, async (err, fields, files) => {
         if (err || !files.file) {
-            return resolve(res.status(400).json({ error: 'Bad Request' }));
+            return resolve(res.status(400).json({ error: 'Bad Request: No files detected' }));
         }
 
         try {
-          const targetDir = fields.path || '';
-          const uploadedFile = files.file;
-          const safeFileName = path.basename(uploadedFile.name || uploadedFile.originalFilename || 'upload');
-          const uploadS3Key = path.posix.join(s3Prefix, targetDir, safeFileName);
+          const baseTargetDir = (Array.isArray(fields.path) ? fields.path[0] : fields.path) || '';
           
-          const fileBuffer = await fs.promises.readFile(uploadedFile.path);
+          // Ensure we always process an array, whether the frontend sent 1 file or 50
+          const uploadedFiles = Array.isArray(files.file) ? files.file : [files.file];
+          const uploadedPaths = [];
 
-          // 1. Upload to S3
-          await s3.putObject({ 
-            Bucket: S3_BUCKET, 
-            Key: uploadS3Key, 
-            Body: fileBuffer, 
-            ContentType: uploadedFile.type || 'application/octet-stream' 
-          }).promise();
-          
-          // 2. Upload to active VPS using IP address
-          if (server.status === 'Running' && server.ipv4) {
-              const targetUrl = `http://${server.ipv4}:3005/api/file`;
+          // Process each file in the dropped folder
+          for (const uploadedFile of uploadedFiles) {
+              const rawFileName = uploadedFile.originalFilename || uploadedFile.name || 'upload';
               
-              const formData = new FormData();
-              formData.append('path', targetDir);
-              formData.append('file', fs.createReadStream(uploadedFile.path), {
-                  filename: safeFileName,
-                  contentType: uploadedFile.type || 'application/octet-stream'
-              });
+              // 1. Preserve the folder structure from the Drag-and-Drop
+              // Example rawFileName: "MyWorld/Data/level.dat"
+              const sanitizedRelativePath = rawFileName.replace(/\0/g, '').replace(/(\.\.\/|\.\.\\)/g, '').replace(/^\/+/, '');
               
-              try {
-                  await axios.post(targetUrl, formData, {
-                      headers: { 
-                          'Authorization': `Bearer ${server.rcon_password}`,
-                          ...formData.getHeaders()
-                      },
-                      maxContentLength: Infinity,
-                      maxBodyLength: Infinity
+              const subFolder = path.posix.dirname(sanitizedRelativePath); // Ex: "MyWorld/Data"
+              const finalFileName = path.posix.basename(sanitizedRelativePath); // Ex: "level.dat"
+              
+              // Combine the frontend target directory with the dropped subfolders
+              const finalTargetDir = subFolder !== '.' ? path.posix.join(baseTargetDir, subFolder) : baseTargetDir;
+              const uploadS3Key = path.posix.join(s3Prefix, finalTargetDir, finalFileName);
+              
+              const filePath = uploadedFile.filepath || uploadedFile.path;
+              const fileMime = uploadedFile.mimetype || uploadedFile.type || 'application/octet-stream';
+              
+              // Load file into memory to prevent streaming drops
+              const fileBuffer = await fs.promises.readFile(filePath);
+
+              // 2. Upload to S3 Backup preserving the structure
+              await s3.putObject({ 
+                Bucket: S3_BUCKET, 
+                Key: uploadS3Key, 
+                Body: fileBuffer, 
+                ContentType: fileMime 
+              }).promise();
+              
+              // 3. Upload to the active Game Server
+              if (server.status === 'Running' && server.ipv4) {
+                  const targetUrl = `http://${server.ipv4}:3005/api/file`;
+                  
+                  const formData = new FormData();
+                  // The VPS file-api.js will automatically do `mkdir -p` for this finalTargetDir!
+                  formData.append('path', finalTargetDir);
+                  formData.append('file', fileBuffer, {
+                      filename: finalFileName,
+                      contentType: fileMime
                   });
-              } catch (vpsErr) { 
-                  console.error('[VPS Upload Error]', vpsErr.message);
+                  
+                  try {
+                      await axios.post(targetUrl, formData, {
+                          headers: { 
+                              'Authorization': `Bearer ${server.rcon_password}`,
+                              ...formData.getHeaders()
+                          },
+                          maxContentLength: Infinity,
+                          maxBodyLength: Infinity
+                      });
+                  } catch (vpsErr) { 
+                      console.error(`[VPS Upload Error - ${finalFileName}]`, vpsErr.message);
+                  }
               }
+
+              uploadedPaths.push(path.posix.join(finalTargetDir, finalFileName));
           }
 
-          resolve(res.status(200).json({ success: true, path: path.posix.join(targetDir, safeFileName) }));
+          // Return all successful paths back to the frontend to refresh the UI
+          resolve(res.status(200).json({ success: true, paths: uploadedPaths }));
 
         } catch (error) { 
           console.error('[Panel Upload Error]', error);
-          resolve(res.status(500).json({ error: 'Upload failed' })); 
+          resolve(res.status(500).json({ error: 'Folder upload failed completely' })); 
         }
       });
     });
