@@ -85,9 +85,6 @@ export default async function handler(req, res) {
   const s3Path = relPath ? path.posix.join(s3Prefix, relPath) + '/' : s3Prefix;
   if (!s3Path.startsWith(s3Prefix)) return res.status(400).json({ error: 'Access denied' });
 
-  // ==========================================
-  // GET: List Files
-  // ==========================================
   if (req.method === 'GET') {
     try {
       if (server.status === 'Running' && server.ipv4) {
@@ -104,9 +101,6 @@ export default async function handler(req, res) {
     } catch (s3Error) { return res.status(200).json({ path: relPath, files: [] }); }
   }
 
-  // ==========================================
-  // PATCH: Rename File/Folder
-  // ==========================================
   if (req.method === 'PATCH') {
       try {
           const bodyBuffer = await getRawBody(req);
@@ -133,9 +127,6 @@ export default async function handler(req, res) {
       } catch (e) { return res.status(500).json({ error: 'Rename failed' }); }
   }
 
-  // ==========================================
-  // DELETE: Remove Directory
-  // ==========================================
   if (req.method === 'DELETE') {
       try {
           if (server.status === 'Running' && server.ipv4) {
@@ -166,9 +157,6 @@ export default async function handler(req, res) {
       }
   }
 
-  // ==========================================
-  // POST: Smart Routing (Uploads vs Directory Creation)
-  // ==========================================
   if (req.method === 'POST') {
     const contentType = req.headers['content-type'] || '';
 
@@ -176,18 +164,15 @@ export default async function handler(req, res) {
       const form = new formidable.IncomingForm({
         maxFileSize: 2000 * 1024 * 1024,
         keepExtensions: true,
-        preservePath: true // MAGIC FLAG: Tells formidable not to strip the folder structure!
+        preservePath: true
       });
 
       return new Promise((resolve) => {
         form.parse(req, async (err, fields, files) => {
-          if (err) {
-            console.error('[Panel Formidable Error]', err);
-            return resolve(res.status(500).json({ error: 'Form parsing failed', detail: err.message }));
-          }
+          if (err) return resolve(res.status(500).json({ error: 'Form parsing failed' }));
 
           const fileKeys = Object.keys(files);
-          if (fileKeys.length === 0) return resolve(res.status(400).json({ error: 'Bad Request: No files detected' }));
+          if (fileKeys.length === 0) return resolve(res.status(400).json({ error: 'No files detected' }));
 
           const uploadedFiles = [];
           for (const key of fileKeys) {
@@ -197,11 +182,9 @@ export default async function handler(req, res) {
           }
 
           try {
-            // Support arrays in case frontend loops multiple files with multiple path strings
             const rawPathField = fields.path || fields.dirPath || req.query.path || '';
             const pathArray = Array.isArray(rawPathField) ? rawPathField : [rawPathField];
             
-            // Support frontends that explicitly send relativePath as a separate field
             const relPathField = fields.relativePath || fields.webkitRelativePath || '';
             const relPathArray = Array.isArray(relPathField) ? relPathField : [relPathField];
 
@@ -209,22 +192,15 @@ export default async function handler(req, res) {
 
             for (let i = 0; i < uploadedFiles.length; i++) {
               const uploadedFile = uploadedFiles[i];
-              
-              // Match base path by array index (fallback to index 0)
               const baseTargetDir = pathArray[i] !== undefined ? pathArray[i] : (pathArray[0] || '');
-              
-              // Try to grab explicit frontend relative path (if passed)
               const frontendRelPath = relPathArray[i] !== undefined ? relPathArray[i] : (relPathArray[0] || '');
               
-              // Use frontendRelPath OR the filename (which preservePath: true keeps intact)
               const rawFileName = frontendRelPath || uploadedFile.originalFilename || uploadedFile.name || 'upload';
-              
               const sanitizedRelativePath = rawFileName.replace(/\0/g, '').replace(/(\.\.\/|\.\.\\)/g, '').replace(/^\/+/, '');
               
               const subFolder = path.posix.dirname(sanitizedRelativePath);
               const finalFileName = path.posix.basename(sanitizedRelativePath);
               
-              // Combine base target directory with the extracted subfolder
               const finalTargetDir = subFolder !== '.' ? path.posix.join(baseTargetDir, subFolder) : baseTargetDir;
               const uploadS3Key = path.posix.join(s3Prefix, finalTargetDir, finalFileName).replace(/\\/g, '/');
               
@@ -235,7 +211,6 @@ export default async function handler(req, res) {
 
               const fileBuffer = await fs.promises.readFile(filePath);
 
-              // 1. Upload to S3 Backup preserving the structure
               await s3.putObject({ 
                 Bucket: S3_BUCKET, 
                 Key: uploadS3Key, 
@@ -243,12 +218,10 @@ export default async function handler(req, res) {
                 ContentType: fileMime 
               }).promise();
               
-              // 2. Upload to the active Game Server
               if (server.status === 'Running' && server.ipv4) {
                   const targetUrl = `http://${server.ipv4}:3005/api/file`;
                   const formData = new FormData();
                   
-                  // The VPS file-api.js will automatically `mkdir -p` this subfolder!
                   formData.append('path', finalTargetDir);
                   formData.append('file', fileBuffer, {
                       filename: finalFileName,
@@ -264,21 +237,15 @@ export default async function handler(req, res) {
                           maxContentLength: Infinity,
                           maxBodyLength: Infinity
                       });
-                  } catch (vpsErr) { 
-                      console.error(`[VPS Upload Error - ${finalFileName}]`, vpsErr.message);
-                  }
+                  } catch (vpsErr) {}
               }
               uploadedPaths.push(path.posix.join(finalTargetDir, finalFileName));
             }
             resolve(res.status(200).json({ success: true, paths: uploadedPaths }));
-          } catch (error) { 
-            console.error('[Panel Upload Error]', error);
-            resolve(res.status(500).json({ error: 'Folder upload failed completely', detail: error.message })); 
-          }
+          } catch (error) { resolve(res.status(500).json({ error: 'Folder upload failed completely' })); }
         });
       });
     } else {
-      // JSON Block for creating directories
       try {
         const bodyBuffer = await getRawBody(req);
         const { type, path: newDirName } = JSON.parse(bodyBuffer.toString());
@@ -294,14 +261,11 @@ export default async function handler(req, res) {
                  headers: { 'Authorization': `Bearer ${server.rcon_password}`, 'Content-Type': 'application/json' }, 
                  body: JSON.stringify({ path: safeRelPath }) 
              });
-           } catch(e) { console.error('[VPS Mkdir Error]', e.message); }
+           } catch(e) {}
         }
         await s3.putObject({ Bucket: S3_BUCKET, Key: path.posix.join(s3Prefix, safeRelPath) + '/', Body: '' }).promise();
         return res.status(200).json({ success: true, path: safeRelPath });
-      } catch (err) { 
-        console.error('[Mkdir Error]', err);
-        return res.status(500).json({ error: 'Failed to create directory' }); 
-      }
+      } catch (err) { return res.status(500).json({ error: 'Failed to create directory' }); }
     }
   }
 
