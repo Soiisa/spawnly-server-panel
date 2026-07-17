@@ -94,8 +94,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
   const textFileExtensions = ['.txt', '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.js', '.properties', '.config', '.conf', '.ini', '.log', '.md', '.dat', '.toml'];
   const maskedItems = ['server.jar', '.git', 'eula.txt', 'file-api.js', 'metrics-server.js', 'properties-api.js', 'status-reporter.js', 'console-server.js', 'startup.sh', 'startup.bat', 'package.json', 'package-lock.json', 'server-installer.jar.log', 'libraries', 'node_modules', 'server-wrapper.js', '.server_status', 'packed-data.zip', 'run.bat', 'run.sh', 'startserver.sh', 'startserver.bat', 'user_jvm_args.txt', '.installed_version', 'vps_system.log', 'bootstrap.sh'].map(item => item.toLowerCase());
   const specialFiles = ['server.properties'].map(item => item.toLowerCase());
-
-  // --- Executable Extension Masking ---
   const HIDDEN_EXTENSIONS = ['.sh', '.bash', '.exe', '.bat', '.cmd', '.elf', '.py', '.pl', '.bin', '.appimage'];
 
   const bigIntReplacer = (key, value) => typeof value === 'bigint' ? value.toString() : value;
@@ -109,14 +107,10 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
 
   useEffect(() => {
     const applyFilter = (list) => {
-      // If the user is an admin AND they toggled the filter off, show everything
       if (!filterEnabled && isAdmin) return list || []; 
-      
       return (list || []).filter(file => {
         const name = file.name.toLowerCase().replace(/\/+$/, '');
-        // Hide explicitly masked items
         if (maskedItems.includes(name) || maskedItems.some(masked => name.startsWith(masked + '/'))) return false;
-        // Hide executables based on extension
         if (HIDDEN_EXTENSIONS.some(ext => name.endsWith(ext))) return false;
         return true;
       });
@@ -205,7 +199,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
         contentType = 'application/octet-stream';
       }
       
-      // FIX: Ensure we use /file instead of /files to prevent the 405 Method Not Allowed error
       await axios.put(`${apiBase}/file`, body, { 
           params: { path: relPath }, 
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType } 
@@ -220,8 +213,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     if (!window.confirm(t('files.delete_confirm', { name: file.name, defaultValue: `Are you sure you want to delete ${file.name}?` }))) return;
     try {
       const relPath = currentPath ? `${currentPath}/${file.name}` : file.name;
-      
-      // FIX: Route to /files for deleting directories, and /file for deleting single files
       const endpoint = file.isDirectory ? '/files' : '/file';
       
       await axios.delete(`${apiBase}${endpoint}`, { params: { path: relPath }, headers: { Authorization: `Bearer ${token}` } });
@@ -240,7 +231,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     } catch (err) { setError(t('files.download_fail', { defaultValue: 'Failed to download file' })); }
   };
 
-  // --- Overwrite check logic ---
   const checkConflictsAndPrepareUpload = (filesList) => {
     if (filesList.length === 0) return;
 
@@ -248,19 +238,14 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     const conflictingNames = new Set();
 
     filesList.forEach(({ relativePath }) => {
-      // Find the top-level entity name in the uploaded structure
       const topLevelName = relativePath.split('/')[0].toLowerCase();
       if (existingNames.has(topLevelName)) {
-        conflictingNames.add(relativePath.split('/')[0]); // Use original case for display
+        conflictingNames.add(relativePath.split('/')[0]); 
       }
     });
 
     if (conflictingNames.size > 0) {
-      setOverwriteModal({
-        open: true,
-        filesList,
-        conflicts: Array.from(conflictingNames)
-      });
+      setOverwriteModal({ open: true, filesList, conflicts: Array.from(conflictingNames) });
     } else {
       performBatchUpload(filesList);
     }
@@ -272,7 +257,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
     performBatchUpload(list);
   };
 
-  // --- External Upload Drag Handlers ---
   const handleDrag = (e) => {
     e.preventDefault(); e.stopPropagation();
     if (e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes('application/x-spawnly-internal')) {
@@ -300,15 +284,18 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
           return entries;
       };
 
-      const readEntry = async (entry, pathStr = '') => {
+      // FIX: Use the native entry.fullPath to guarantee the root folder is preserved
+      const readEntry = async (entry) => {
           if (entry.isFile) {
               const file = await new Promise(resolve => entry.file(resolve));
-              filesList.push({ file, relativePath: pathStr + file.name });
+              let relPath = entry.fullPath || file.name;
+              if (relPath.startsWith('/')) relPath = relPath.substring(1);
+              filesList.push({ file, relativePath: relPath });
           } else if (entry.isDirectory) {
               const dirReader = entry.createReader();
               const entries = await readAllEntries(dirReader);
               for (const child of entries) {
-                  await readEntry(child, pathStr + entry.name + '/');
+                  await readEntry(child);
               }
           }
       };
@@ -317,13 +304,11 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
           const item = items[i];
           if (item.kind === 'file') {
               const entry = item.webkitGetAsEntry();
-              if (entry) await readEntry(entry, '');
+              if (entry) await readEntry(entry);
           }
       }
       
-      if (filesList.length > 0) {
-          checkConflictsAndPrepareUpload(filesList);
-      }
+      if (filesList.length > 0) checkConflictsAndPrepareUpload(filesList);
     } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const filesList = Array.from(e.dataTransfer.files).map(f => ({ file: f, relativePath: f.name }));
       checkConflictsAndPrepareUpload(filesList);
@@ -351,7 +336,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
           return;
       }
 
-      // Concurrency limit to not overwhelm the API
       const concurrencyLimit = 3;
       let i = 0;
 
@@ -363,12 +347,12 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
               setUploadState(prev => ({ ...prev, currentFileName: file.name }));
               
               const formData = new FormData();
-              // FIX: Provide the explicit path mappings the backend expects
+              // FIX: Append the correct relativePath properties to pass folder structures
+              formData.append('relativePath', relativePath);
               formData.append('webkitRelativePath', relativePath);
               formData.append('file', file);
 
               try {
-                  // FIX: Target /file instead of /files
                   await axios.post(`${apiBase}/file?path=${encodeURIComponent(currentPath)}`, formData, {
                       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
                   });
@@ -381,11 +365,7 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
               
               const currentProgress = totalBytes === 0 ? 100 : Math.min(100, Math.round((uploadedBytes / totalBytes) * 100));
               
-              setUploadState(prev => ({
-                  ...prev,
-                  progress: currentProgress,
-                  uploadedCount: completedFiles
-              }));
+              setUploadState(prev => ({ ...prev, progress: currentProgress, uploadedCount: completedFiles }));
           }
       };
 
@@ -395,7 +375,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
 
       fetchFiles(currentPath);
       
-      // Keep complete message for 2 seconds before hiding
       setTimeout(() => {
           setUploadState({ active: false, progress: 0, currentFileName: '', uploadedCount: 0, totalCount: 0 });
       }, 2000);
@@ -404,7 +383,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       if (folderInputRef.current) folderInputRef.current.value = '';
   };
 
-  // --- Internal Row Drag Handlers ---
   const handleRowDragStart = (e, file) => {
       setInternalDragFile(file); e.dataTransfer.setData('application/x-spawnly-internal', file.name); e.dataTransfer.effectAllowed = 'move';
   };
@@ -420,7 +398,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       await executeMove(oldPath, newPath);
   };
 
-  // --- Breadcrumb Drag Handlers ---
   const handleBreadcrumbDragOver = (e, path) => {
       e.preventDefault(); if (internalDragFile && path !== currentPath) { setBreadcrumbDropTarget(path); e.dataTransfer.dropEffect = 'move'; }
   };
@@ -440,17 +417,14 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       } catch (err) { setError(t('files.errors.move_fail', { defaultValue: 'Move failed' })); }
   };
 
-  // --- Create/Action Handlers ---
   const openCreateModal = (type) => { setCreateModal({ open: true, type }); setNewItemName(''); setError(null); };
   const handleCreateSubmit = async (e) => {
     e?.preventDefault(); if (!newItemName.trim() || isProcessing) return; setIsProcessing(true);
     const name = newItemName.trim();
     try {
       if (createModal.type === 'folder') {
-          // Directories go to /files
           await axios.post(`${apiBase}/files`, { type: 'directory', path: currentPath ? `${currentPath}/${name}` : name }, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
       } else {
-          // Empty files go to /file to avoid 405 error
           await axios.put(`${apiBase}/file`, '', { params: { path: currentPath ? `${currentPath}/${name}` : name }, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' } });
       }
       setCreateModal({ open: false, type: 'file' }); setNewItemName(''); fetchFiles(currentPath);
@@ -483,7 +457,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       {dragActive && (<div className="absolute inset-0 z-50 bg-indigo-500/10 backdrop-blur-sm border-2 border-indigo-500 border-dashed rounded-xl flex flex-col items-center justify-center pointer-events-none"><ArrowUpTrayIcon className="w-16 h-16 text-indigo-600 animate-bounce" /><p className="text-xl font-bold text-indigo-700 mt-4">{t('files.drop_to_upload', { defaultValue: 'Drop files to upload' })}</p></div>)}
       {dragActive && (<div className="absolute inset-0 z-50" onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop} />)}
 
-      {/* Overwrite Confirmation Modal */}
       <AnimatePresence>
         {overwriteModal.open && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -535,7 +508,6 @@ export default function FileManager({ server, token, setActiveTab, isAdmin }) {
       <AnimatePresence>{createModal.open && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"><motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 10 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm overflow-hidden"><div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center"><h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">{createModal.type === 'folder' ? <FolderPlusIcon className="w-5 h-5 text-indigo-500" /> : <PlusIcon className="w-5 h-5 text-indigo-500" />}{createModal.type === 'folder' ? t('files.create_folder', { defaultValue: 'Create Folder' }) : t('files.create_file', { defaultValue: 'Create File' })}</h3><button onClick={() => setCreateModal({ ...createModal, open: false })}><XMarkIcon className="w-5 h-5 text-gray-400" /></button></div><form onSubmit={handleCreateSubmit} className="p-6"><input ref={nameInputRef} type="text" value={newItemName} onChange={(e) => setNewItemName(e.target.value)} className="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-lg dark:text-white mb-4" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setCreateModal({ ...createModal, open: false })} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button><button type="submit" disabled={isProcessing} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('actions.create', { defaultValue: 'Create' })}</button></div></form></motion.div></motion.div>)}</AnimatePresence>
       <AnimatePresence>{editingFile && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"><motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"><div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center"><div className="flex items-center gap-3"><div className="p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-600 shadow-sm">{getFileIcon(editingFile.name, false)}</div><div><h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{editingFile.name}</h3><p className="text-xs text-gray-500 dark:text-gray-300 font-mono">{currentPath}/{editingFile.name}</p></div></div><div className="flex gap-3"><button onClick={() => { setEditingFile(null); setFileContent(''); }} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-600 rounded-lg">{t('actions.cancel', { defaultValue: 'Cancel' })}</button><button onClick={saveFile} disabled={isSaving} className="px-4 py-2 text-white bg-indigo-600 rounded-lg">{t('files.editor.save_changes', { defaultValue: 'Save Changes' })}</button></div></div><div className="flex-1 relative bg-slate-900"><textarea value={fileContent} onChange={(e) => setFileContent(e.target.value)} className="w-full h-full p-6 font-mono text-sm bg-transparent text-slate-300 border-none outline-none resize-none" spellCheck="false" /></div></motion.div></motion.div>)}</AnimatePresence>
 
-      {/* Floating Upload Progress Widget */}
       <AnimatePresence>
         {uploadState.active && (
           <motion.div
