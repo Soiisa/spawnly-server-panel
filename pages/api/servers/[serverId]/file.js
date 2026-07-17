@@ -165,7 +165,7 @@ export default async function handler(req, res) {
 
     if (contentType.includes('multipart/form-data')) {
       const form = new formidable.IncomingForm({
-        maxFileSize: 2000 * 1024 * 1024, // 2GB limit to handle large files like MP4 videos
+        maxFileSize: 2000 * 1024 * 1024, // 2GB limit to handle large files
         keepExtensions: true
       });
 
@@ -187,7 +187,10 @@ export default async function handler(req, res) {
           }
 
           try {
-            const baseTargetDir = (Array.isArray(fields.path) ? fields.path[0] : fields.path) || '';
+            // FIX: Check the URL query parameters (req.query.path) if the form body doesn't contain the path
+            const rawPathField = fields.path || fields.dirPath || req.query.path || '';
+            const baseTargetDir = Array.isArray(rawPathField) ? rawPathField[0] : rawPathField;
+            
             const uploadedPaths = [];
 
             for (const uploadedFile of uploadedFiles) {
@@ -205,7 +208,7 @@ export default async function handler(req, res) {
               
               if (!filePath) continue;
 
-              // 1. Upload to S3 Backup using Streams (Prevents Out of Memory crashes)
+              // 1. Upload to S3 Backup using Streams
               await s3.putObject({ 
                 Bucket: S3_BUCKET, 
                 Key: uploadS3Key, 
@@ -218,6 +221,7 @@ export default async function handler(req, res) {
                   const targetUrl = `http://${server.ipv4}:3005/api/file`;
                   const formData = new FormData();
                   
+                  // Forward the corrected target directory to the VPS daemon
                   formData.append('path', finalTargetDir);
                   formData.append('file', fs.createReadStream(filePath), {
                       filename: finalFileName,
