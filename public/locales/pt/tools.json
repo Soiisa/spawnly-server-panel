@@ -1,0 +1,616 @@
+{
+  "hub": {
+    "seo": {
+      "title": "Ferramentas Gratuitas e Calculadoras de Servidores de Jogos | Spawnly",
+      "description": "Utilitários gratuitos para administradores de servidores e jogadores. Verificadores de portas de rede, geradores de configurações de servidores, calculadoras de raid para Rust e calculadoras de RAM para servidores.",
+      "og_title": "Ferramentas Gratuitas e Calculadoras de Servidores de Jogos | Spawnly",
+      "og_desc": "Utilitários gratuitos para administradores de servidores e jogadores. Verificadores de portas de rede, geradores de configurações de servidores, calculadoras de raid para Rust e muito mais."
+    },
+    "hero": {
+      "title": "Ferramentas Gratuitas para",
+      "title_highlight": "Jogadores e Administradores",
+      "subtitle": "Pare de adivinhar e comece a jogar. Criámos estes utilitários gratuitos para o ajudar a configurar, testar e executar os seus servidores de jogos sem falhas."
+    },
+    "tools": {
+      "status_checker": {
+        "title": "Verificador de Rede e Portas",
+        "desc": "Faça ping a qualquer servidor de jogos, verifique se as suas portas estão encaminhadas corretamente e veja a contagem de jogadores em direto.",
+        "badge": "Mais Popular"
+      },
+      "config_generator": {
+        "title": "Gerador de Configurações de Servidor",
+        "desc": "Editor visual para gerar ficheiros server.properties, PalWorldSettings.ini e server.cfg perfeitos.",
+        "badge": "Novo"
+      },
+      "player_calculators": {
+        "title": "Centro de Calculadoras para Jogadores",
+        "desc": "Custos de raid no Rust, coordenadas de sincronização de portais do Nether no Minecraft e rácios de produção no Factorio."
+      },
+      "ram_calculator": {
+        "title": "Calculadora de RAM para Servidor",
+        "desc": "Descubra exatamente de quanta RAM necessita com base no seu jogo, contagem de jogadores e tamanho do modpack."
+      }
+    },
+    "card": {
+      "launch_tool": "Iniciar Ferramenta"
+    },
+    "upsell": {
+      "title": "Cansado de gerir servidores manualmente?",
+      "desc": "A Spawnly inclui configurações automáticas, instalações instantâneas de modpacks e um painel de controlo incrível para que nunca mais tenha de tocar num ficheiro de configuração.",
+      "cta": "Ver Planos de Alojamento"
+    }
+  },
+  "calculators": {
+    "seo": {
+      "title": "Calculadoras de Jogos: Rust, Enshrouded, Lethal Company | Spawnly",
+      "description": "Mais de 20 calculadoras avançadas gratuitas. Planeie raids no Rust, calcule os limites de Shroud no Enshrouded, lucros no Stardew, cotas no Lethal Company e muito mais.",
+      "schema_name": "Centro Supremo de Calculadoras de Jogos da Spawnly",
+      "schema_desc": "Mais de 20 calculadoras de jogos gratuitas baseadas na web para Rust, Enshrouded, Oxygen Not Included, Lethal Company, Stardew Valley, Space Engineers e mais."
+    },
+    "hero": {
+      "title": "Centro Massivo de Calculadoras",
+      "subtitle": "20 ferramentas matemáticas e de planeamento altamente especializadas para os maiores jogos."
+    },
+    "upsell": {
+      "title_1": "Pronto para pôr estes planos à prova?",
+      "title_2": "Aloje o seu próprio servidor de jogos premium.",
+      "desc_1": "Pare de se preocupar com o lag do servidor, wipes imprevisíveis ou regras restritivas de administradores. A Spawnly fornece alojamento de servidores de jogos de alto desempenho e sem lag para mais de 30 títulos, incluindo Rust, Palworld, Enshrouded, Valheim e 7 Days to Die. Coloque em prática as suas rotas de raid, layouts de fábrica e construções de base num ambiente totalmente controlado por si.",
+      "desc_2": "Os nossos servidores de classe empresarial são alimentados por SSDs NVMe de desempenho extremo, processadores de topo e proteção DDoS robusta. Quer esteja a gerir uma operação massiva de um clã no Rust, a construir uma mega fábrica no Satisfactory ou a manter um castelo persistente no V Rising, a nossa rede global garante 99,9% de tempo de atividade e zero rubberbanding.",
+      "feat_instant": "Configuração Instantânea",
+      "feat_ddos": "Proteção DDoS",
+      "feat_nvme": "Armazenamento NVMe",
+      "feat_global": "Localizações Globais",
+      "cta": "Ver Planos de Alojamento",
+      "cta_sub": "Implemente em menos de 60s"
+    },
+    "categories": {
+      "survival": "Sobrevivência Hardcore",
+      "rpg": "Crafting e RPG",
+      "factory": "Fábrica e Automação",
+      "tactical": "Tático e Co-Op"
+    },
+    "names": {
+      "rust": "Planeador de Rotas de Raid",
+      "ark": "Maturação e Criação",
+      "seven_days": "Gamestage da Lua de Sangue",
+      "zomboid": "Uso de Combustível do Gerador",
+      "conan": "Domesticação da Roda da Dor",
+      "dayz": "Consumo de Metabolismo",
+      "minecraft": "Sincronização de Portal do Nether",
+      "palworld": "Tempos de Servidor e Ovos",
+      "valheim": "Construtor de Base de Conforto",
+      "v_rising": "Decadência do Castelo e Sangue",
+      "enshrouded": "Calc. de Tempo no Shroud",
+      "stardew": "Calc. de Lucro de Cultivos",
+      "factorio": "Otimização de Cintos e Montagem",
+      "satisfactory": "Planeador de Energia a Carvão",
+      "space_engineers": "Elevação Atmosférica",
+      "oni": "Calculadora SPOM",
+      "dsp": "Planeador de Laboratório de Matrizes",
+      "cs2_sens": "Conversor de Sensibilidade",
+      "lethal": "Previsor de Cota"
+    },
+    "rust": {
+      "wood_door": "Porta de Madeira",
+      "sheet_door": "Porta de Chapa de Metal",
+      "garage_door": "Porta de Garagem",
+      "armored_door": "Porta Blindada",
+      "stone_wall": "Parede de Pedra",
+      "metal_wall": "Parede de Chapa de Metal",
+      "armored_wall": "Parede Blindada",
+      "tc": "Armário de Ferramentas (TC)",
+      "c4": "C4",
+      "rockets": "Foguetes",
+      "satchels": "Cargas Explosivas",
+      "exp_ammo": "Munição Exp.",
+      "structures": "Estruturas",
+      "clear_blueprint": "Limpar Planta",
+      "raid_plan": "Planta de Raid",
+      "empty_cart": "A sua planta está vazia.",
+      "empty_sub": "Adicione portas e paredes a partir do menu à esquerda para calcular os custos.",
+      "sulfur_short": "S",
+      "best": "⭐ Melhor",
+      "req_loadout": "Equipamento Necessário",
+      "c4_needed": "C4 Necessário",
+      "rockets_needed": "Foguetes Necessários",
+      "satchels_needed": "Cargas Explosivas",
+      "expammo_needed": "Munição Exp.",
+      "total_sulfur": "Custo Total de Enxofre",
+      "combined": "Custo combinado de todos os explosivos selecionados"
+    },
+    "ark": {
+      "breeding": "Criação",
+      "desc": "Calcule os resultados de maturação e impressão (imprint) com base nas taxas do servidor.",
+      "species": "Espécie",
+      "mature_speed": "Multiplicador de Velocidade de Maturação (BabyMatureSpeedMultiplier)",
+      "cuddle_interval": "Multiplicador de Intervalo de Cuidado (BabyCuddleIntervalMultiplier)",
+      "imprint_qual": "Multiplicador de Qualidade de Impressão (0.0–1.0)",
+      "total_time": "Tempo Total de Maturação",
+      "hours": "Horas",
+      "cuddle_inter": "Intervalo de Cuidado",
+      "poss_cuddles": "Cuidados Possíveis",
+      "imprint_max": "100% de Impressão Alcançável 🎉",
+      "imprint_cap": "Impressão Máxima:"
+    },
+    "7dtd": {
+      "title": "Gamestage da Lua de Sangue",
+      "level": "O Seu Nível",
+      "days": "Dias Sobrevividos",
+      "players": "Jogadores a Solo / Co-op Simples",
+      "party": "Níveis do Grupo (separados por vírgula, opcional)",
+      "party_ph": "ex: 45,32,50",
+      "party_desc": "Substitui a contagem de co-op simples por uma fórmula de grupo precisa.",
+      "diff": "Dificuldade",
+      "final_gs": "Gamestage Final",
+      "horde": "Tamanho Estimado da Horda",
+      "zombies": "zombies",
+      "per_wave": "Por onda de jogadores",
+      "calc_party": "A calcular para um grupo dinâmico de {{partySize}}."
+    },
+    "pz": {
+      "title": "Uso de Combustível do Gerador",
+      "fridge": "Frigorífico",
+      "freezer": "Congelador",
+      "oven": "Forno Elétrico",
+      "light": "Lâmpada",
+      "tv": "TV",
+      "radio": "Rádio",
+      "antique": "Forno Antigo (lenha)",
+      "ice": "Congelador de Gelados",
+      "computer": "Computador",
+      "cond": "Condição do Gerador %",
+      "load": "Carga Total:",
+      "ph": "Combustível por Hora",
+      "p24": "Combustível por 24h",
+      "tank_msg": "Um tanque cheio (1,5 L) dura",
+      "hours": "horas."
+    },
+    "conan": {
+      "title": "Domesticação da Roda da Dor",
+      "captive_tier": "Tier do Lacaio (Thrall)",
+      "tier_1": "Tier 1",
+      "tier_2": "Tier 2",
+      "tier_3": "Tier 3",
+      "tier_4": "Tier 4 (Nomeado)",
+      "taskmaster": "Lacaio Feitor (Taskmaster)",
+      "tm_none": "Nenhum",
+      "tm_1": "Tier 1 (-14%)",
+      "tm_2": "Tier 2 (-29%)",
+      "tm_3": "Tier 3 (-43%)",
+      "tm_4": "Tier 4 (-57%)",
+      "wheel_type": "Tipo de Roda",
+      "wl_lesser": "Menor (0.5x)",
+      "wl_normal": "Normal (0.75x)",
+      "wl_greater": "Maior (1.0x)",
+      "server_speed": "Multiplicador de Velocidade do Servidor (ThrallCraftSpeedMultiplier)",
+      "time_req": "Tempo Real Necessário"
+    },
+    "dayz": {
+      "title": "Consumo de Metabolismo",
+      "temp": "Temperatura Corporal",
+      "hot": "Quente",
+      "normal": "Normal",
+      "cold": "Frio",
+      "freezing": "A Congelar",
+      "move": "Estado de Movimento",
+      "rest": "A Descansar",
+      "walk": "A Andar",
+      "jog": "A Correr",
+      "sprint": "Em Sprint",
+      "sick": "Doente",
+      "wet": "Molhado",
+      "burn_rate": "Taxa de Consumo de Calorias",
+      "time_starve": "Tempo Até Morrer à Fome"
+    },
+    "mc": {
+      "title": "Ligador de Portais do Nether",
+      "dir": "Direção",
+      "ow_nether": "Overworld → Nether",
+      "nether_ow": "Nether → Overworld",
+      "ow_x": "X do Overworld",
+      "net_x": "X do Nether",
+      "ow_z": "Z do Overworld",
+      "net_z": "Z do Nether",
+      "ext_portal": "Posição de Portal do Nether Existente (Opcional)",
+      "x_coord": "Coord. X",
+      "z_coord": "Coord. Z",
+      "ext_desc": "Utilizado para verificar se os portais se ligam (dentro de 16 blocos).",
+      "res_net": "Coordenadas do Nether",
+      "res_ow": "Coordenadas do Overworld",
+      "warn_link": "⚠ Irá ligar-se ao portal existente (a {{dist}} blocos de distância)",
+      "safe_link": "✓ Seguro: Não irá interferir (a {{dist}} blocos de distância)"
+    },
+    "palworld": {
+      "title": "Calc. de Incubação de Ovos",
+      "egg_size": "Tamanho do Ovo",
+      "egg_norm": "Normal (base de 1h)",
+      "egg_large": "Grande (base de 2h)",
+      "egg_huge": "Enorme (base de 4h)",
+      "server_speed": "Multiplicador de Velocidade de Incubação de Ovos do Servidor",
+      "incub_bonus": "Bónus de Velocidade da Incubadora % (0-200)",
+      "comf_temp": "Temperatura Confortável (2x)",
+      "flame_emp": "Imperador das Chamas (+100%)",
+      "real_time": "Tempo Real de Incubação",
+      "hours": "Horas"
+    },
+    "valheim": {
+      "title": "Construtor de Base de Conforto",
+      "shelter": "Abrigo (+2)",
+      "fire": "Fogueira (+1)",
+      "bed": "Cama (+1)",
+      "deer": "Tapete de Veado (+1)",
+      "wolf": "Tapete de Lobo (+1)",
+      "lox": "Tapete de Lox (+1)",
+      "banner": "Estandarte (+1)",
+      "chair": "Cadeira (+1)",
+      "table": "Mesa (+1)",
+      "bench": "Banco (+1)",
+      "hot_tub": "Jacuzzi (+2)",
+      "crystal": "Trono de Cristal (+2)",
+      "maypole": "Mastro de Maio (+1)",
+      "yule": "Árvore de Yule (+1)",
+      "level": "Nível de Conforto",
+      "rested_dur": "Duração do Buff de Descansado",
+      "mins": "Minutos",
+      "rested_desc": "O buff de descansado concede ",
+      "rested_strong": "+50% de regen. de HP, +100% de regen. de Vigor e +50% de XP."
+    },
+    "v_rising": {
+      "title": "Calc. de Decadência do Castelo",
+      "heart": "Nível do Coração do Castelo",
+      "level": "Nível",
+      "day": "dia",
+      "essence": "Essência de Sangue Atual",
+      "quality": "Qualidade do Sangue % (0–100)",
+      "desc": "Uma qualidade do sangue mais alta reduz o consumo de essência em até 20%.",
+      "time_decay": "Tempo Até à Decadência",
+      "eff_time": "Tempo Efetivo (Com Qualidade de Sangue)",
+      "reduced": "Consumo reduzido"
+    },
+    "enshrouded": {
+      "title": "Calc. de Tempo no Shroud",
+      "altar": "Nível do Altar da Chama",
+      "level": "Nível",
+      "mins": "mins",
+      "flask": "Frasco Ativo",
+      "none": "Nenhum",
+      "surv": "Frasco de Sobrevivência (+2)",
+      "great": "Sobrevivência Maior (+4)",
+      "inner": "Habilidade Fogos Interiores (+2 mins)",
+      "safe": "Tempo Seguro Total"
+    },
+    "stardew": {
+      "title": "Otimizador de Lucro de Cultivos",
+      "parsnip": "Chirivia",
+      "strawberry": "Morango",
+      "blueberry": "Mirtilo",
+      "cranberry": "Arando",
+      "ancient": "Fruto Antigo",
+      "crop": "Cultivo",
+      "planted": "Plantado",
+      "days_left": "Dias Restantes",
+      "fert": "Fertilizante",
+      "none": "Nenhum",
+      "basic": "Básico",
+      "quality": "Qualidade",
+      "deluxe": "Deluxe (+25% VEL)",
+      "prof": "Profissão",
+      "tiller": "Agricultor (+10%)",
+      "artisan": "Artesão (+40%)",
+      "harvests": "Total de Colheitas",
+      "net": "Lucro Líquido",
+      "avg_sell": "Preço médio de venda:"
+    },
+    "factorio": {
+      "title": "Otimizador de Linha de Montagem",
+      "iron_gear": "Roda Dentada de Ferro",
+      "circuit": "Circuito Eletrónico",
+      "copper_cable": "Cabo de Cobre",
+      "adv_circuit": "Circuito Avançado",
+      "recipe": "Receita",
+      "target": "Saída Alvo (itens/seg)",
+      "tier": "Tier da Máquina de Montagem",
+      "modules": "Módulos de Prod.",
+      "assemblers": "Máquinas Necessárias",
+      "inputs": "Materiais de Entrada Necessários/Seg"
+    },
+    "satisfactory": {
+      "title": "Planeador de Energia a Carvão",
+      "gen": "Geradores",
+      "overclock": "Overclock %",
+      "node": "Pureza do Nó de Carvão (Minerador Mk1)",
+      "impure": "Impuro (30/min)",
+      "normal": "Normal (60/min)",
+      "pure": "Puro (120/min)",
+      "power": "Saída Total de Energia",
+      "extractors": "Extratores de Água",
+      "miners": "Mineradores Mk1",
+      "coal": "Carvão/min"
+    },
+    "se": {
+      "title": "Elevação Atmosférica",
+      "earth": "Tipo Terra",
+      "mars": "Marte",
+      "moon": "Lua",
+      "atmo": "Atmosférico",
+      "hydro": "Hidrogénio",
+      "ion": "Ião",
+      "warn_atmo": "Os propulsores atmosféricos não funcionam no vácuo.",
+      "warn_ion": "Os propulsores de iões perdem eficiência na atmosfera.",
+      "mass": "Massa Total (kg)",
+      "grid": "Tamanho da Grelha",
+      "large": "Grande",
+      "small": "Pequena",
+      "thruster": "Propulsor",
+      "t_atmo": "Atmo",
+      "t_hydro": "Hidrogénio",
+      "t_ion": "Ião",
+      "planet": "Planeta"
+    },
+    "oni": {
+      "title": "Calc. de Oxigénio SPOM",
+      "water": "Água (g/s)",
+      "trait": "Traço do Duplicante",
+      "normal": "Normal (100 g/s)",
+      "mouth": "Respirador pela Boca (150 g/s)",
+      "lungs": "Pulmões de Mergulhador (75 g/s)",
+      "o2": "Saída de O₂",
+      "h2": "Saída de H₂",
+      "dupes": "Duplicantes Suportados",
+      "elec_need": "São necessários {{count}} Eletrolisadores",
+      "power": "Energia Bruta"
+    },
+    "dsp": {
+      "title": "Planeador de Laboratório de Matrizes",
+      "blue": "Azul",
+      "red": "Vermelho",
+      "yellow": "Amarelo",
+      "purple": "Roxo",
+      "green": "Verde",
+      "white": "Branco",
+      "matrix": "Tipo de Matriz",
+      "target": "Ciência Alvo/s",
+      "prolif": "Nível do Proliferador (0-3)",
+      "labs": "Laboratórios Ativos Necessários",
+      "extra": "Bónus de produtos extras: +{{pct}}%"
+    },
+    "sens": {
+      "title": "Conversor de Sensibilidade",
+      "from": "Converter De",
+      "to": "Converter Para",
+      "current": "Sensibilidade Atual",
+      "dpi": "DPI do Rato",
+      "converted": "Sensibilidade Convertida",
+      "cm": "cm / 360°",
+      "cm_sub": "Distância física para uma volta completa"
+    },
+    "lethal": {
+      "title": "Previsor de Cota",
+      "target": "Cota Alvo",
+      "current": "Sucata Atual",
+      "days": "Dias Restantes",
+      "avg": "Sucata Média/Dia",
+      "overtime": "Dias Extra (após o prazo)",
+      "projected": "Total Projetado",
+      "secured": "✅ Cota garantida (+${{diff}} excedente)",
+      "fired": "💀 Despedido! Falta ${{diff}}"
+    }
+  },
+  "config_generator": {
+    "seo": {
+      "title": "Gerador de Configurações de Servidor (INI, JSON, XML) | Ferramentas Gratuitas Spawnly",
+      "description": "Gerador visual gratuito para criar ficheiros server.properties, server.cfg, PalWorldSettings.ini e ficheiros JSON perfeitamente formatados para mais de 30 jogos.",
+      "schema_name": "Gerador de Configurações de Servidor da Spawnly",
+      "schema_desc": "Um gerador visual gratuito para criar ficheiros de configuração server.properties, server.cfg, PalWorldSettings.ini e JSON perfeitamente formatados para mais de 30 servidores de jogos."
+    },
+    "hero": {
+      "title": "Gerador de Configurações de Servidor",
+      "subtitle": "Pare de quebrar o seu servidor com erros de sintaxe. Selecione um jogo e deixe-nos gerar o código perfeitamente formatado."
+    },
+    "editor": {
+      "title": "Definições Visuais",
+      "format": "Formato {{format}}"
+    },
+    "preview": {
+      "copy": "Copiar",
+      "copied": "Copiado!",
+      "download": "Transferir",
+      "upsell_title": "Odeia editar ficheiros de texto?",
+      "upsell_desc": "O painel de controlo da Spawnly possui um editor visual integrado.",
+      "host_btn": "Alojar {{game}}"
+    },
+    "seo_section": {
+      "title": "Como usar o Gerador de Configurações",
+      "desc": "Os erros de formatação são a razão nº1 para os servidores de jogos falharem no arranque. Quer esteja a tentar formatar um array complicado no <code>PalWorldSettings.ini</code>, a garantir a sintaxe estrita do JSON para o <code>server-settings.json</code> no Factorio, ou apenas a gerar um ficheiro <code>server.properties</code> básico para o Minecraft, a nossa ferramenta garante a sintaxe correta. Basta selecionar o seu jogo, ajustar as opções e clicar em transferir. Carregue o ficheiro para o diretório raiz do seu servidor e reinicie o seu jogo."
+    },
+    "games": {
+      "minecraft": "Minecraft",
+      "terraria": "Terraria",
+      "project_zomboid": "Project Zomboid",
+      "valheim": "Valheim",
+      "ark_se": "ARK: Survival Evolved",
+      "ark_sa": "ARK: Survival Ascended",
+      "conan_exiles": "Conan Exiles",
+      "enshrouded": "Enshrouded",
+      "dst": "Don't Starve Together",
+      "palworld": "Palworld",
+      "rust": "Rust",
+      "cs2": "Counter-Strike 2",
+      "gmod": "Garry's Mod",
+      "tf2": "Team Fortress 2",
+      "l4d2": "Left 4 Dead 2",
+      "squad": "Squad",
+      "insurgency_sandstorm": "Insurgency",
+      "factorio": "Factorio",
+      "v_rising": "V Rising",
+      "seven_days_to_die": "7 Days to Die"
+    }
+  },
+  "ram_calculator": {
+    "seo": {
+      "title": "Calculadora de RAM para Servidor de Jogos (Minecraft, Palworld, Rust) | Spawnly",
+      "desc": "Calcule exatamente quanta RAM o seu servidor dedicado necessita com base no motor do jogo, jogadores ativos e tamanhos de modpacks. Suporta mais de 30 jogos.",
+      "og_title": "Calculadora de RAM para Servidor de Jogos | Spawnly",
+      "og_desc": "Calcule exatamente de quanta RAM o seu servidor de jogos necessita para Minecraft, Rust, Palworld e mais de 30 outros.",
+      "schema_name": "Calculadora de RAM para Servidor da Spawnly",
+      "schema_desc": "Calcule exatamente de quanta RAM o seu servidor de jogos necessita com base nos slots de jogadores e modpacks para mais de 30 jogos, incluindo Minecraft, Palworld e Rust."
+    },
+    "hero": {
+      "title": "Calculadora de RAM para Servidor",
+      "subtitle": "Pare de adivinhar. Selecione entre os nossos mais de 30 jogos suportados para encontrar instantaneamente o tamanho de servidor perfeito."
+    },
+    "inputs": {
+      "select_game": "Selecionar Jogo",
+      "player_count": "Contagem de Jogadores",
+      "player": "Jogador",
+      "players": "Jogadores",
+      "scope_mods": "Escopo / Mods do Servidor"
+    },
+    "results": {
+      "recommendation": "Recomendação",
+      "need_at_least": "Necessita de um servidor com pelo menos",
+      "breakdown": "Distribuição de Utilização",
+      "base_os": "Motor / SO Base:",
+      "player_overhead": "Custo de Jogadores (Overhead):",
+      "mods_scope": "Mods / Escopo:",
+      "est_raw": "Utilização Bruta Estimada:",
+      "view_plans": "Ver Planos de {{ram}}GB"
+    },
+    "faq": {
+      "title": "Perguntas Frequentes",
+      "q1": "Por que razão o Palworld precisa de tanta RAM?",
+      "a1": "O Palworld foi construído no Unreal Engine 5 e utiliza intensamente a memória para o pathing da IA e renderização de bases. Além disso, atualmente sofre de fugas de memória ao longo do tempo. Recomendamos um mínimo de 8GB, embora 12GB+ seja mais seguro para grandes grupos.",
+      "q2": "Os mods do Minecraft usam muita memória?",
+      "a2": "Sim. Embora o Minecraft Vanilla funcione bem com 2-3GB de RAM para pequenos grupos, os grandes modpacks (como o All The Mods ou Better MC) carregam milhares de novos assets e scripts na memória durante o arranque, necessitando de 8GB+ apenas para iniciar.",
+      "q3": "O que acontece se eu ficar sem RAM?",
+      "a3": "Se o seu servidor atingir o limite de RAM, o sistema operativo acionará um evento de morte por OOM (Out of Memory). O seu servidor irá falhar instantaneamente sem guardar os dados, e os jogadores serão desconectados.",
+      "q4": "Posso aumentar a minha RAM mais tarde?",
+      "a4": "Absolutamente. A Spawnly permite-lhe aumentar ou diminuir instantaneamente a RAM do seu servidor a partir do painel de controlo. Os seus ficheiros e endereço IP permanecem exatamente os mesmos."
+    },
+    "mods": {
+      "vanilla": "Vanilla / Spigot",
+      "light_mods": "Mods Leves (1-30)",
+      "heavy_mods": "Mods Pesados (30-100)",
+      "massive_mods": "Modpacks Massivos (200+)",
+      "std_rates": "Taxas Standard",
+      "high_spawn": "Altas Taxas de Spawn / Late Game",
+      "small_map": "Mapa Pequeno (3k)",
+      "med_map": "Mapa Médio (4k)",
+      "large_map": "Mapa Grande (5k+)",
+      "island": "The Island (Base)",
+      "heavy_gen2": "Mods Pesados / Gen2",
+      "std_server": "Servidor Standard",
+      "heavy_modded": "Altamente Modificado",
+      "vanilla_map": "Mapa Vanilla",
+      "valheim_plus": "Valheim Plus / Mods Pesados",
+      "overhauls": "Darkness Falls / Overhauls",
+      "aoc_mods": "Age of Calamitous / Mods",
+      "vanilla_chernarus": "Chernarus Vanilla",
+      "expansion_mods": "Expansão / Mods Pesados",
+      "early_factory": "Fábrica Inicial / Mid Game",
+      "mega_factory": "Mega Fábrica (Late Game)",
+      "std_factory": "Fábrica Standard",
+      "space_exp": "Space Exploration / Krastorio",
+      "std_solar": "Sistema Solar Standard",
+      "heavy_grids": "Grelhas Pesadas / Mods",
+      "heavy_vehicles": "Mapas Pesados / Veículos",
+      "std_match": "Matchmaking Standard",
+      "sandbox": "Sandbox",
+      "darkrp": "DarkRP / Addons Pesados",
+      "std_50v50": "Standard 50v50",
+      "vanilla_light": "Vanilla / Cenários Leves",
+      "heavy_ai": "Antistasi / ALiVE / IA Pesada",
+      "vanilla_small": "Vanilla / Mapa Pequeno",
+      "calamity": "Mapa Grande / Calamity Mod",
+      "caves": "Cavernas Standard + Overworld",
+      "std_farm": "Fazenda Standard"
+    }
+  },
+  "status_checker": {
+    "seo": {
+      "title": "Verificador de Estado e Portas de Servidor | Ferramentas Gratuitas Spawnly",
+      "desc": "Ferramenta gratuita para verificar se o seu servidor de jogos está online. Suporta Minecraft, Palworld, Rust, ARK e mais de 25 outros jogos.",
+      "schema_name": "Verificador de Estado e Portas de Servidor da Spawnly",
+      "schema_desc": "Uma ferramenta de diagnóstico gratuita para testar o tempo de atividade do servidor de jogos e verificar portas abertas."
+    },
+    "hero": {
+      "title": "Ferramentas de Diagnóstico de Rede",
+      "subtitle": "Faça ping instantaneamente ao seu servidor de jogos para verificar o tempo de atividade ou verificar se as regras de encaminhamento de portas do seu router estão ativas."
+    },
+    "sidebar": {
+      "step1_status": "1. Selecionar Jogo para Fazer Ping",
+      "step1_port": "1. Selecionar Jogo (Preenche Porta Automaticamente)",
+      "search_placeholder": "Pesquisar mais de 30 jogos...",
+      "no_games_found": "Nenhum jogo encontrado a corresponder a \"{{query}}\""
+    },
+    "tabs": {
+      "tab_status": "Estado do Servidor de Jogos",
+      "tab_port": "Testador de Encaminhamento de Portas"
+    },
+    "form": {
+      "context_status_title": "Verificar Servidor de {{game}}",
+      "context_port_title": "Testar Porta de {{game}}",
+      "context_status_desc": "Introduza o endereço IP do servidor para lhe fazer ping.",
+      "context_port_desc": "Introduza o seu IP público para ver se a porta está aberta.",
+      "ip_label": "Endereço IP / Domínio",
+      "ip_placeholder": "ex: 192.168.1.1 ou jogar.servidor.com",
+      "port_label": "Porta",
+      "btn_loading": "A Executar Diagnósticos...",
+      "btn_submit": "Executar Teste de Rede"
+    },
+    "results": {
+      "port_open": "A Porta {{port}} está Aberta!",
+      "port_closed": "A Porta {{port}} está Fechada",
+      "server_online": "O Servidor está Online!",
+      "server_offline": "O Servidor está Offline",
+      "hostname": "Nome do Anfitrião (Hostname)",
+      "players": "Jogadores"
+    },
+    "errors": {
+      "connection_failed": "Falha ao ligar ao servidor de testes."
+    },
+    "upsell": {
+      "title": "Problemas de rede a deixá-lo louco?",
+      "desc": "Ignore as configurações do router. Obtenha um servidor de <strong>{{game}}</strong> pré-configurado a correr em hardware empresarial com proteção DDoS instantaneamente.",
+      "btn": "Ver Alojamento de {{game}}"
+    },
+    "seo_text": {
+      "q1_title": "Porque é que a porta do meu servidor de jogos está fechada?",
+      "q1_desc": "Se o nosso Testador de Encaminhamento de Portas disser que a sua porta está fechada, jogadores externos não conseguirão entrar no seu servidor. Isso normalmente acontece por três motivos: o seu ISP usa CGNAT (o que significa que não tem um verdadeiro IP público), as regras de encaminhamento de portas do seu router estão configuradas incorretamente, ou o Windows Defender Firewall está a bloquear a aplicação.",
+      "q2_title": "Como funciona o Verificador de Estado do Servidor?",
+      "q2_desc": "A nossa ferramenta envia uma consulta de rede direta usando o protocolo específico do jogo selecionado. Utilizamos os protocolos de consulta oficiais (como a Source Engine Query ou o Ping standard do Minecraft) para contactar o IP e Porta fornecidos. Se o servidor responder, apresentamos o mapa ativo, nome do anfitrião e a contagem de jogadores."
+    },
+    "games": {
+      "minecraft": "Minecraft",
+      "satisfactory": "Satisfactory",
+      "rust": "Rust",
+      "palworld": "Palworld",
+      "valheim": "Valheim",
+      "ark_sa": "ARK: Survival Ascended",
+      "ark_se": "ARK: Survival Evolved",
+      "factorio": "Factorio",
+      "project_zomboid": "Project Zomboid",
+      "gmod": "Garry's Mod",
+      "cs2": "Counter-Strike 2",
+      "arma3": "Arma 3",
+      "arma_reforger": "Arma Reforger",
+      "space_engineers": "Space Engineers",
+      "seven_days_to_die": "7 Days to Die",
+      "conan_exiles": "Conan Exiles",
+      "dayz": "DayZ",
+      "enshrouded": "Enshrouded",
+      "sons_of_the_forest": "Sons of the Forest",
+      "v_rising": "V Rising",
+      "core_keeper": "Core Keeper",
+      "mindustry": "Mindustry",
+      "squad": "Squad",
+      "insurgency_sandstorm": "Insurgency: Sandstorm",
+      "unturned": "Unturned",
+      "tf2": "Team Fortress 2",
+      "l4d2": "Left 4 Dead 2",
+      "dst": "Don't Starve Together",
+      "terraria": "Terraria",
+      "stardew_valley": "Stardew Valley"
+    }
+  }
+}

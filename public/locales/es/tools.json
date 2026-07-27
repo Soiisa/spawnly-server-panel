@@ -1,0 +1,616 @@
+{
+  "hub": {
+    "seo": {
+      "title": "Free Game Server Tools & Calculators | Spawnly",
+      "description": "Free utilities for server admins and gamers. Network port checkers, server config generators, Rust raid calculators, and server RAM calculators.",
+      "og_title": "Free Game Server Tools & Calculators | Spawnly",
+      "og_desc": "Free utilities for server admins and gamers. Network port checkers, server config generators, Rust raid calculators, and more."
+    },
+    "hero": {
+      "title": "Free Tools for",
+      "title_highlight": "Gamers & Admins",
+      "subtitle": "Stop guessing and start playing. We built these free utilities to help you configure, test, and run your game servers flawlessly."
+    },
+    "tools": {
+      "status_checker": {
+        "title": "Network & Port Checker",
+        "desc": "Ping any game server, check if your ports are forwarded correctly, and view live player counts.",
+        "badge": "Most Popular"
+      },
+      "config_generator": {
+        "title": "Server Config Generator",
+        "desc": "Visual UI editor to generate perfect server.properties, PalWorldSettings.ini, and server.cfg files.",
+        "badge": "New"
+      },
+      "player_calculators": {
+        "title": "Player Calculators Hub",
+        "desc": "Rust raid costs, Minecraft Nether portal sync coordinates, and Factorio production ratios."
+      },
+      "ram_calculator": {
+        "title": "Server RAM Calculator",
+        "desc": "Find out exactly how much RAM you need based on your game, player count, and modpack size."
+      }
+    },
+    "card": {
+      "launch_tool": "Launch Tool"
+    },
+    "upsell": {
+      "title": "Tired of managing servers manually?",
+      "desc": "Spawnly includes automated setups, instant modpack installations, and a beautiful control panel so you never have to touch a config file again.",
+      "cta": "View Hosting Plans"
+    }
+  },
+  "calculators": {
+    "seo": {
+      "title": "Massive Game Calculators: Rust, Enshrouded, Lethal Company | Spawnly",
+      "description": "20+ free advanced gaming calculators. Plan Rust raids, calculate Enshrouded Shroud limits, Stardew profits, Lethal Company quotas, and more.",
+      "schema_name": "Spawnly Ultimate Game Calculators Hub",
+      "schema_desc": "20+ free web-based gaming calculators for Rust, Enshrouded, Oxygen Not Included, Lethal Company, Stardew Valley, Space Engineers, and more."
+    },
+    "hero": {
+      "title": "Massive Calculator Hub",
+      "subtitle": "20 highly-specialized math and planning tools for the biggest games."
+    },
+    "upsell": {
+      "title_1": "Ready to put these plans to the test?",
+      "title_2": "Host your own premium game server.",
+      "desc_1": "Stop worrying about server lag, unpredictable wipes, or restrictive admin rules. Spawnly provides high-performance, lag-free game server hosting for over 30+ titles including Rust, Palworld, Enshrouded, Valheim, and 7 Days to Die. Put your raid paths, factory layouts, and base builds into practice in an environment you entirely control.",
+      "desc_2": "Our enterprise-grade servers are powered by extreme-performance NVMe SSDs, top-tier CPUs, and robust DDoS protection. Whether you are running a massive Rust clan operation, building a megabase in Satisfactory, or maintaining a persistent V Rising castle, our global network ensures 99.9% uptime and zero rubberbanding.",
+      "feat_instant": "Instant Setup",
+      "feat_ddos": "DDoS Protection",
+      "feat_nvme": "NVMe Storage",
+      "feat_global": "Global Locations",
+      "cta": "View Hosting Plans",
+      "cta_sub": "Deploy in under 60s"
+    },
+    "categories": {
+      "survival": "Hardcore Survival",
+      "rpg": "Crafting & RPG",
+      "factory": "Factory & Automation",
+      "tactical": "Tactical & Co-Op"
+    },
+    "names": {
+      "rust": "Raid Path Planner",
+      "ark": "Maturation & Breeding",
+      "seven_days": "Blood Moon Gamestage",
+      "zomboid": "Generator Fuel Usage",
+      "conan": "Wheel of Pain Taming",
+      "dayz": "Metabolism Drain",
+      "minecraft": "Nether Portal Sync",
+      "palworld": "Server Times & Eggs",
+      "valheim": "Comfort Base Builder",
+      "v_rising": "Castle Decay & Blood",
+      "enshrouded": "Shroud Time Calc",
+      "stardew": "Crop Profit Calc",
+      "factorio": "Belt & Assembly Opt",
+      "satisfactory": "Coal Power Planner",
+      "space_engineers": "Atmospheric Lift",
+      "oni": "SPOM Calculator",
+      "dsp": "Matrix Lab Planner",
+      "cs2_sens": "Sensitivity Converter",
+      "lethal": "Quota Predictor"
+    },
+    "rust": {
+      "wood_door": "Wooden Door",
+      "sheet_door": "Sheet Metal Door",
+      "garage_door": "Garage Door",
+      "armored_door": "Armored Door",
+      "stone_wall": "Stone Wall",
+      "metal_wall": "Sheet Metal Wall",
+      "armored_wall": "Armored Wall",
+      "tc": "Tool Cupboard",
+      "c4": "C4",
+      "rockets": "Rockets",
+      "satchels": "Satchels",
+      "exp_ammo": "Exp. Ammo",
+      "structures": "Structures",
+      "clear_blueprint": "Clear Blueprint",
+      "raid_plan": "Raid Blueprint",
+      "empty_cart": "Your blueprint is empty.",
+      "empty_sub": "Add doors and walls from the left menu to calculate costs.",
+      "sulfur_short": "S",
+      "best": "⭐ Best",
+      "req_loadout": "Required Loadout",
+      "c4_needed": "C4 Needed",
+      "rockets_needed": "Rockets Needed",
+      "satchels_needed": "Satchels",
+      "expammo_needed": "Exp. Ammo",
+      "total_sulfur": "Total Sulfur Cost",
+      "combined": "Combined cost of all selected explosives"
+    },
+    "ark": {
+      "breeding": "Breeding",
+      "desc": "Calculate maturation and imprinting results based on server rates.",
+      "species": "Species",
+      "mature_speed": "BabyMatureSpeedMultiplier",
+      "cuddle_interval": "BabyCuddleIntervalMultiplier",
+      "imprint_qual": "Imprint Quality Multiplier (0.0–1.0)",
+      "total_time": "Total Maturation Time",
+      "hours": "Hours",
+      "cuddle_inter": "Cuddle Interval",
+      "poss_cuddles": "Possible Cuddles",
+      "imprint_max": "100% Imprint Achievable 🎉",
+      "imprint_cap": "Max Imprint:"
+    },
+    "7dtd": {
+      "title": "Bloodmoon Gamestage",
+      "level": "Your Level",
+      "days": "Days Alive",
+      "players": "Solo / Simple Co-op Players",
+      "party": "Party Levels (comma separated, optional)",
+      "party_ph": "e.g. 45,32,50",
+      "party_desc": "Overrides simple co-op count for accurate group formula.",
+      "diff": "Difficulty",
+      "final_gs": "Final Gamestage",
+      "horde": "Est. Horde Size",
+      "zombies": "zombies",
+      "per_wave": "Per player wave",
+      "calc_party": "Calculating for a dynamic party of {{partySize}}."
+    },
+    "pz": {
+      "title": "Generator Fuel Usage",
+      "fridge": "Refrigerator",
+      "freezer": "Freezer",
+      "oven": "Electric Oven",
+      "light": "Lamp",
+      "tv": "TV",
+      "radio": "Radio",
+      "antique": "Antique Oven (wood)",
+      "ice": "Popsicle Freezer",
+      "computer": "Computer",
+      "cond": "Generator Condition %",
+      "load": "Total Load:",
+      "ph": "Fuel per Hour",
+      "p24": "Fuel per 24h",
+      "tank_msg": "A full tank (1.5 L) lasts",
+      "hours": "hours."
+    },
+    "conan": {
+      "title": "Wheel of Pain Taming",
+      "captive_tier": "Thrall Tier",
+      "tier_1": "Tier 1",
+      "tier_2": "Tier 2",
+      "tier_3": "Tier 3",
+      "tier_4": "Tier 4 (Named)",
+      "taskmaster": "Taskmaster Thrall",
+      "tm_none": "None",
+      "tm_1": "Tier 1 (-14%)",
+      "tm_2": "Tier 2 (-29%)",
+      "tm_3": "Tier 3 (-43%)",
+      "tm_4": "Tier 4 (-57%)",
+      "wheel_type": "Wheel Type",
+      "wl_lesser": "Lesser (0.5x)",
+      "wl_normal": "Normal (0.75x)",
+      "wl_greater": "Greater (1.0x)",
+      "server_speed": "Server ThrallCraftSpeedMultiplier",
+      "time_req": "Real Time Required"
+    },
+    "dayz": {
+      "title": "Metabolism Drain",
+      "temp": "Body Temperature",
+      "hot": "Hot",
+      "normal": "Normal",
+      "cold": "Cold",
+      "freezing": "Freezing",
+      "move": "Movement State",
+      "rest": "Resting",
+      "walk": "Walking",
+      "jog": "Jogging",
+      "sprint": "Sprinting",
+      "sick": "Sick",
+      "wet": "Wet",
+      "burn_rate": "Calorie Burn Rate",
+      "time_starve": "Time to Starve"
+    },
+    "mc": {
+      "title": "Nether Portal Linker",
+      "dir": "Direction",
+      "ow_nether": "Overworld → Nether",
+      "nether_ow": "Nether → Overworld",
+      "ow_x": "Overworld X",
+      "net_x": "Nether X",
+      "ow_z": "Overworld Z",
+      "net_z": "Nether Z",
+      "ext_portal": "Existing Nether Portal Position (Optional)",
+      "x_coord": "X Coord",
+      "z_coord": "Z Coord",
+      "ext_desc": "Used to check if portals will link (within 16 blocks).",
+      "res_net": "Nether Coordinates",
+      "res_ow": "Overworld Coordinates",
+      "warn_link": "⚠ Will link to existing portal ({{dist}} blocks away)",
+      "safe_link": "✓ Safe: Will not interfere ({{dist}} blocks away)"
+    },
+    "palworld": {
+      "title": "Egg Incubation Calc",
+      "egg_size": "Egg Size",
+      "egg_norm": "Normal (1h base)",
+      "egg_large": "Large (2h base)",
+      "egg_huge": "Huge (4h base)",
+      "server_speed": "Server Egg Incubation Speed Multiplier",
+      "incub_bonus": "Incubator Speed Bonus % (0-200)",
+      "comf_temp": "Comfortable Temp (2x)",
+      "flame_emp": "Flame Emperor (+100%)",
+      "real_time": "Real Incubation Time",
+      "hours": "Hours"
+    },
+    "valheim": {
+      "title": "Comfort Base Builder",
+      "shelter": "Shelter (+2)",
+      "fire": "Campfire (+1)",
+      "bed": "Bed (+1)",
+      "deer": "Deer Rug (+1)",
+      "wolf": "Wolf Rug (+1)",
+      "lox": "Lox Rug (+1)",
+      "banner": "Banner (+1)",
+      "chair": "Chair (+1)",
+      "table": "Table (+1)",
+      "bench": "Bench (+1)",
+      "hot_tub": "Hot Tub (+2)",
+      "crystal": "Crystal Throne (+2)",
+      "maypole": "Maypole (+1)",
+      "yule": "Yule Tree (+1)",
+      "level": "Comfort Level",
+      "rested_dur": "Rested Buff Duration",
+      "mins": "Minutes",
+      "rested_desc": "Rested buff grants ",
+      "rested_strong": "+50% HP regen, +100% Stamina regen, and +50% XP."
+    },
+    "v_rising": {
+      "title": "Castle Decay Calc",
+      "heart": "Castle Heart Level",
+      "level": "Level",
+      "day": "day",
+      "essence": "Current Blood Essence",
+      "quality": "Blood Quality % (0–100)",
+      "desc": "Higher blood quality reduces essence consumption by up to 20%.",
+      "time_decay": "Time Until Decay",
+      "eff_time": "Effective Time (With Blood Quality)",
+      "reduced": "Reduced consumption"
+    },
+    "enshrouded": {
+      "title": "Shroud Time Calc",
+      "altar": "Flame Altar Level",
+      "level": "Level",
+      "mins": "mins",
+      "flask": "Active Flask",
+      "none": "None",
+      "surv": "Survival Flask (+2)",
+      "great": "Greater Survival (+4)",
+      "inner": "Inner Fires Skill (+2 mins)",
+      "safe": "Total Safe Time"
+    },
+    "stardew": {
+      "title": "Crop Profit Optimizer",
+      "parsnip": "Parsnip",
+      "strawberry": "Strawberry",
+      "blueberry": "Blueberry",
+      "cranberry": "Cranberry",
+      "ancient": "Ancient Fruit",
+      "crop": "Crop",
+      "planted": "Planted",
+      "days_left": "Days Left",
+      "fert": "Fertilizer",
+      "none": "None",
+      "basic": "Basic",
+      "quality": "Quality",
+      "deluxe": "Deluxe (+25% SPD)",
+      "prof": "Profession",
+      "tiller": "Tiller (+10%)",
+      "artisan": "Artisan (+40%)",
+      "harvests": "Total Harvests",
+      "net": "Net Profit",
+      "avg_sell": "Avg sell price:"
+    },
+    "factorio": {
+      "title": "Assembly Line Optimizer",
+      "iron_gear": "Iron Gear Wheel",
+      "circuit": "Electronic Circuit",
+      "copper_cable": "Copper Cable",
+      "adv_circuit": "Advanced Circuit",
+      "recipe": "Recipe",
+      "target": "Target Output (items/sec)",
+      "tier": "Assembler Tier",
+      "modules": "Prod Modules",
+      "assemblers": "Assemblers Needed",
+      "inputs": "Input Materials Req/Sec"
+    },
+    "satisfactory": {
+      "title": "Coal Power Planner",
+      "gen": "Generators",
+      "overclock": "Overclock %",
+      "node": "Coal Node Purity (Mk1 Miner)",
+      "impure": "Impure (30/min)",
+      "normal": "Normal (60/min)",
+      "pure": "Pure (120/min)",
+      "power": "Total Power Output",
+      "extractors": "Water Extractors",
+      "miners": "Mk1 Miners",
+      "coal": "Coal/min"
+    },
+    "se": {
+      "title": "Atmospheric Lift",
+      "earth": "EarthLike",
+      "mars": "Mars",
+      "moon": "Moon",
+      "atmo": "Atmospheric",
+      "hydro": "Hydrogen",
+      "ion": "Ion",
+      "warn_atmo": "Atmospheric thrusters do not work in a vacuum.",
+      "warn_ion": "Ion thrusters lose efficiency in atmosphere.",
+      "mass": "Total Mass (kg)",
+      "grid": "Grid Size",
+      "large": "Large",
+      "small": "Small",
+      "thruster": "Thruster",
+      "t_atmo": "Atmo",
+      "t_hydro": "Hydrogen",
+      "t_ion": "Ion",
+      "planet": "Planet"
+    },
+    "oni": {
+      "title": "SPOM Oxygen Calc",
+      "water": "Water (g/s)",
+      "trait": "Duplicant Trait",
+      "normal": "Normal (100 g/s)",
+      "mouth": "Mouth Breather (150 g/s)",
+      "lungs": "Diver's Lungs (75 g/s)",
+      "o2": "O₂ Output",
+      "h2": "H₂ Output",
+      "dupes": "Dupes Supported",
+      "elec_need": "{{count}} Electrolyzers needed",
+      "power": "Gross Power"
+    },
+    "dsp": {
+      "title": "Matrix Lab Planner",
+      "blue": "Blue",
+      "red": "Red",
+      "yellow": "Yellow",
+      "purple": "Purple",
+      "green": "Green",
+      "white": "White",
+      "matrix": "Matrix Type",
+      "target": "Target Science/s",
+      "prolif": "Proliferator Level (0-3)",
+      "labs": "Active Labs Needed",
+      "extra": "Extra products boost: +{{pct}}%"
+    },
+    "sens": {
+      "title": "Sensitivity Converter",
+      "from": "Convert From",
+      "to": "Convert To",
+      "current": "Current Sensitivity",
+      "dpi": "Mouse DPI",
+      "converted": "Converted Sensitivity",
+      "cm": "cm / 360°",
+      "cm_sub": "Physical distance for a full turn"
+    },
+    "lethal": {
+      "title": "Quota Predictor",
+      "target": "Target Quota",
+      "current": "Current Scrap",
+      "days": "Days Left",
+      "avg": "Avg Scrap/Day",
+      "overtime": "Overtime Days (after deadline)",
+      "projected": "Projected Total",
+      "secured": "✅ Quota secured (+${{diff}} surplus)",
+      "fired": "💀 Fired! Short by ${{diff}}"
+    }
+  },
+  "config_generator": {
+    "seo": {
+      "title": "Server Config Generator (INI, JSON, XML) | Spawnly Free Tools",
+      "description": "Free visual UI generator to create perfectly formatted server.properties, server.cfg, PalWorldSettings.ini, and JSON files for over 30 games.",
+      "schema_name": "Spawnly Server Config Generator",
+      "schema_desc": "A free visual UI generator to create perfectly formatted server.properties, server.cfg, PalWorldSettings.ini, and JSON configuration files for 30+ game servers."
+    },
+    "hero": {
+      "title": "Server Config Generator",
+      "subtitle": "Stop breaking your server with syntax errors. Select a game and let us generate perfectly formatted code."
+    },
+    "editor": {
+      "title": "Visual Settings",
+      "format": "{{format}} Format"
+    },
+    "preview": {
+      "copy": "Copy",
+      "copied": "Copied!",
+      "download": "Download",
+      "upsell_title": "Hate editing text files?",
+      "upsell_desc": "Spawnly's control panel features a built-in visual editor.",
+      "host_btn": "Host {{game}}"
+    },
+    "seo_section": {
+      "title": "How to use the Config Generator",
+      "desc": "Formatting errors are the #1 reason game servers crash on startup. Whether you're trying to format a tricky <code>PalWorldSettings.ini</code> array, ensuring strict JSON syntax for <code>server-settings.json</code> in Factorio, or just generating a basic <code>server.properties</code> file for Minecraft, our tool guarantees correct syntax. Simply select your game, adjust the toggles, and click download. Upload the file to your server's root directory and restart your game."
+    },
+    "games": {
+      "minecraft": "Minecraft",
+      "terraria": "Terraria",
+      "project_zomboid": "Project Zomboid",
+      "valheim": "Valheim",
+      "ark_se": "ARK: Survival Evolved",
+      "ark_sa": "ARK: Survival Ascended",
+      "conan_exiles": "Conan Exiles",
+      "enshrouded": "Enshrouded",
+      "dst": "Don't Starve Together",
+      "palworld": "Palworld",
+      "rust": "Rust",
+      "cs2": "Counter-Strike 2",
+      "gmod": "Garry's Mod",
+      "tf2": "Team Fortress 2",
+      "l4d2": "Left 4 Dead 2",
+      "squad": "Squad",
+      "insurgency_sandstorm": "Insurgency",
+      "factorio": "Factorio",
+      "v_rising": "V Rising",
+      "seven_days_to_die": "7 Days to Die"
+    }
+  },
+  "ram_calculator": {
+    "seo": {
+      "title": "Game Server RAM Calculator (Minecraft, Palworld, Rust) | Spawnly",
+      "desc": "Calculate exactly how much RAM your dedicated server needs based on game engine, active players, and modpack sizes. Supports over 30 games.",
+      "og_title": "Game Server RAM Calculator | Spawnly",
+      "og_desc": "Calculate exactly how much RAM your game server needs for Minecraft, Rust, Palworld, and 30+ more.",
+      "schema_name": "Spawnly Server RAM Calculator",
+      "schema_desc": "Calculate exactly how much RAM your game server needs based on player slots and modpacks for 30+ games including Minecraft, Palworld, and Rust."
+    },
+    "hero": {
+      "title": "Server RAM Calculator",
+      "subtitle": "Stop guessing. Select from our 30+ supported games to find your perfect server size instantly."
+    },
+    "inputs": {
+      "select_game": "Select Game",
+      "player_count": "Player Count",
+      "player": "Player",
+      "players": "Players",
+      "scope_mods": "Server Scope / Mods"
+    },
+    "results": {
+      "recommendation": "Recommendation",
+      "need_at_least": "You need a server with at least",
+      "breakdown": "Usage Breakdown",
+      "base_os": "Engine / Base OS:",
+      "player_overhead": "Player Overhead:",
+      "mods_scope": "Mods / Scope:",
+      "est_raw": "Estimated Raw Usage:",
+      "view_plans": "View {{ram}}GB Plans"
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "q1": "Why does Palworld need so much RAM?",
+      "a1": "Palworld is built on Unreal Engine 5 and heavily utilizes memory for AI pathing and base rendering. It also currently suffers from memory leaks over time. We recommend a minimum of 8GB, though 12GB+ is safer for larger groups.",
+      "q2": "Do Minecraft mods use a lot of memory?",
+      "a2": "Yes. While Vanilla Minecraft runs fine on 2-3GB of RAM for small groups, large modpacks (like All The Mods or Better MC) load thousands of new assets and scripts into the memory on startup, requiring 8GB+ just to boot.",
+      "q3": "What happens if I run out of RAM?",
+      "a3": "If your server hits its RAM limit, the operating system will trigger an OOM (Out of Memory) kill event. Your server will instantly crash without saving, and players will be disconnected.",
+      "q4": "Can I upgrade my RAM later?",
+      "a4": "Absolutely. Spawnly allows you to scale your server's RAM up or down instantly from the control panel. Your files and IP address remain exactly the same."
+    },
+    "mods": {
+      "vanilla": "Vanilla / Spigot",
+      "light_mods": "Light Mods (1-30)",
+      "heavy_mods": "Heavy Mods (30-100)",
+      "massive_mods": "Massive Modpacks (200+)",
+      "std_rates": "Standard Rates",
+      "high_spawn": "High Spawn Rates / Late Game",
+      "small_map": "Small Map (3k)",
+      "med_map": "Medium Map (4k)",
+      "large_map": "Large Map (5k+)",
+      "island": "The Island (Base)",
+      "heavy_gen2": "Heavy Mods / Gen2",
+      "std_server": "Standard Server",
+      "heavy_modded": "Heavy Modded",
+      "vanilla_map": "Vanilla map",
+      "valheim_plus": "Valheim Plus / Heavy Mods",
+      "overhauls": "Darkness Falls / Overhauls",
+      "aoc_mods": "Age of Calamitous / Mods",
+      "vanilla_chernarus": "Vanilla Chernarus",
+      "expansion_mods": "Expansion / Heavy Mods",
+      "early_factory": "Early/Mid Game Factory",
+      "mega_factory": "Mega Factory (Late Game)",
+      "std_factory": "Standard Factory",
+      "space_exp": "Space Exploration / Krastorio",
+      "std_solar": "Standard Solar System",
+      "heavy_grids": "Heavy Grids / Mods",
+      "heavy_vehicles": "Heavy Map Mods / Vehicles",
+      "std_match": "Standard Matchmaking",
+      "sandbox": "Sandbox",
+      "darkrp": "DarkRP / Heavy Addons",
+      "std_50v50": "Standard 50v50",
+      "vanilla_light": "Vanilla / Light Scenarios",
+      "heavy_ai": "Antistasi / ALiVE / Heavy AI",
+      "vanilla_small": "Vanilla / Small Map",
+      "calamity": "Large Map / Calamity Mod",
+      "caves": "Standard Caves + Overworld",
+      "std_farm": "Standard Farm"
+    }
+  },
+  "status_checker": {
+    "seo": {
+      "title": "Server Status & Port Checker | Spawnly Free Tools",
+      "desc": "Free tool to check if your game server is online. Supports Minecraft, Palworld, Rust, ARK, and 25+ more games.",
+      "schema_name": "Spawnly Server Status & Port Checker",
+      "schema_desc": "A free diagnostic tool to test game server uptime and verify open ports."
+    },
+    "hero": {
+      "title": "Network Diagnostic Tools",
+      "subtitle": "Instantly ping your game server to check uptime, or verify if your router's port forwarding rules are active."
+    },
+    "sidebar": {
+      "step1_status": "1. Select Game to Ping",
+      "step1_port": "1. Select Game (Auto-fills Port)",
+      "search_placeholder": "Search 30+ games...",
+      "no_games_found": "No games found matching \"{{query}}\""
+    },
+    "tabs": {
+      "tab_status": "Game Server Status",
+      "tab_port": "Port Forwarding Tester"
+    },
+    "form": {
+      "context_status_title": "Check {{game}} Server",
+      "context_port_title": "Test {{game}} Port",
+      "context_status_desc": "Enter the IP address of the server to ping it.",
+      "context_port_desc": "Enter your public IP to see if the port is open.",
+      "ip_label": "IP Address / Domain",
+      "ip_placeholder": "e.g., 192.168.1.1 or play.server.com",
+      "port_label": "Port",
+      "btn_loading": "Running Diagnostics...",
+      "btn_submit": "Execute Network Test"
+    },
+    "results": {
+      "port_open": "Port {{port}} is Open!",
+      "port_closed": "Port {{port}} is Closed",
+      "server_online": "Server is Online!",
+      "server_offline": "Server is Offline",
+      "hostname": "Hostname",
+      "players": "Players"
+    },
+    "errors": {
+      "connection_failed": "Failed to connect to the testing server."
+    },
+    "upsell": {
+      "title": "Network issues driving you crazy?",
+      "desc": "Skip the router configurations. Get a pre-configured <strong>{{game}}</strong> server running on DDoS-protected enterprise hardware instantly.",
+      "btn": "View {{game}} Hosting"
+    },
+    "seo_text": {
+      "q1_title": "Why is my game server port closed?",
+      "q1_desc": "If our Port Forwarding Tester says your port is closed, outside players will not be able to join your server. This usually happens for three reasons: your ISP uses CGNAT (meaning you don't have a true public IP), your router's port forwarding rules are set up incorrectly, or Windows Defender Firewall is blocking the application.",
+      "q2_title": "How does the Server Status Checker work?",
+      "q2_desc": "Our tool sends a direct network query using the specific protocol for your selected game. We use the official query protocols (like the Source Engine Query or standard Minecraft Ping) to reach out to the IP and Port provided. If the server responds, we display the active map, hostname, and player count."
+    },
+    "games": {
+      "minecraft": "Minecraft",
+      "satisfactory": "Satisfactory",
+      "rust": "Rust",
+      "palworld": "Palworld",
+      "valheim": "Valheim",
+      "ark_sa": "ARK: Survival Ascended",
+      "ark_se": "ARK: Survival Evolved",
+      "factorio": "Factorio",
+      "project_zomboid": "Project Zomboid",
+      "gmod": "Garry's Mod",
+      "cs2": "Counter-Strike 2",
+      "arma3": "Arma 3",
+      "arma_reforger": "Arma Reforger",
+      "space_engineers": "Space Engineers",
+      "seven_days_to_die": "7 Days to Die",
+      "conan_exiles": "Conan Exiles",
+      "dayz": "DayZ",
+      "enshrouded": "Enshrouded",
+      "sons_of_the_forest": "Sons of the Forest",
+      "v_rising": "V Rising",
+      "core_keeper": "Core Keeper",
+      "mindustry": "Mindustry",
+      "squad": "Squad",
+      "insurgency_sandstorm": "Insurgency: Sandstorm",
+      "unturned": "Unturned",
+      "tf2": "Team Fortress 2",
+      "l4d2": "Left 4 Dead 2",
+      "dst": "Don't Starve Together",
+      "terraria": "Terraria",
+      "stardew_valley": "Stardew Valley"
+    }
+  }
+}

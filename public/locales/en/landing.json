@@ -18,7 +18,7 @@
     "cpu_load": "CPU Load",
     "memory": "Memory (RAM)"
   },
-  "carousel": {
+"carousel": {
     "title": "Library",
     "subtitle": "Select a title to deploy your dedicated server.",
     "drag_instruction": "Drag left or right to explore",
