@@ -578,24 +578,11 @@ async function provisionSteamServer(serverRow, version, ssh_keys, res) {
     sbox_maxballoons 10
     EOF`;
         } else if (gameType === 'space_engineers') {
-             gameSpecificSetup = `  - mkdir -p /usr/share/wine/mono
-  - wget -qO /tmp/wine-mono.tar.xz https://dl.winehq.org/wine/wine-mono/6.1.1/wine-mono-6.1.1-x86.tar.xz
-  - tar -xf /tmp/wine-mono.tar.xz -C /usr/share/wine/mono/
-  - mkdir -p /home/spawnly/.wine/drive_c/users/spawnly/AppData/Roaming/SpaceEngineersDedicated
-  - |
-    cat << 'EOF' > /home/spawnly/.wine/drive_c/users/spawnly/AppData/Roaming/SpaceEngineersDedicated/SpaceEngineers-Dedicated.cfg
-    <?xml version="1.0" encoding="utf-8"?>
-    <MyConfigDedicated xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-      <SessionSettings>
-        <GameMode>Survival</GameMode>
-        <InventorySizeMultiplier>10</InventorySizeMultiplier>
-        <BlocksInventorySizeMultiplier>1</BlocksInventorySizeMultiplier>
-        <MaxPlayers>16</MaxPlayers>
-      </SessionSettings>
-      <ServerName>Spawnly Dedicated Space Engineers</ServerName>
-      <WorldName>SpawnlyWorld</WorldName>
-    </MyConfigDedicated>
-    EOF`;
+             gameSpecificSetup = `  - su - spawnly -c "wineboot -u"
+  - wget -qO /tmp/wine-mono.msi https://dl.winehq.org/wine/wine-mono/6.1.1/wine-mono-6.1.1-x86.msi
+  - su - spawnly -c "xvfb-run -a wine msiexec /i /tmp/wine-mono.msi /qn"
+  - wget -qO /tmp/vc_redist.x64.exe https://aka.ms/vs/16/release/vc_redist.x64.exe
+  - su - spawnly -c "xvfb-run -a wine /tmp/vc_redist.x64.exe /q /norestart"`;
         } else if (gameType === 'tf2') {
             gameSpecificSetup = `  - mkdir -p /home/spawnly/server/tf/cfg
   - |
