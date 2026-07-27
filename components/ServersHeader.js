@@ -10,7 +10,8 @@ import {
   MoonIcon, 
   Cog6ToothIcon, 
   ChatBubbleLeftRightIcon, 
-  BanknotesIcon 
+  BanknotesIcon,
+  BookOpenIcon
 } from '@heroicons/react/24/outline';
 import CreditBalance from "./CreditBalance";
 import { useDarkMode } from '../pages/_app';
@@ -26,12 +27,11 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
     { name: t('nav.dashboard'), href: '/dashboard', icon: ServerIcon },
     { name: t('nav.pools', 'Pools'), href: '/pools', icon: BanknotesIcon },
     { name: t('nav.billing'), href: '/credits', icon: CreditCardIcon },
+    { name: t('nav.knowledge_base', 'Knowledge Base'), href: '/knowledge-base?source=dashboard', icon: BookOpenIcon },
     { name: t('nav.support'), href: '/support', icon: ChatBubbleLeftRightIcon },
     { name: t('nav.settings', 'Settings'), href: '/settings', icon: Cog6ToothIcon },
   ];
 
-  // --- CHANGED: Logic to determine display name ---
-  // Try user_metadata.username first, fallback to email prefix
   const displayName = user?.user_metadata?.username || user?.email?.split('@')[0] || '';
   const displayInitial = displayName ? displayName.charAt(0).toUpperCase() : '?';
 
@@ -57,20 +57,24 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
             </Link>
 
             <nav className="hidden md:flex items-center gap-1">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    isActive(link.href)
-                      ? 'bg-gray-100 dark:bg-slate-800 text-indigo-600'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-slate-800/50'
-                  }`}
-                >
-                  <link.icon className={`w-4 h-4 ${isActive(link.href) ? 'text-indigo-600' : 'text-gray-400'}`} />
-                  {link.name}
-                </Link>
-              ))}
+              {navLinks.map((link) => {
+                // Determine active state strictly off the pathname, ignoring the query params
+                const linkPath = link.href.split('?')[0];
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      isActive(linkPath)
+                        ? 'bg-gray-100 dark:bg-slate-800 text-indigo-600'
+                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <link.icon className={`w-4 h-4 ${isActive(linkPath) ? 'text-indigo-600' : 'text-gray-400'}`} />
+                    {link.name}
+                  </Link>
+                );
+              })}
             </nav>
           </div>
 
@@ -87,7 +91,6 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
             <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 hidden sm:block"></div>
             <div className="flex items-center gap-3 pl-2">
               <div className="hidden sm:flex flex-col items-end">
-                {/* CHANGED: Use displayName instead of email split */}
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-none">
                   {displayName}
                 </span>
@@ -98,7 +101,6 @@ export default function ServersHeader({ user, credits, isLoading, onLogout }) {
                   {t('nav.logout')}
                 </button>
               </div>
-              {/* CHANGED: Use displayInitial */}
               <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-white dark:ring-slate-800 shadow-sm">
                 {displayInitial}
               </div>

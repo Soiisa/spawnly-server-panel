@@ -37,6 +37,12 @@ export default function Navbar() {
           <Link href="/pricing" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-white transition-colors">
             {t('nav.pricing', 'Pricing')}
           </Link>
+          <Link href="/tools" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-white transition-colors">
+            {t('nav.tools', 'Tools')}
+          </Link>
+          <Link href="/knowledge-base" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-white transition-colors">
+            {t('nav.knowledge_base', 'Knowledge Base')}
+          </Link>
           <Link href="/support" className="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-white transition-colors">
             {t('nav.support', 'Support')}
           </Link>
@@ -92,9 +98,16 @@ export default function Navbar() {
           <Link href="/pricing" className="block text-base font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors">
             {t('nav.pricing', 'Pricing')}
           </Link>
+          <Link href="/tools" className="block text-base font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors">
+            {t('nav.tools', 'Tools')}
+          </Link>
+          <Link href="/knowledge-base" className="block text-base font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors">
+            {t('nav.knowledge_base', 'Knowledge Base')}
+          </Link>
           <Link href="/support" className="block text-base font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors">
             {t('nav.support', 'Support')}
           </Link>
+          
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
             <Link href="/login" className="block text-base font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors">
               {t('nav.login', 'Sign In')}
