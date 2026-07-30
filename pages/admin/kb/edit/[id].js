@@ -10,7 +10,7 @@ import FontFamily from '@tiptap/extension-font-family'; // <-- Added
 import Underline from '@tiptap/extension-underline'; // <-- Added to keep Word/Docs underlines
 import { Extension } from '@tiptap/core'; // <-- Added for custom FontSize
 import { useCallback, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../../../../lib/supabaseClient';
 
 // --- CUSTOM EXTENSIONS TO RETAIN PASTE FORMATTING ---
 
