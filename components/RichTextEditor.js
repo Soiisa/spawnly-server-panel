@@ -1,13 +1,51 @@
+// components/RichTextEditor.js
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import TextAlign from '@tiptap/extension-text-align';
-import Youtube from '@tiptap/extension-youtube'; // <-- Imported YouTube Extension
-import { TextStyleKit } from '@tiptap/extension-text-style';
+import Youtube from '@tiptap/extension-youtube';
+import TextStyle from '@tiptap/extension-text-style'; // <-- Fixed import
+import FontFamily from '@tiptap/extension-font-family'; // <-- Added
+import Underline from '@tiptap/extension-underline'; // <-- Added to keep Word/Docs underlines
+import { Extension } from '@tiptap/core'; // <-- Added for custom FontSize
 import { useCallback, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
+// --- CUSTOM EXTENSIONS TO RETAIN PASTE FORMATTING ---
+
+// 1. Custom Font Size Extension
+const FontSize = Extension.create({
+  name: 'fontSize',
+  addOptions() {
+    return { types: ['textStyle'] };
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: element => element.style.fontSize?.replace(/['"]+/g, ''),
+            renderHTML: attributes => {
+              if (!attributes.fontSize) return {};
+              return { style: `font-size: ${attributes.fontSize}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+  addCommands() {
+    return {
+      setFontSize: fontSize => ({ chain }) => chain().setMark('textStyle', { fontSize }).run(),
+      unsetFontSize: () => ({ chain }) => chain().setMark('textStyle', { fontSize: null }).run(),
+    };
+  },
+});
+
+// 2. Resizable Image (Your existing code)
 const ResizableImage = Image.extend({
   addAttributes() {
     return {
@@ -39,14 +77,16 @@ export default function RichTextEditor({ content, onChange }) {
   const editor = useEditor({
     extensions: [
       StarterKit,
-      TextStyleKit,
+      TextStyle,
+      FontFamily, // Fixes missing font families on paste
+      FontSize,   // Fixes missing font sizes on paste
+      Underline,  // Fixes missing underlines on paste
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       ResizableImage,
       Link.configure({ 
         openOnClick: false,
         HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer', class: 'text-indigo-400 underline hover:text-indigo-300 transition-colors' }
       }),
-      // --- YOUTUBE CONFIGURATION ---
       Youtube.configure({
         controls: true,
         nocookie: true,
@@ -155,6 +195,7 @@ export default function RichTextEditor({ content, onChange }) {
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={`px-2 py-1 text-sm font-bold rounded transition-colors ${editor.isActive('bold') ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}>B</button>
           <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} className={`px-2 py-1 text-sm italic font-serif rounded transition-colors ${editor.isActive('italic') ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}>I</button>
+          <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} className={`px-2 py-1 text-sm underline rounded transition-colors ${editor.isActive('underline') ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}>U</button>
           <button type="button" onClick={() => editor.chain().focus().toggleStrike().run()} className={`px-2 py-1 text-sm line-through rounded transition-colors ${editor.isActive('strike') ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}>S</button>
           <button type="button" onClick={() => editor.chain().focus().unsetAllMarks().run()} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors ml-1" title="Clear Formatting"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg></button>
         </div>
@@ -195,7 +236,7 @@ export default function RichTextEditor({ content, onChange }) {
           </div>
         )}
         
-        {/* NEW: Insert Video Button */}
+        {/* Insert Video Button */}
         <button type="button" onClick={setVideo} className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-md text-gray-300 hover:bg-gray-700 hover:text-white transition-colors border border-transparent hover:border-gray-600" title="Embed YouTube Video">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
           <span className="hidden sm:inline">Video</span>
