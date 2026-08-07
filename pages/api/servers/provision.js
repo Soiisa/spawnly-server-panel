@@ -1022,6 +1022,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
     const escapedRconPassword = escapeForSingleQuotes(rconPassword);
     const escapedVersion = escapeForSingleQuotes(effectiveVersion);
     const escapedRestoreKey = escapeForSingleQuotes(serverRow.pending_backup_restore || '');
+    const escapedCfApiKey = escapeForSingleQuotes(process.env.CURSEFORGE_API_KEY || '');
     const forceInstall = serverRow.force_software_install || false;
 
 const mcSyncSh = `#!/bin/bash
@@ -1088,6 +1089,7 @@ SOFTWARE='${software}'
 DOWNLOAD_URL='${escapedDl}'
 JAVA_BIN='${javaBin}'
 MC_VERSION='${escapedVersion}'
+CURSEFORGE_API_KEY='${escapedCfApiKey}'
 AIKAR_FLAGS="-XX:+ExitOnOutOfMemoryError -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Djava.awt.headless=true"
 
 mkdir -p /opt/minecraft && cd /opt/minecraft
@@ -1215,6 +1217,40 @@ if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FO
                 elif [[ "\$LOADER_ID" == neoforge-* ]]; then DETECTED_LOADER="neoforge"; LOADER_VER="\${LOADER_ID#neoforge-}";
                 elif [[ "\$LOADER_ID" == fabric-* ]]; then DETECTED_LOADER="fabric"; LOADER_VER="\${LOADER_ID#fabric-}"; fi
 
+                if [ -n "\$CURSEFORGE_API_KEY" ]; then
+                    echo "[Startup] No server pack — resolving CurseForge mod files from manifest.json..."
+                    mkdir -p mods
+                    jq -c '[.files[]?.fileID // empty] | unique' manifest.json > /tmp/cf_file_ids.json 2>/dev/null || echo "[]" > /tmp/cf_file_ids.json
+                    CF_TOTAL=\$(jq 'length' /tmp/cf_file_ids.json 2>/dev/null || echo 0)
+                    rm -f /tmp/cf_mods.jsonl
+                    CF_IDX=0
+                    while [ "\$CF_IDX" -lt "\$CF_TOTAL" ]; do
+                        CHUNK=\$(jq -c ".[\$CF_IDX:\$((CF_IDX+50))]" /tmp/cf_file_ids.json 2>/dev/null || echo "[]")
+                        curl -s -X POST "https://api.curseforge.com/v1/mods/files" \\
+                            -H "Accept: application/json" -H "Content-Type: application/json" \\
+                            -H "x-api-key: \$CURSEFORGE_API_KEY" \\
+                            -d "{\\"fileIds\\": \$CHUNK}" 2>/dev/null \\
+                            | jq -c '.data[]? | {fileName, downloadUrl, id}' 2>/dev/null >> /tmp/cf_mods.jsonl || true
+                        CF_IDX=\$((CF_IDX+50))
+                    done
+                    if [ -s /tmp/cf_mods.jsonl ]; then
+                        cat /tmp/cf_mods.jsonl | xargs -d '\\n' -P 10 -I {} bash -c '
+                            LINE="\$1"
+                            DL_URL=\$(printf "%s" "\$LINE" | jq -r ".downloadUrl" 2>/dev/null)
+                            F_NAME=\$(printf "%s" "\$LINE" | jq -r ".fileName" 2>/dev/null)
+                            F_ID=\$(printf "%s" "\$LINE" | jq -r ".id" 2>/dev/null)
+                            [ -z "\$F_NAME" ] || [ "\$F_NAME" = "null" ] && exit 0
+                            if [ -z "\$DL_URL" ] || [ "\$DL_URL" = "null" ]; then
+                                DL_URL="https://edge.forgecdn.net/files/\${F_ID:0:4}/\${F_ID:4}/\$F_NAME"
+                            fi
+                            wget -q -O "mods/\$F_NAME" "\$DL_URL" || echo "[Startup] WARNING: failed to download mod \$F_NAME (fileId \$F_ID)"
+                        ' _ {} || true
+                    fi
+                    echo "[Startup] CurseForge mod resolution finished (\$CF_TOTAL files)."
+                else
+                    echo "[Startup] WARNING: CURSEFORGE_API_KEY not set — skipping mod download."
+                fi
+
             elif [ -f "modrinth.index.json" ]; then
                 MANIFEST_MC=\$(jq -r '.dependencies.minecraft // empty' modrinth.index.json || true)
                 if [ -n "\$MANIFEST_MC" ]; then DETECTED_MC_VER="\$MANIFEST_MC"; fi
@@ -1233,14 +1269,15 @@ if [ ! -f "run.sh" ] || [ "${serverRow.needsFileDeletion}" = "true" ] || [ "\$FO
                 echo "[Startup] Downloading Modrinth Mods concurrently..."
                 jq -c '.files[] | select(.env == null or .env.server != "unsupported")' modrinth.index.json > /tmp/mr_mods.json || true
                 if [ -s /tmp/mr_mods.json ]; then
-                    cat /tmp/mr_mods.json | xargs -n 1 -P 10 -I {} bash -c '
-                        DL_URL=\$(echo "{}" | jq -r ".downloads[0]")
-                        FILE_PATH=\$(echo "{}" | jq -r ".path")
+                    cat /tmp/mr_mods.json | xargs -d '\\n' -P 10 -I {} bash -c '
+                        LINE="\$1"
+                        DL_URL=\$(printf "%s" "\$LINE" | jq -r ".downloads[0]" 2>/dev/null)
+                        FILE_PATH=\$(printf "%s" "\$LINE" | jq -r ".path" 2>/dev/null)
                         if [ -n "\$DL_URL" ] && [ "\$DL_URL" != "null" ]; then
                             mkdir -p "\$(dirname "\$FILE_PATH")"
                             wget -q -O "\$FILE_PATH" "\$DL_URL" || true
                         fi
-                    ' || true
+                    ' _ {} || true
                     echo "[Startup] Modrinth downloads finished."
                 fi
             fi

@@ -1,3 +1,4 @@
+// pages/admin/kb/edit/[id].js
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../../../../lib/supabaseClient';
@@ -116,23 +117,13 @@ export default function EditArticle() {
   }
 
   return (
-    // FULL SCREEN LAYOUT
     <div className="flex flex-col h-screen overflow-hidden bg-[#05070a]">
       
-      {/* WORD-LIKE TOP NAVIGATION BAR */}
       <header className="h-16 shrink-0 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 z-20">
-        
-        {/* Left: Back Button & Document Title */}
         <div className="flex items-center gap-4 flex-1">
-          <Link 
-            href="/admin/kb" 
-            className="p-2 rounded-full text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-            title="Back to Dashboard"
-          >
+          <Link href="/admin/kb" className="p-2 rounded-full text-gray-400 hover:text-white hover:bg-gray-800 transition-colors" title="Back to Dashboard">
             <ArrowLeftIcon className="w-5 h-5" />
           </Link>
-          
-          {/* Seamless Title Input */}
           <input
             type="text"
             value={formData.title}
@@ -142,9 +133,7 @@ export default function EditArticle() {
           />
         </div>
 
-        {/* Right: Status & Actions */}
         <div className="flex items-center gap-3 shrink-0">
-          
           <div className="hidden md:flex flex-col items-end mr-4">
             <span className={`text-xs font-semibold uppercase tracking-wider ${formData.is_published ? 'text-green-500' : 'text-yellow-500'}`}>
               {formData.is_published ? 'Live (Published)' : 'Draft Mode'}
@@ -156,29 +145,20 @@ export default function EditArticle() {
             )}
           </div>
 
-          <button
-            onClick={() => setShowSettings(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 hover:text-white rounded-md transition-colors border border-gray-700"
-          >
+          <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 hover:text-white rounded-md transition-colors border border-gray-700">
             <Cog8ToothIcon className="w-4 h-4" />
             <span className="hidden sm:inline">Page Setup</span>
           </button>
 
           <div className="h-6 w-px bg-gray-700 mx-1"></div>
 
-          <button
-            onClick={() => handleUpdate(formData.is_published)}
-            disabled={loading || !formData.title}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-md shadow-sm transition-colors"
-          >
+          <button onClick={() => handleUpdate(formData.is_published)} disabled={loading || !formData.title} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-md shadow-sm transition-colors">
             <CloudArrowUpIcon className="w-4 h-4" />
             {loading ? 'Saving...' : 'Save'}
           </button>
         </div>
       </header>
 
-      {/* DOCUMENT EDITOR CANVAS */}
-      {/* We pass the remaining height down to the RichTextEditor */}
       <div className="flex-grow overflow-hidden relative">
         <RichTextEditor 
           content={formData.content} 
@@ -213,11 +193,7 @@ export default function EditArticle() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Category / Game</label>
-                  <select 
-                    value={formData.game}
-                    onChange={(e) => setFormData({...formData, game: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white focus:border-indigo-500"
-                  >
+                  <select value={formData.game} onChange={(e) => setFormData({...formData, game: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white focus:border-indigo-500">
                     <option value="general">General (Website/Panel)</option>
                     {games.map(game => (
                       <option key={game.id} value={game.id}>{game.name}</option>
@@ -226,11 +202,7 @@ export default function EditArticle() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Language</label>
-                  <select 
-                    value={formData.language}
-                    onChange={(e) => setFormData({...formData, language: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white focus:border-indigo-500"
-                  >
+                  <select value={formData.language} onChange={(e) => setFormData({...formData, language: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white focus:border-indigo-500">
                     <option value="en">English (en)</option>
                     <option value="pt">Portuguese (pt)</option>
                     <option value="es">Spanish (es)</option>
@@ -242,13 +214,7 @@ export default function EditArticle() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Tags (Comma separated)</label>
-                <input 
-                  type="text" 
-                  value={formData.tags}
-                  onChange={(e) => setFormData({...formData, tags: e.target.value})}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                  placeholder="mods, plugins, setup"
-                />
+                <input type="text" value={formData.tags} onChange={(e) => setFormData({...formData, tags: e.target.value})} className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder="mods, plugins, setup" />
               </div>
             </div>
 
@@ -265,10 +231,7 @@ export default function EditArticle() {
                 {formData.is_published ? 'Unpublish (Switch to Draft)' : 'Publish to Live Site'}
               </button>
 
-              <button 
-                onClick={() => setShowSettings(false)}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-md shadow-sm transition-colors"
-              >
+              <button onClick={() => setShowSettings(false)} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-md shadow-sm transition-colors">
                 Done
               </button>
             </div>

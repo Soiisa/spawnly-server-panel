@@ -1,5 +1,6 @@
 import { getServerSideSitemapLegacy } from 'next-sitemap';
 import { supabase } from '../lib/supabaseClient';
+import { i18n } from '../next-i18next.config';
 
 export async function getServerSideProps(ctx) {
   // 1. Fetch all published articles
@@ -8,9 +9,10 @@ export async function getServerSideProps(ctx) {
     .select('slug, updated_at')
     .eq('is_published', true);
 
-  // 2. Define your locales (Match these to your next.config.js)
-  const locales = ['en', 'es', 'pt', 'de']; // Update with your actual languages
-  const defaultLocale = 'en';
+  // 2. Locales now come straight from next-i18next.config.js instead of a
+  // second hardcoded copy — that's what let this list drift and silently
+  // drop 'fr' from every knowledge-base sitemap entry and hreflang block.
+  const { locales, defaultLocale } = i18n;
 
   const fields = [];
 

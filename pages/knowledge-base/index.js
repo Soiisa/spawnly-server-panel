@@ -9,6 +9,7 @@ import { MagnifyingGlassIcon, BookOpenIcon, CommandLineIcon } from '@heroicons/r
 import Navbar from '../../components/Navbar';
 import ServersHeader from '../../components/ServersHeader';
 import ServersFooter from '../../components/ServersFooter';
+
 import { getGamesList } from '../../lib/gamesList';
 
 export default function KnowledgeBaseHub({ articles }) {
@@ -93,7 +94,12 @@ export default function KnowledgeBaseHub({ articles }) {
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-950 selection:bg-indigo-500/30"> 
-      
+      <SEO
+        title={t('kb_hub.seo.title', { defaultValue: 'Knowledge Base | Spawnly Help Center' })}
+        description={t('kb_hub.seo.description', { defaultValue: 'Guides and tutorials for setting up, configuring, and troubleshooting your Spawnly game server — mods, backups, world management, and more.' })}
+        path="/knowledge-base"
+      />
+
       {/* Dynamic Header */}
       {navType === 'loading' ? (
         <div className="h-16 md:h-20 w-full bg-slate-950 animate-pulse border-b border-slate-800"></div>

@@ -107,6 +107,11 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
+      <SEO
+        title={t('seo.title', { defaultValue: 'Pricing | Spawnly Game Server Hosting' })}
+        description={t('seo.description', { defaultValue: 'Pay-hourly or monthly game server hosting for Minecraft, Rust, ARK, Valheim, and more. Transparent pricing, no contracts, scale RAM anytime.' })}
+        path="/pricing"
+      />
       <Navbar />
 
       <main className="flex-grow w-full">
