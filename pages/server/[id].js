@@ -13,7 +13,6 @@ import {
   CalendarDaysIcon, TrashIcon, ShieldCheckIcon, BanknotesIcon, PlusIcon,
   ArrowsPointingOutIcon, ExclamationTriangleIcon, CalendarIcon
 } from '@heroicons/react/24/outline';
-
 // Components
 import ServerSoftwareTab from '../../components/ServerSoftwareTab';
 import ServerSoftwareTabSteam from '../../components/ServerSoftwareTabSteam';
@@ -33,12 +32,10 @@ import SchedulesTab from '../../components/SchedulesTab';
 import AccessTab from '../../components/AccessTab';
 import ServerTour from '../../components/ServerTour';
 import { getAvailableRamTiers, getMonthlyCreditCost, getHourlyCreditCost } from '../../lib/config';
-
 const getOnlinePlayersArray = (server) => {
   if (server?.game_status !== 'Running' || !server?.players_online) return [];
   return server.players_online.split(', ').filter(Boolean);
 };
-
 const showStatusNotification = (serverName, t) => {
   if (typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') {
@@ -48,7 +45,6 @@ const showStatusNotification = (serverName, t) => {
     }
   }
 };
-
 const getDisplayInfo = (server, t) => {
   if (!server) return { software: t ? t('software.unknown') : 'Unknown', version: t ? t('software.unknown') : 'Unknown' };
   let software = server.type || 'Vanilla';
@@ -65,19 +61,15 @@ const getDisplayInfo = (server, t) => {
   }
   return { software, version };
 };
-
 const ContributeModal = ({ isOpen, onClose, pool, userCredits, onContribute }) => {
   const { t } = useTranslation('server');
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
-
   if (!isOpen) return null;
-
   const handleSubmit = async () => {
     if (!amount || isNaN(amount) || amount <= 0) return;
     setLoading(true); await onContribute(Number(amount)); setLoading(false); setAmount('');
   };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-slate-700">
@@ -100,39 +92,48 @@ const ContributeModal = ({ isOpen, onClose, pool, userCredits, onContribute }) =
     </div>
   );
 };
-
-// --- RESTORED SCALE MODAL ---
 const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => {
     const { t } = useTranslation('server');
     const [targetRam, setTargetRam] = useState(server?.ram || 4);
     const [loading, setLoading] = useState(false);
-  
     if (!isOpen || !server) return null;
-  
     const availableTiers = getAvailableRamTiers();
-    const now = new Date();
-    const lastBilled = new Date(server.last_billed_at || server.created_at);
-    const elapsedDays = Math.max(0, (now - lastBilled) / (1000 * 60 * 60 * 24));
-    const remainingDays = Math.min(30, Math.max(0, 30 - elapsedDays));
-    const oldMonthlyCost = getMonthlyCreditCost(server.ram);
-    const newMonthlyCost = getMonthlyCreditCost(targetRam);
-    const oldDaily = oldMonthlyCost / 30;
-    const newDaily = newMonthlyCost / 30;
-    const netCharge = Number(((newDaily - oldDaily) * remainingDays).toFixed(2));
+    const isHourly = server.billing_type !== 'monthly';
+    // Variables for dynamic billing calculation
+    let oldCost = 0;
+    let newCost = 0;
+    let netCharge = 0;
+    if (isHourly) {
+        // Hourly servers simply update their burn rate going forward. No prorated upfront charge.
+        oldCost = getHourlyCreditCost(server.ram);
+        newCost = getHourlyCreditCost(targetRam);
+    } else {
+        // Monthly servers require a 30-day prorated difference calculation
+        const now = new Date();
+        const lastBilled = new Date(server.last_billed_at || server.created_at);
+        const elapsedDays = Math.max(0, (now - lastBilled) / (1000 * 60 * 60 * 24));
+        const remainingDays = Math.min(30, Math.max(0, 30 - elapsedDays));
+        oldCost = getMonthlyCreditCost(server.ram);
+        newCost = getMonthlyCreditCost(targetRam);
+        const oldDaily = oldCost / 30;
+        const newDaily = newCost / 30;
+        netCharge = Number(((newDaily - oldDaily) * remainingDays).toFixed(2));
+    }
     const currentBalance = server.pool ? server.pool.balance : userCredits;
     const isInsufficient = netCharge > 0 && currentBalance < netCharge;
-  
     const handleSubmit = async () => {
       if (targetRam === server.ram) return;
       setLoading(true); await onScale(targetRam); setLoading(false);
     };
-  
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-md shadow-2xl border border-gray-200 dark:border-slate-700 flex flex-col max-h-[90vh] overflow-y-auto">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-400"><ArrowsPointingOutIcon className="w-6 h-6" /></div>
-            <div><h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">{t('scale.title', 'Scale Server RAM')}</h3><p className="text-sm text-gray-500 dark:text-gray-400">{t('scale.desc', 'Modify hardware allocation dynamically.')}</p></div>
+            <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">{t('scale.title', 'Scale Server RAM')}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('scale.desc', 'Modify hardware allocation dynamically.')}</p>
+            </div>
           </div>
           <div className="space-y-5">
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 flex gap-3 text-amber-800 dark:text-amber-300">
@@ -142,16 +143,32 @@ const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => 
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">{t('scale.select_tier', 'Select New RAM Tier')}</label>
               <select value={targetRam} onChange={(e) => setTargetRam(Number(e.target.value))} className="w-full px-3 py-2.5 border rounded-xl bg-gray-50 dark:bg-slate-900 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 font-medium">
-                {availableTiers.map(tier => (<option key={tier} value={tier}>{t('scale.tier_option', { tier, cost: getMonthlyCreditCost(tier), defaultValue: '{{tier}} GB RAM — {{cost}} Credits/mo' })}</option>))}
+                {availableTiers.map(tier => (
+                    <option key={tier} value={tier}>
+                        {isHourly 
+                            ? `${tier} GB RAM — ${getHourlyCreditCost(tier)} Credits/hr`
+                            : `${tier} GB RAM — ${getMonthlyCreditCost(tier)} Credits/mo`
+                        }
+                    </option>
+                ))}
               </select>
             </div>
             <div className="bg-gray-50 dark:bg-slate-700/50 p-4 rounded-xl border border-gray-200 dark:border-slate-600 space-y-2">
-                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300"><span>{t('scale.current_plan', 'Current Plan')}</span><span>{oldMonthlyCost} cr</span></div>
-                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300"><span>{t('scale.new_plan', 'New Plan')}</span><span>{newMonthlyCost} cr</span></div>
-                <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-slate-600">
-                    <span className="text-sm font-bold text-gray-900 dark:text-white">{netCharge > 0 ? t('scale.prorated_due', 'Prorated Cost Due') : t('scale.prorated_refund', 'Prorated Refund')}</span>
-                    <span className={`text-lg font-bold ${netCharge > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{netCharge > 0 ? `-${netCharge.toFixed(2)} cr` : `+${Math.abs(netCharge).toFixed(2)} cr`}</span>
+                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
+                    <span>{t('scale.current_plan', 'Current Plan')}</span>
+                    <span>{oldCost} {isHourly ? 'cr/hr' : 'cr/mo'}</span>
                 </div>
+                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
+                    <span>{t('scale.new_plan', 'New Plan')}</span>
+                    <span>{newCost} {isHourly ? 'cr/hr' : 'cr/mo'}</span>
+                </div>
+                {/* Only show prorated cost charges for Monthly servers */}
+                {!isHourly && (
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-slate-600">
+                        <span className="text-sm font-bold text-gray-900 dark:text-white">{netCharge > 0 ? t('scale.prorated_due', 'Prorated Cost Due') : t('scale.prorated_refund', 'Prorated Refund')}</span>
+                        <span className={`text-lg font-bold ${netCharge > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{netCharge > 0 ? `-${netCharge.toFixed(2)} cr` : `+${Math.abs(netCharge).toFixed(2)} cr`}</span>
+                    </div>
+                )}
             </div>
             {netCharge > 0 && (
                 <div className={`text-sm p-3 rounded-lg flex justify-between items-center ${isInsufficient ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-slate-700'}`}>
@@ -169,12 +186,10 @@ const ScaleServerModal = ({ isOpen, onClose, server, userCredits, onScale }) => 
       </div>
     );
 };
-
 export default function ServerDetailPage({ initialServer }) {
   const router = useRouter();
   const { id } = router.query;
   const { t } = useTranslation('server');
-
   const [server, setServer] = useState(initialServer);
   const [loading, setLoading] = useState(!initialServer);
   const [activeTab, setActiveTab] = useState('overview');
@@ -184,76 +199,60 @@ export default function ServerDetailPage({ initialServer }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fileToken, setFileToken] = useState(null);
-  
   const [isLocalProvisioning, setIsLocalProvisioning] = useState(false);
-  
   const [editingRam, setEditingRam] = useState(false);
   const [newRam, setNewRam] = useState(null);
   const [showScaleModal, setShowScaleModal] = useState(false);
   const [savingAutoUpdate, setSavingAutoUpdate] = useState(false);
-  
   const [onlinePlayers, setOnlinePlayers] = useState(getOnlinePlayersArray(initialServer));
   const [runTour, setRunTour] = useState(false);
-
   const [isOwner, setIsOwner] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false); 
   const [myPerms, setMyPerms] = useState({}); 
-
   const [autoStopCountdown, setAutoStopCountdown] = useState(null);
   const [savingAutoStop, setSavingAutoStop] = useState(false);
   const [copiedIp, setCopiedIp] = useState(false);
   const [isEditingMotd, setIsEditingMotd] = useState(false);
   const [motdText, setMotdText] = useState(initialServer?.motd || '');
   const [savingMotd, setSavingMotd] = useState(false);
-
   const [pools, setPools] = useState([]);
   const [savingPool, setSavingPool] = useState(false);
   const [showContributeModal, setShowContributeModal] = useState(false);
-
   const profileChannelRef = useRef(null);
   const serverChannelRef = useRef(null);
   const mountedRef = useRef(false);
   const pollRef = useRef(null);
   const countdownIntervalRef = useRef(null);
   const prevGameStatusRef = useRef(initialServer?.game_status); 
-
   useEffect(() => {
     const qTab = router?.query?.tab;
     if (qTab && typeof qTab === 'string') setActiveTab(qTab);
   }, [router?.query?.tab]);
-
   useEffect(() => {
     mountedRef.current = true;
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
-
     const fetchSessionAndData = async () => {
       setLoading(true); setCreditsLoading(true);
       try {
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !sessionData?.session) return router.push('/login');
-
         const userData = sessionData.session.user;
         setUser(userData);
-        
         const { data: profile } = await supabase.from('profiles').select('credits, server_tour_completed, is_admin').eq('id', userData.id).single();
-
         if (profile) {
             setCredits(profile.credits || 0);
             setIsAdmin(!!profile.is_admin); 
             if (!profile.server_tour_completed) setRunTour(true);
         }
         setCreditsLoading(false);
-
         let currentServer = server;
         if (id) {
           const { data } = await supabase.from('servers').select('*, pool:credit_pools(*)').eq('id', id).single();
           if (data) { currentServer = data; setServer(data); setMotdText(data.motd || ''); }
         }
-
         if (currentServer && userData) {
             const owner = currentServer.user_id === userData.id;
             setIsOwner(owner);
-
             if (owner) {
                 setMyPerms({ control: true, console: true, files: true, settings: true, schedules: true, players: true, software: true, mods: true, world: true, backups: true });
                 const { data: userPools } = await supabase.from('credit_pools').select('*').eq('owner_id', userData.id);
@@ -265,15 +264,12 @@ export default function ServerDetailPage({ initialServer }) {
         }
       } catch (err) { setError(t('errors.load_session')); } finally { setLoading(false); }
     };
-
     fetchSessionAndData();
     return () => { mountedRef.current = false; cleanupResources(); };
   }, [id]);
-
   useEffect(() => {
     if (!id || !user?.id) return;
     if (serverChannelRef.current) supabase.removeChannel(serverChannelRef.current);
-
     const serverChannel = supabase
       .channel(`server-changes-${id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'servers', filter: `id=eq.${id}` }, async (payload) => {
@@ -291,17 +287,14 @@ export default function ServerDetailPage({ initialServer }) {
           setError(null);
         }
       ).subscribe();
-
     serverChannelRef.current = serverChannel;
     return () => { if (serverChannelRef.current) supabase.removeChannel(serverChannelRef.current); };
   }, [id, user?.id, isEditingMotd]);
-
   useEffect(() => {
     if (!id || !user?.id) return;
     const heartbeat = setInterval(() => { if (!document.hidden && !pollRef.current && mountedRef.current) fetchServer(id); }, 15000); 
     return () => clearInterval(heartbeat);
   }, [id, user?.id]);
-
   useEffect(() => {
     if (!server?.id || fileToken || !user) return;
     if (myPerms.files || myPerms.world || myPerms.players) {
@@ -319,9 +312,7 @@ export default function ServerDetailPage({ initialServer }) {
         fetchFileToken();
     }
   }, [server?.id, user, myPerms]);
-
   useEffect(() => { setOnlinePlayers(getOnlinePlayersArray(server)); }, [server?.players_online, server?.game_status]);
-
   useEffect(() => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     const hasActivePlayers = server?.player_count && server.player_count > 0;
@@ -335,10 +326,12 @@ export default function ServerDetailPage({ initialServer }) {
     } else setAutoStopCountdown(null);
     return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
   }, [server?.game_status, server?.last_empty_at, server?.auto_stop_timeout, server?.player_count, server?.billing_type, t]);
-
   useEffect(() => {
     const currentStatus = server?.game_status;
-    if (['Starting', 'Running'].includes(currentStatus)) {
+    // Was: only cleared on 'Starting'/'Running', so a failed provision attempt
+    // (server reverts to 'Stopped'/'Error' in the DB) left this stuck `true`
+    // forever, which pinned gameStatus to 'Installing' and hid the Start button.
+    if (!['Installing', 'Provisioning'].includes(currentStatus)) {
         setIsLocalProvisioning(false);
     }
     const prevStatus = prevGameStatusRef.current;
@@ -347,7 +340,6 @@ export default function ServerDetailPage({ initialServer }) {
     }
     prevGameStatusRef.current = currentStatus;
   }, [server?.game_status, server?.name, t]); 
-
   const cleanupResources = () => {
     try {
       if (profileChannelRef.current) supabase.removeChannel(profileChannelRef.current);
@@ -356,19 +348,16 @@ export default function ServerDetailPage({ initialServer }) {
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     } catch (e) {}
   };
-
   const fetchUserCredits = async (userId) => {
     setCreditsLoading(true);
     const { data } = await supabase.from('profiles').select('credits').eq('id', userId).single();
     if (data && mountedRef.current) { setCredits(data.credits || 0); setCreditsLoading(false); }
   };
-
   const safeFetchJson = async (url, opts = {}) => {
     const res = await fetch(url, opts);
     if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
     return res.json();
   };
-
   const fetchServer = useCallback(
     debounce(async (serverId) => {
       const { data } = await supabase.from('servers').select('*, pool:credit_pools(*)').eq('id', serverId).single();
@@ -378,7 +367,6 @@ export default function ServerDetailPage({ initialServer }) {
       }
     }, 1000), [isEditingMotd]
   );
-
   const pollUntilStatus = (expectedStatuses, timeout = 120000) => {
     if (pollRef.current) clearInterval(pollRef.current);
     const startTime = Date.now();
@@ -390,15 +378,12 @@ export default function ServerDetailPage({ initialServer }) {
       }
     }, 3000);
   };
-
   const handleCopyIp = () => {
     if (!server?.name) return;
     navigator.clipboard.writeText(`${server.name}.spawnly.net`);
     setCopiedIp(true); setTimeout(() => setCopiedIp(false), 2000);
   };
-
   const handleSoftwareChange = (newConfig) => setServer(prev => ({ ...prev, ...newConfig }));
-
   const handleAutoStopChange = async (e) => {
     if (!isOwner && !myPerms.settings) return setError(t('errors.no_permission', 'Permission denied'));
     const val = parseInt(e.target.value, 10);
@@ -408,7 +393,6 @@ export default function ServerDetailPage({ initialServer }) {
       setServer(prev => ({ ...prev, auto_stop_timeout: val }));
     } catch (e) { setError(t('errors.update_auto_stop')); } finally { setSavingAutoStop(false); }
   };
-
   const handleAutoUpdateChange = async (e) => {
     if (!isOwner && !myPerms.settings) return setError(t('errors.no_permission', 'Permission denied'));
     const val = e.target.checked;
@@ -422,7 +406,6 @@ export default function ServerDetailPage({ initialServer }) {
       setSavingAutoUpdate(false); 
     }
   };
-
   const handlePoolChange = async (e) => {
     if (!isOwner) return;
     const val = e.target.value === 'personal' ? null : e.target.value;
@@ -434,7 +417,6 @@ export default function ServerDetailPage({ initialServer }) {
         setServer(prev => ({ ...prev, pool_id: val, pool: newPoolData }));
     } catch (err) { setError(t('errors.update_billing', "Failed to update billing source.")); } finally { setSavingPool(false); }
   };
-
   const handleContribute = async (amount) => {
       if (!server.pool_id) return;
       try {
@@ -442,7 +424,6 @@ export default function ServerDetailPage({ initialServer }) {
         await fetchUserCredits(user.id); await fetchServer(server.id); setShowContributeModal(false); alert(t('contribute.success', "Contribution successful!"));
       } catch (e) { alert(t('contribute.failed', { message: e.message, defaultValue: "Contribution failed: {{message}}" })); }
   };
-
   const handleScaleServer = async (targetRam) => {
     setError(null);
     try {
@@ -452,56 +433,49 @@ export default function ServerDetailPage({ initialServer }) {
         if (server.game_status !== 'Stopped') pollUntilStatus(['Running', 'Stopped']);
     } catch (e) { setError(e.message); }
   };
-
   const handleServerAction = async (action, event = null) => {
     if (!myPerms.control) return setError(t('errors.no_permission_control', "You do not have permission to control this server."));
     if (actionLoading) return;
-    
     let finalAction = action;
     if (action === 'restart' && event?.shiftKey) {
         finalAction = 'hard_restart';
         if (!confirm(t('messages.confirm_hard_restart', 'Are you sure you want to perform a HARD RESTART? This will power-cycle the entire VPS hardware instead of just safely restarting the game.'))) return;
     }
     if (finalAction === 'kill' && !confirm(t('messages.confirm_kill', 'Are you sure you want to force kill the server?'))) return;
-
     setActionLoading(true); setError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error(t('errors.no_session', "No active session"));
-
       const hasHardware = !!server.hetzner_id;
-
       if (finalAction === 'start' && !hasHardware) {
         setIsLocalProvisioning(true);
         setServer(p => ({ ...p, status: 'Installing', game_status: 'Installing' }));
-        
         const { data: sData } = await supabase.from('servers').select('type, version, pending_type, pending_version').eq('id', server.id).single();
         const { data: installed } = await supabase.from('installed_software').select('*').eq('server_id', server.id);
-        
         await safeFetchJson('/api/servers/provision', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` }, body: JSON.stringify({ serverId: server.id, type: sData.pending_type || sData.type, version: sData.pending_version || sData.version, installedSoftware: installed }) });
-        
         if (sData.pending_type || sData.pending_version) await supabase.from('servers').update({ pending_type: null, pending_version: null }).eq('id', server.id);
         pollUntilStatus(['Starting', 'Running']);
       } else {
         let targetStatus = 'Stopping';
         if (finalAction === 'restart' || finalAction === 'hard_restart') targetStatus = 'Restarting';
         if (finalAction === 'start') targetStatus = 'Starting';
-        
         setServer(p => ({ ...p, game_status: targetStatus }));
         await safeFetchJson('/api/servers/action', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` }, body: JSON.stringify({ serverId: server.id, action: finalAction }) });
         pollUntilStatus((finalAction === 'restart' || finalAction === 'hard_restart' || finalAction === 'start') ? ['Running'] : ['Stopped']);
       }
     } catch (e) {
       setError(t('errors.failed_action', { action: finalAction, message: e.message }));
+      // Provisioning can fail before the DB status ever leaves 'Installing' locally
+      // (e.g. Hetzner fails to create the instance) — clear the local flag explicitly
+      // so the UI doesn't stay stuck showing "Processing..." with no Start button.
+      setIsLocalProvisioning(false);
       await fetchServer(server.id);
     } finally { setActionLoading(false); }
   };
-
   const handleSaveRam = async () => {
     if (!isOwner) return setError(t('errors.only_owner_ram', "Only owner can change RAM billing"));
     if (server.status !== 'Stopped') return setError(t('errors.stop_ram'));
     if (!getAvailableRamTiers().includes(newRam)) return setError(t('errors.ram_range'));
-
     setActionLoading(true);
     try {
       const newHourlyCost = getHourlyCreditCost(newRam);
@@ -509,14 +483,12 @@ export default function ServerDetailPage({ initialServer }) {
       setServer(prev => ({ ...prev, ram: newRam, cost_per_hour: newHourlyCost })); setEditingRam(false);
     } catch (e) { setError(e.message); } finally { setActionLoading(false); }
   };
-
   const handleSaveMotd = async () => {
     if (!isOwner && !myPerms.settings) return setError(t('errors.permission_denied', "Permission denied"));
     setSavingMotd(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       await supabase.from('servers').update({ motd: motdText }).eq('id', server.id);
-
       if (!server.game || server.game === 'minecraft') {
         const propsRes = await fetch(`/api/servers/${server.id}/properties`, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
         if (propsRes.ok) {
@@ -528,35 +500,27 @@ export default function ServerDetailPage({ initialServer }) {
       setServer(prev => ({ ...prev, motd: motdText })); setIsEditingMotd(false);
     } catch (e) { setError(t('errors.save_motd')); } finally { setSavingMotd(false); }
   };
-
   const getNextBillingDate = () => {
     if (!server.created_at) return t('billing.unknown', 'Unknown');
     const created = new Date(server.created_at); const now = new Date(); let next = new Date(created);
     while (next <= now) next.setMonth(next.getMonth() + 1);
     return next.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
-
   const { software: displaySoftware, version: displayVersion } = getDisplayInfo(server, t);
-
   if (!user || loading) return <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center"><div className="flex flex-col items-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div><p className="mt-4 text-gray-500 dark:text-gray-400 font-medium">{t('loading')}</p></div></div>;
   if (!server) return <div className="p-10 text-center dark:text-gray-400">{t('not_found')}</div>;
-
   const vpsStatus = server.status || 'Unknown';
   let gameStatus = server.game_status || server.status || 'Stopped'; 
-
   if (vpsStatus === 'Installing' || vpsStatus === 'Provisioning' || isLocalProvisioning) {
       gameStatus = 'Installing';
   }
-
   const isVpsRunning = vpsStatus === 'Running';
   const isGameRunning = gameStatus === 'Running';
   const isGameStopped = gameStatus === 'Stopped';
   const isGameBusy = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting', 'Installing'].includes(gameStatus);
-
   const isMinecraft = !server.game || server.game === 'minecraft';
   const sType = (server.type || '').toLowerCase();
   const showMods = ['forge', 'neoforge', 'fabric', 'quilt', 'paper', 'spigot', 'purpur', 'folia', 'velocity', 'waterfall', 'bukkit', 'arclight', 'mohist', 'magma'].includes(sType);
-  
   const allTabs = [
     { id: 'overview', label: t('tabs.overview'), icon: SignalIcon, perm: null },
     { id: 'schedules', label: t('tabs.schedules'), icon: CalendarDaysIcon, perm: 'schedules' },
@@ -570,14 +534,11 @@ export default function ServerDetailPage({ initialServer }) {
     { id: 'backups', label: t('tabs.backups'), icon: ArchiveBoxIcon, perm: 'backups' },
     ...(isOwner ? [{ id: 'access', label: t('tabs.access', 'Access'), icon: ShieldCheckIcon, perm: 'owner' }] : []),
   ];
-
   const tabs = allTabs.filter(tab => tab.perm === null || (tab.perm === 'owner' ? isOwner : myPerms[tab.perm]));
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={creditsLoading} onLogout={() => { supabase.auth.signOut(); router.push('/login'); }} />
       <ServerTour run={runTour} userId={user?.id} onFinish={() => setRunTour(false)} />
-
       <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         <AnimatePresence>
           {error && (
@@ -587,10 +548,8 @@ export default function ServerDetailPage({ initialServer }) {
             </motion.div>
           )}
         </AnimatePresence>
-
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 mb-8">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-            
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{server.name}</h1>
@@ -603,7 +562,6 @@ export default function ServerDetailPage({ initialServer }) {
                     <ServerStatusIndicator server={{...server, status: gameStatus}} />
                 </div>
               </div>
-              
               <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-2">
                 <span className="bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded text-gray-700 dark:text-gray-300 font-medium capitalize">{server.game}</span>
                 <span>•</span>
@@ -612,7 +570,6 @@ export default function ServerDetailPage({ initialServer }) {
                   {copiedIp ? <span className="text-green-600 text-xs font-bold">{t('actions.copied')}</span> : <ClipboardDocumentIcon className="w-4 h-4 opacity-50 group-hover:opacity-100" />}
                 </button>
               </div>
-
               <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 h-8">
                 {isEditingMotd ? (
                   <div className="flex items-center gap-2 w-full max-w-md animate-in fade-in zoom-in duration-200">
@@ -628,7 +585,6 @@ export default function ServerDetailPage({ initialServer }) {
                 )}
               </div>
             </div>
-
             <div className="flex flex-wrap items-center gap-3 tour-server-controls">
               {myPerms.control && isGameStopped && (
                 <button onClick={(e) => handleServerAction('start', e)} disabled={actionLoading} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
@@ -636,7 +592,6 @@ export default function ServerDetailPage({ initialServer }) {
                   {t('actions.start')}
                 </button>
               )}
-              
               {myPerms.control && (isGameRunning || gameStatus === 'Unknown') && (
                 <>
                   {isGameRunning && (
@@ -651,7 +606,6 @@ export default function ServerDetailPage({ initialServer }) {
                   </button>
                 </>
               )}
-              
               {isGameBusy && (
                 <button disabled className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold cursor-not-allowed transition-all ${
                     gameStatus === 'Installing' 
@@ -672,7 +626,6 @@ export default function ServerDetailPage({ initialServer }) {
                       : t('status.processing', 'Processing...')}
                 </button>
               )}
-
               {myPerms.control && isGameBusy && (
                 <button onClick={(e) => handleServerAction('kill', e)} disabled={actionLoading} title={t('actions.force_kill_tooltip', "Force Kill")} className="flex items-center gap-2 bg-red-800 hover:bg-red-900 text-white px-4 py-2.5 rounded-xl font-semibold shadow-sm transition-all disabled:opacity-50">
                     <TrashIcon className="w-5 h-5" />
@@ -682,7 +635,6 @@ export default function ServerDetailPage({ initialServer }) {
             </div>
           </div>
         </div>
-
         <div className="mb-8 overflow-x-auto tour-server-tabs">
           <div className="flex items-center gap-2 min-w-max border-b border-gray-200 dark:border-slate-700 pb-1">
             {tabs.map((tab) => (
@@ -693,10 +645,8 @@ export default function ServerDetailPage({ initialServer }) {
             ))}
           </div>
         </div>
-
         <div className="min-h-[400px]">
           <Suspense fallback={<div className="text-center py-12 text-gray-400">{t('loading')}</div>}>
-            
             {activeTab === 'overview' && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col justify-between">
@@ -713,7 +663,6 @@ export default function ServerDetailPage({ initialServer }) {
                     <div className="flex justify-between items-center"><span className="text-sm text-gray-600 dark:text-gray-300">{isMinecraft ? t('connection.version') : t('connection.branch', 'Branch')}</span><span className="text-sm font-medium text-gray-900 dark:text-gray-100">{displayVersion}</span></div>
                   </div>
                 </div>
-
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2 flex flex-col tour-server-resources">
                   <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2"><CpuChipIcon className="w-4 h-4" /> {t('resources.title')}</h3>
                   <div className="flex flex-col flex-1 gap-4">
@@ -738,12 +687,10 @@ export default function ServerDetailPage({ initialServer }) {
                     )}
                   </div>
                 </div>
-
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <h3 className="text-gray-500 dark:text-gray-400 text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
                     <ClockIcon className="w-4 h-4" /> {t('config.title')}
                   </h3>
-                  
                   {/* Auto-Stop Setting */}
                   {server.billing_type !== 'monthly' && (
                     <div className="mb-6">
@@ -757,7 +704,6 @@ export default function ServerDetailPage({ initialServer }) {
                       {autoStopCountdown && (<div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-xs rounded-lg flex items-center gap-2 animate-pulse border border-amber-100 dark:border-amber-900"><ClockIcon className="w-3 h-3" /> {autoStopCountdown}</div>)}
                     </div>
                   )}
-
                   {/* Update on Start Toggle (Steam Games Only) */}
                   {!isMinecraft && (
                     <div className="mb-6 pb-6 border-b border-gray-100 dark:border-slate-700">
@@ -780,7 +726,6 @@ export default function ServerDetailPage({ initialServer }) {
                       </label>
                     </div>
                   )}
-
                   {/* RAM Allocation Setting */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('config.ram_allocation')}</label>
@@ -808,7 +753,6 @@ export default function ServerDetailPage({ initialServer }) {
                     )}
                   </div>
                 </div>
-
                 {(isOwner || server.pool_id) && (
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 md:col-span-2 tour-billing-card flex flex-col">
                     <div className="flex justify-between items-center mb-4">
@@ -850,55 +794,44 @@ export default function ServerDetailPage({ initialServer }) {
                 )}
               </div>
             )}
-
             <div className={activeTab === 'overview' ? 'hidden' : 'block animate-in fade-in duration-300'}>
               {activeTab === 'properties' && isMinecraft && myPerms.settings && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <ServerPropertiesEditor server={server} isAdmin={isAdmin} />
                 </div>
               )}
-
               {activeTab === 'schedules' && myPerms.schedules && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   <SchedulesTab server={server} />
                 </div>
               )}
-
               {activeTab === 'console' && myPerms.console && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {isVpsRunning ? <ConsoleViewer server={server} /> : <div className="text-center py-10 text-gray-500">{t('console.start_to_access', 'Please start the server to access the live console.')}</div>}
                 </div>
               )}
-
               {activeTab === 'players' && isMinecraft && myPerms.players && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {isVpsRunning ? (fileToken ? <PlayersTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating')}</p>) : <div className="text-center py-10 text-gray-500">{t('players.start_to_access', 'Please start the server to manage players.')}</div>}
                 </div>
               )}
-
               {activeTab === 'software' && myPerms.software && (isMinecraft ? <ServerSoftwareTab server={server} onSoftwareChange={handleSoftwareChange} /> : <ServerSoftwareTabSteam server={server} onSoftwareChange={handleSoftwareChange} />)}
-              
               {activeTab === 'mods' && myPerms.mods && (isMinecraft ? <ModsPluginsTab server={server} /> : <ModsPluginsTabSteam server={server} />)}
-
               {activeTab === 'world' && isMinecraft && myPerms.world && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {isVpsRunning ? (fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating')}</p>) : <div className="text-center py-10 text-gray-500">{t('world.start_to_manage', 'Please start the server to manage worlds.')}</div>}
                 </div>
               )}
-
               {activeTab === 'files' && myPerms.files && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
                   {fileToken ? <FileManager server={server} token={fileToken} setActiveTab={setActiveTab} isAdmin={isAdmin} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating_files', { defaultValue: 'Authenticating file access...' })}</p>}
                 </div>
               )}
-
               {activeTab === 'backups' && myPerms.backups && (<BackupsTab server={server} />)}
               {activeTab === 'access' && isOwner && (<AccessTab server={server} />)}
             </div>
-
           </Suspense>
         </div>
-
         <ContributeModal isOpen={showContributeModal} onClose={() => setShowContributeModal(false)} pool={server.pool} userCredits={credits} onContribute={handleContribute} />
         <ScaleServerModal isOpen={showScaleModal} onClose={() => setShowScaleModal(false)} server={server} userCredits={credits} onScale={handleScaleServer} />
       </main>
@@ -906,7 +839,6 @@ export default function ServerDetailPage({ initialServer }) {
     </div>
   );
 }
-
 export async function getServerSideProps(context) {
   const { id } = context.params || {};
   if (!id) return { notFound: true };
