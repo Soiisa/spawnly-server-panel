@@ -516,7 +516,11 @@ export default function ServerDetailPage({ initialServer }) {
   }
   const isVpsRunning = vpsStatus === 'Running';
   const isGameRunning = gameStatus === 'Running';
-  const isGameStopped = gameStatus === 'Stopped';
+  // 'Crashed' means the game process died but the VPS/Hetzner instance is still
+  // up (log.js intentionally leaves status:'Running' in that case) — so it just
+  // needs a normal restart, not reprovisioning. Previously this matched none of
+  // isGameStopped/isGameRunning/isGameBusy, so NO buttons rendered at all.
+  const isGameStopped = gameStatus === 'Stopped' || gameStatus === 'Crashed';
   const isGameBusy = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting', 'Installing'].includes(gameStatus);
   const isMinecraft = !server.game || server.game === 'minecraft';
   const sType = (server.type || '').toLowerCase();
