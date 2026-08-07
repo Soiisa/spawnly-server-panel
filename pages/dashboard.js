@@ -1,5 +1,4 @@
 // pages/dashboard.js
-
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/router";
@@ -24,25 +23,19 @@ import {
   CommandLineIcon,
   UsersIcon 
 } from '@heroicons/react/24/outline';
-
 // Import the central config
 import { GAME_REGISTRY } from "../lib/config";
-
 // --- Helper for Displaying Software/Version ---
 const getDisplayInfo = (server, t) => {
   if (!server) return { software: t('software.unknown'), version: t('software.unknown') };
-
   let typeKey = server.type || 'vanilla';
   let software = t(`software_names.${typeKey}`, { defaultValue: server.type || 'Vanilla' });
   let version = server.version || '';
-
   // Handle Modpacks
   if (server.type?.startsWith('modpack-')) {
     const providerRaw = server.type.replace('modpack-', '');
     const provider = providerRaw.charAt(0).toUpperCase() + providerRaw.slice(1);
-    
     software = `${t('software.modpack')} (${provider})`;
-
     if (server.version?.includes('::')) {
       const parts = server.version.split('::');
       if (parts[1]) version = parts[1];
@@ -51,10 +44,8 @@ const getDisplayInfo = (server, t) => {
       }
     }
   }
-
   return { software, version };
 };
-
 export default function Dashboard() {
   const router = useRouter();
   const { t } = useTranslation('dashboard'); 
@@ -65,52 +56,41 @@ export default function Dashboard() {
   const [credits, setCredits] = useState(0);
   const [isLoadingServers, setIsLoadingServers] = useState(true);
   const [error, setError] = useState(null);
-  
   // --- STATE FOR TOUR ---
   const [runTour, setRunTour] = useState(false);
   const [tourPending, setTourPending] = useState(false);
-
   // --- STATE FOR USERNAME MODAL ---
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState("");
-
   // Polling and mounted refs
   const pollingRef = useRef(false);
   const [isPolling, setIsPolling] = useState(false);
   const mountedRef = useRef(false);
   const pollingIntervalRef = useRef(null);
   const realtimeChannelRef = useRef(null);
-
   // Added new Installing/Provisioning states
   const transitionalStates = ['Initializing', 'Starting', 'Stopping', 'Restarting', 'Provisioning', 'Installing'];
-
   useEffect(() => {
     mountedRef.current = true;
-
     const fetchSession = async () => {
       const { data, error } = await supabase.auth.getSession();
-      
       if (!data.session) {
         router.push("/login");
       } else {
         setUser(data.session.user);
-        
         // Fetch credits, tutorial status, AND username
         const { data: profile } = await supabase
             .from('profiles')
             .select('credits, tutorial_completed, username')
             .eq('id', data.session.user.id)
             .maybeSingle(); 
-
         if (profile) {
             setCredits(profile.credits || 0);
         }
-
         // --- Verify Username Exists ---
         const hasUsername = data.session.user.user_metadata?.username || profile?.username;
-        
         if (!hasUsername) {
             setShowUsernameModal(true);
             // Delay the tour if they also need to complete it
@@ -123,14 +103,11 @@ export default function Dashboard() {
                 setRunTour(true);
             }
         }
-
         fetchServers(data.session.user.id);
       }
       setLoading(false);
     };
-
     fetchSession();
-
     return () => {
       mountedRef.current = false;
       pollingRef.current = false;
@@ -146,16 +123,22 @@ export default function Dashboard() {
       }
     };
   }, []);
-
   // Set up real-time subscriptions
   useEffect(() => {
     if (!user?.id) return;
-
     const serverChannel = supabase
       .channel(`user-servers-${user.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'servers', filter: `user_id=eq.${user.id}` }, (payload) => {
         if (!mountedRef.current) return;
-        setServers((prev) => prev.map((s) => (s.id === payload.new.id ? { ...s, ...payload.new } : s)));
+        setServers((prev) => prev.map((s) => (s.id === payload.new.id ? {
+          ...s,
+          ...payload.new,
+          // isLocalProvisioning isn't a DB column, so a naive spread never clears it.
+          // If the DB now reports anything other than an in-progress provision
+          // (e.g. it reverted to 'Stopped' after a failed Hetzner create), drop the
+          // stale local flag so gameStatus stops being forced to 'Installing'.
+          isLocalProvisioning: ['Installing', 'Provisioning'].includes(payload.new.status) ? s.isLocalProvisioning : false,
+        } : s)));
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'servers', filter: `user_id=eq.${user.id}` }, (payload) => {
         if (!mountedRef.current) return;
@@ -166,7 +149,6 @@ export default function Dashboard() {
         setServers((prev) => prev.filter((s) => s.id !== payload.old.id));
       })
       .subscribe();
-
     const profileChannel = supabase
       .channel(`user-profile-${user.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, (payload) => {
@@ -174,9 +156,7 @@ export default function Dashboard() {
         setCredits(payload.new.credits || 0);
       })
       .subscribe();
-
     realtimeChannelRef.current = { serverChannel, profileChannel };
-
     return () => {
       if (realtimeChannelRef.current) {
         supabase.removeChannel(realtimeChannelRef.current.serverChannel);
@@ -184,37 +164,30 @@ export default function Dashboard() {
       }
     };
   }, [user?.id]);
-
   // Start polling if transitional
   useEffect(() => {
     if (!user?.id || isPolling) return;
     const hasTransitional = servers.some((s) => transitionalStates.includes(s.status) || transitionalStates.includes(s.game_status));
     if (hasTransitional) startPolling();
   }, [servers, user?.id, isPolling]);
-
   const setPolling = (val) => {
     pollingRef.current = val;
     if (mountedRef.current) setIsPolling(val);
   };
-
   const startPolling = () => {
     if (pollingRef.current || !mountedRef.current) return;
     setPolling(true);
-
     pollingIntervalRef.current = setInterval(async () => {
       if (!mountedRef.current || !pollingRef.current) {
         clearInterval(pollingIntervalRef.current);
         return;
       }
-
       const transitional = servers.filter((s) => transitionalStates.includes(s.status) && s.hetzner_id);
-
       if (transitional.length === 0) {
         clearInterval(pollingIntervalRef.current);
         setPolling(false);
         return;
       }
-
       for (const srv of transitional) {
         try {
           const resp = await fetch(`/api/servers/hetzner-status?hetznerId=${encodeURIComponent(srv.hetzner_id)}`);
@@ -236,32 +209,26 @@ export default function Dashboard() {
       }
     }, 3000);
   };
-
   const fetchServers = async (userId) => {
     setIsLoadingServers(true);
-    
     try {
         const { data: owned } = await supabase
           .from('servers')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
-
         const { data: sharedPerms } = await supabase
           .from('server_permissions')
           .select('server:servers(*)')
           .eq('user_id', userId);
-
         const shared = sharedPerms 
           ? sharedPerms
               .filter(p => p.server !== null) 
               .map(p => ({ ...p.server, isShared: true })) 
           : [];
-
         const allServers = [...(owned || []), ...shared].sort((a, b) => 
           new Date(b.created_at) - new Date(a.created_at)
         );
-
         setServers(allServers);
     } catch (e) {
         console.error("Error fetching servers:", e);
@@ -270,40 +237,32 @@ export default function Dashboard() {
         setIsLoadingServers(false);
     }
   };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
-
   const handleSaveUsername = async (e) => {
     e.preventDefault();
     setSavingUsername(true);
     setUsernameError("");
-
     try {
       const { data: existingUser } = await supabase
         .from('profiles')
         .select('id')
         .ilike('username', usernameInput)
         .maybeSingle();
-
       if (existingUser && existingUser.id !== user.id) {
         throw new Error(t('setup.username_taken', 'This username is already taken. Please choose another.'));
       }
-
       const { data: authData, error: authError } = await supabase.auth.updateUser({
         data: { username: usernameInput }
       });
-
       if (authError) throw authError;
-
       if (user?.id) {
         const { error: dbError } = await supabase
           .from('profiles')
           .update({ username: usernameInput })
           .eq('id', user.id);
-          
         if (dbError) {
           if (dbError.code === '23505') {
             throw new Error(t('setup.username_taken', 'This username is already taken. Please choose another.'));
@@ -311,10 +270,8 @@ export default function Dashboard() {
           throw dbError;
         }
       }
-
       setUser(authData.user);
       setShowUsernameModal(false);
-
       if (tourPending) {
         setRunTour(true);
         setTourPending(false);
@@ -325,11 +282,9 @@ export default function Dashboard() {
       setSavingUsername(false);
     }
   };
-
   const handleCreateServer = async (serverData) => {
     if (!user) return;
     const cost = parseFloat(serverData.costPerHour);
-    
     // Optimistic UI - Mark it as 'Installing' right out of the gate
     const tempServerId = `temp-${Date.now()}`;
     const optimisticServer = {
@@ -348,15 +303,12 @@ export default function Dashboard() {
       ipv4: null,
       billing_type: serverData.billing_type
     };
-
     setServers((prev) => [optimisticServer, ...prev]);
     setShowModal(false);
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
       const token = session.access_token;
-
       const resp = await fetch('/api/servers/create', {
         method: 'POST',
         headers: { 
@@ -365,10 +317,8 @@ export default function Dashboard() {
         },
         body: JSON.stringify({ ...serverData, userId: user.id }),
       });
-
       const json = await resp.json();
       if (!resp.ok) throw new Error(json.error || 'Failed to create');
-
       const newServerId = json.server?.id;
       if (newServerId) router.push(`/server/${newServerId}`);
     } catch (err) {
@@ -376,14 +326,12 @@ export default function Dashboard() {
       setError(`${t('messages.error_create')}: ${err.message}`); 
     }
   };
-
   const handleDeleteServer = async (serverId) => {
     if (!confirm(t('messages.confirm_delete'))) return; 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
       const token = session.access_token;
-
       await fetch('/api/servers/action', {
         method: 'POST',
         headers: { 
@@ -397,10 +345,8 @@ export default function Dashboard() {
       setError(t('messages.error_delete')); 
     }
   };
-
   const handleStartServer = async (server) => {
     const isProvisioning = !server.hetzner_id;
-
     // Optimistic UI lock
     setServers(prev => prev.map(s => s.id === server.id ? { 
         ...s, 
@@ -408,15 +354,12 @@ export default function Dashboard() {
         game_status: isProvisioning ? 'Installing' : 'Starting',
         isLocalProvisioning: isProvisioning 
     } : s));
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
       const token = session.access_token;
-
       const endpoint = isProvisioning ? '/api/servers/provision' : '/api/servers/action';
       const body = isProvisioning ? { serverId: server.id } : { serverId: server.id, action: 'start' };
-      
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 
@@ -428,20 +371,21 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(await res.text());
     } catch (err) {
       setError(`${t('messages.error_start')}: ${err.message}`); 
-      // Rollback on error
+      setServers(prev => prev.map(s => s.id === server.id ? { ...s, isLocalProvisioning: false } : s));
+      // Rollback on error (fetchServers replaces rows fully, which also
+      // drops the non-DB isLocalProvisioning field — this is the real fix
+      // for the case where /api/servers/provision fails asynchronously
+      // and only the realtime UPDATE below ever fires, not this catch).
       fetchServers(user.id);
     }
   };
-
   const handleStopServer = async (serverId) => {
     // Optimistic UI lock
     setServers(prev => prev.map(s => s.id === serverId ? { ...s, game_status: 'Stopping' } : s));
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
       const token = session.access_token;
-
       await fetch('/api/servers/action', {
         method: 'POST',
         headers: { 
@@ -455,7 +399,6 @@ export default function Dashboard() {
       fetchServers(user.id);
     }
   };
-
   if (loading) return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
       <div className="flex flex-col items-center">
@@ -464,17 +407,14 @@ export default function Dashboard() {
       </div>
     </div>
   );
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-gray-100">
       <Header user={user} credits={credits} isLoading={isLoadingServers} onLogout={handleLogout} />
-
       <DashboardTour 
          run={runTour} 
          userId={user?.id} 
          onFinish={() => setRunTour(false)} 
       />
-
       {showUsernameModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl max-w-md w-full border border-gray-200 dark:border-slate-700">
@@ -487,14 +427,12 @@ export default function Dashboard() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 text-center">
               {t('setup.username_desc', 'Welcome! Please pick a username to continue using your dashboard.')}
             </p>
-            
             <form onSubmit={handleSaveUsername} className="space-y-5">
               {usernameError && (
                 <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-900/50 text-sm text-red-600 dark:text-red-300 text-center">
                   {usernameError}
                 </div>
               )}
-              
               <div>
                 <label htmlFor="usernameInput" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   {t('setup.username_label', 'Username')}
@@ -511,7 +449,6 @@ export default function Dashboard() {
                   placeholder="e.g. ServerMaster99"
                 />
               </div>
-
               <button
                 type="submit"
                 disabled={savingUsername || usernameInput.trim().length < 3}
@@ -523,7 +460,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
       <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-24">
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex justify-between items-center shadow-sm">
@@ -534,7 +470,6 @@ export default function Dashboard() {
             <button onClick={() => setError(null)} className="text-sm font-semibold hover:underline">{t('messages.dismiss')}</button> 
           </div>
         )}
-
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 tour-stats">
           <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 flex items-center gap-4">
             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><ServerIcon className="w-6 h-6" /></div>
@@ -567,7 +502,6 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('headers.your_servers')}</h2> 
           <button
@@ -578,7 +512,6 @@ export default function Dashboard() {
             {t('headers.new_server')} 
           </button>
         </div>
-
         {isLoadingServers && servers.length === 0 ? (
           <div className="py-20 flex justify-center"><div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent" /></div>
         ) : servers.length === 0 ? (
@@ -595,7 +528,6 @@ export default function Dashboard() {
             {servers.map((server) => {
               const { software, version } = getDisplayInfo(server, t);
               const isShared = server.isShared === true;
-              
               // Smart UI Flow Logic mirroring [id].js
               const vpsStatus = server.status || 'Unknown';
               let gameStatus = server.game_status || server.status || 'Stopped';
@@ -605,13 +537,10 @@ export default function Dashboard() {
               const isGameRunning = gameStatus === 'Running';
               const isGameStopped = gameStatus === 'Stopped';
               const isGameBusy = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting', 'Installing'].includes(gameStatus);
-
               // Fetch Game Config for Logo
               const gameConfig = GAME_REGISTRY[server.game || 'minecraft'] || GAME_REGISTRY.minecraft;
-              
               return (
               <div key={server.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col group hover:border-indigo-200 dark:hover:border-indigo-600 transition-colors">
-                
                 <div className="p-6 border-b border-gray-100 dark:border-slate-700">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
@@ -648,7 +577,6 @@ export default function Dashboard() {
                     {/* Injecting gameStatus properly for the visual dot indicator */}
                     <ServerStatusIndicator server={{...server, status: gameStatus}} />
                   </div>
-                  
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.memory')}</p> 
@@ -660,7 +588,6 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
-
                 <div className="p-4 bg-gray-50 dark:bg-slate-700 flex items-center gap-2 mt-auto">
                   {isGameStopped ? (
                     <button 
@@ -697,7 +624,6 @@ export default function Dashboard() {
                           : t('server_card.processing', 'Processing...')}
                     </button>
                   )}
-
                   <Link 
                     href={server.id.startsWith('temp') ? '#' : `/server/${server.id}`}
                     className={`p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
@@ -705,7 +631,6 @@ export default function Dashboard() {
                   >
                     <CommandLineIcon className="w-5 h-5" />
                   </Link>
-                  
                   <Link 
                     href={server.id.startsWith('temp') ? '#' : `/server/${server.id}?tab=properties`}
                     className={`p-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:text-indigo-600 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors ${server.id.startsWith('temp') ? 'pointer-events-none opacity-50' : ''}`}
@@ -713,7 +638,6 @@ export default function Dashboard() {
                   >
                     <AdjustmentsHorizontalIcon className="w-5 h-5" />
                   </Link>
-
                   {!isShared && (
                     <button
                       onClick={() => handleDeleteServer(server.id)}
@@ -730,7 +654,6 @@ export default function Dashboard() {
           </div>
         )}
       </main>
-
       {showModal && (
         <CreateServerForm
           onClose={() => setShowModal(false)}
@@ -738,12 +661,10 @@ export default function Dashboard() {
           credits={credits}
         />
       )}
-
       <Footer />
     </div>
   );
 }
-
 // --- REQUIRED FOR NEXT-I18NEXT ---
 export async function getStaticProps({ locale }) {
   return {
