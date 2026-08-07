@@ -535,7 +535,12 @@ export default function Dashboard() {
                   gameStatus = 'Installing';
               }
               const isGameRunning = gameStatus === 'Running';
-              const isGameStopped = gameStatus === 'Stopped';
+              // See pages/server/[id].js for why 'Crashed' is treated like 'Stopped':
+              // the VPS stays up after a game-process crash, so Start just restarts
+              // the game rather than reprovisioning. Without this, the card's
+              // isGameStopped/isGameRunning ternary fell through to the disabled
+              // "Processing..." spinner forever for a crashed server.
+              const isGameStopped = gameStatus === 'Stopped' || gameStatus === 'Crashed';
               const isGameBusy = ['Initializing', 'Provisioning', 'Starting', 'Recreating', 'Stopping', 'Restarting', 'Installing'].includes(gameStatus);
               // Fetch Game Config for Logo
               const gameConfig = GAME_REGISTRY[server.game || 'minecraft'] || GAME_REGISTRY.minecraft;
