@@ -83,14 +83,10 @@ export default function ServerTable() {
     }
   };
 
-  // Helper function to parse version strings
   const formatVersion = (versionString) => {
     if (!versionString) return <span className="text-slate-400 italic text-xs">Latest</span>;
-
-    // Check for Modpack format: URL::MC_VERSION::MODPACK_NAME
     if (versionString.includes('::')) {
       const parts = versionString.split('::');
-      // Ensure we have at least 3 parts (URL, MC Version, Name)
       if (parts.length >= 3) {
         const mcVersion = parts[1];
         const modpackName = parts[2];
@@ -106,8 +102,6 @@ export default function ServerTable() {
         );
       }
     }
-
-    // Default fallback for standard versions (e.g., "1.20.1")
     return <span className="text-sm font-mono text-slate-600 dark:text-slate-400">{versionString}</span>;
   };
 
@@ -118,37 +112,22 @@ export default function ServerTable() {
       {viewingServer && adminToken && (
         <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
           <div className="bg-white dark:bg-slate-900 w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
-            {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
                   <FolderIcon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    File Manager
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">
-                    {viewingServer.name}
-                  </p>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">File Manager</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{viewingServer.name}</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setViewingServer(null)}
-                className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500 dark:text-slate-400"
-              >
+              <button onClick={() => setViewingServer(null)} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-500 dark:text-slate-400">
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
-            
-            {/* Modal Content */}
             <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950 p-4">
-              <FileManager 
-                server={viewingServer} 
-                token={adminToken} 
-                isAdmin={true} 
-                setActiveTab={() => {}} 
-              />
+              <FileManager server={viewingServer} token={adminToken} isAdmin={true} setActiveTab={() => {}} />
             </div>
           </div>
         </div>
@@ -178,12 +157,12 @@ export default function ServerTable() {
           <thead className="bg-slate-50 dark:bg-slate-950">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Server Info</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Software</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Version</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Game & Software</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Billing</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Owner</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Resources</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Admin Actions</th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
@@ -200,54 +179,58 @@ export default function ServerTable() {
                     {server.hetzner_id && <div className="text-[10px] text-indigo-400 font-mono">HZ-ID: {server.hetzner_id}</div>}
                   </td>
                   
-                  {/* Software Cell */}
+                  {/* Updated Game & Software Cell */}
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 capitalize bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 inline-block">
-                      {server.type || 'Unknown'}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white capitalize">
+                        {server.game ? server.game.replace('_', ' ') : 'Minecraft'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-medium text-slate-700 dark:text-slate-300 capitalize bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 w-fit">
+                          {server.type || 'Unknown'}
+                        </span>
+                        {formatVersion(server.version)}
+                      </div>
+                    </div>
                   </td>
 
-                  {/* Version Cell with Parsing */}
+                  {/* New Billing Cell */}
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {formatVersion(server.version)}
+                    <span className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider ${
+                      server.billing_type === 'monthly' 
+                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800' 
+                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                    }`}>
+                      {server.billing_type === 'monthly' ? 'Monthly' : 'Hourly'}
+                    </span>
                   </td>
 
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-slate-700 dark:text-slate-300">{server.owner_email}</div>
                   </td>
+                  
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center text-sm text-slate-600 dark:text-slate-400 gap-1">
                       <CpuChipIcon className="h-4 w-4" />
                       {server.ram} GB
                     </div>
                   </td>
+                  
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(server.status)}`}>
                       {server.status}
                     </span>
                   </td>
+                  
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-3">
-                      <button
-                        onClick={() => handleOpenFiles(server)}
-                        className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                        title="Browse Files"
-                      >
+                      <button onClick={() => handleOpenFiles(server)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300" title="Browse Files">
                         <FolderIcon className="h-5 w-5" />
                       </button>
-                      <button 
-                        onClick={() => handleAction('force_stop', server.id, server.name)}
-                        disabled={server.status === 'Stopped'}
-                        className={`text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300 ${server.status === 'Stopped' ? 'opacity-30 cursor-not-allowed' : ''}`}
-                        title="Force Stop (Kill VPS)"
-                      >
+                      <button onClick={() => handleAction('force_stop', server.id, server.name)} disabled={server.status === 'Stopped'} className={`text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300 ${server.status === 'Stopped' ? 'opacity-30 cursor-not-allowed' : ''}`} title="Force Stop (Kill VPS)">
                         <StopCircleIcon className="h-5 w-5" />
                       </button>
-                      <button 
-                        onClick={() => handleAction('delete', server.id, server.name)}
-                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                        title="Delete Permanently"
-                      >
+                      <button onClick={() => handleAction('delete', server.id, server.name)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" title="Delete Permanently">
                         <TrashIcon className="h-5 w-5" />
                       </button>
                     </div>
