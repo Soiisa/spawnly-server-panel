@@ -9,6 +9,7 @@ import { MagnifyingGlassIcon, BookOpenIcon, CommandLineIcon } from '@heroicons/r
 import Navbar from '../../components/Navbar';
 import ServersHeader from '../../components/ServersHeader';
 import ServersFooter from '../../components/ServersFooter';
+import SEO from '../../components/SEO';
 
 import { getGamesList } from '../../lib/gamesList';
 

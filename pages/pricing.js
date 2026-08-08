@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import SEO from "../components/SEO";
 import { 
   CheckCircleIcon, 
   CircleStackIcon,

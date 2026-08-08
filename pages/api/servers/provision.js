@@ -696,7 +696,10 @@ async function provisionSteamServer(serverRow, version, ssh_keys, res) {
         ufwRules += `\n  - ufw --force enable`;
 
         // Build the dependency list dynamically based on the game
-        let aptPackages = "nodejs lib32gcc-s1 steamcmd unzip ufw wine xvfb";
+        // NOTE: 'wine' is intentionally excluded here - Ubuntu's default repo ships an old
+        // build (6.0.3) where winetricks dotnet48 is known-broken (WineHQ bug 49897, fixed in
+        // 6.6+). We install winehq-stable from the official WineHQ apt repo instead (see runcmd).
+        let aptPackages = "nodejs lib32gcc-s1 steamcmd unzip ufw xvfb";
         if (gameType === 'dst') {
             aptPackages += " libcurl4-gnutls-dev:i386";
         } else if (gameType === 'terraria') {
@@ -728,10 +731,14 @@ write_files:
       ${s3Config.S3_ENDPOINT ? `endpoint_url = ${s3Config.S3_ENDPOINT}` : ''}
 runcmd:
   - dpkg --add-architecture i386
+  - mkdir -pm755 /etc/apt/keyrings
+  - wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
+  - wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/$(lsb_release -cs)/winehq-$(lsb_release -cs).sources
   - apt-get update
   - echo steam steam/question select "I AGREE" | debconf-set-selections
   - echo steam steam/license note '' | debconf-set-selections
   - curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y --install-recommends winehq-stable
   - DEBIAN_FRONTEND=noninteractive apt-get install -y ${aptPackages}
   
   - curl -sL https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz | tar -xzf - -C /usr/local/bin/ s5cmd
