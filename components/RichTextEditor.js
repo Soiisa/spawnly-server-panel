@@ -5,12 +5,17 @@ import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import TextAlign from '@tiptap/extension-text-align';
 import Youtube from '@tiptap/extension-youtube';
-import TextStyle from '@tiptap/extension-text-style'; 
-import FontFamily from '@tiptap/extension-font-family'; 
-import Underline from '@tiptap/extension-underline'; 
-import { Extension } from '@tiptap/core'; 
+import TextStyle from '@tiptap/extension-text-style';
+import FontFamily from '@tiptap/extension-font-family';
+import Underline from '@tiptap/extension-underline';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { Extension } from '@tiptap/core';
 import { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { Callout } from './tiptap/Callout';
 
 // --- CUSTOM EXTENSIONS TO RETAIN PASTE FORMATTING ---
 const FontSize = Extension.create({
@@ -88,6 +93,11 @@ export default function RichTextEditor({ content, onChange }) {
         allowFullscreen: true,
         HTMLAttributes: { class: 'w-full aspect-video rounded-xl shadow-lg my-8 border border-gray-800 bg-black' }
       }),
+      Callout,
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: content,
     immediatelyRender: false,
@@ -96,7 +106,7 @@ export default function RichTextEditor({ content, onChange }) {
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-invert prose-indigo max-w-none focus:outline-none prose-img:shadow-lg prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700',
+        class: 'tiptap-content prose prose-invert prose-indigo max-w-none focus:outline-none prose-img:shadow-lg prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700 prose-h2:mt-10 prose-h2:mb-3 prose-h2:pb-2 prose-h2:border-b prose-h2:border-gray-700 prose-blockquote:not-italic prose-blockquote:border-l-4 prose-blockquote:border-indigo-500 prose-blockquote:bg-gray-900/50 prose-blockquote:rounded-r-lg prose-code:text-indigo-300 prose-code:before:content-none prose-code:after:content-none',
       },
     },
   });
@@ -153,7 +163,26 @@ export default function RichTextEditor({ content, onChange }) {
     }
   }, [editor]);
 
+  const setCallout = useCallback((type) => {
+    if (editor.isActive('callout')) {
+      editor.chain().focus().updateCalloutType(type).run();
+    } else {
+      editor.chain().focus().setCallout(type).run();
+    }
+  }, [editor]);
+
+  const insertTable = useCallback(() => {
+    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+  }, [editor]);
+
   if (!editor) return null;
+
+  const CALLOUT_TYPES = [
+    { type: 'info', label: 'i', title: 'Info callout', color: 'bg-blue-600' },
+    { type: 'tip', label: '✓', title: 'Tip callout', color: 'bg-emerald-600' },
+    { type: 'warning', label: '!', title: 'Warning callout', color: 'bg-amber-600' },
+    { type: 'danger', label: '⛔', title: 'Danger callout', color: 'bg-red-600' },
+  ];
 
   return (
     <div className="flex flex-col h-full w-full bg-[#05070a]">
@@ -207,6 +236,34 @@ export default function RichTextEditor({ content, onChange }) {
           <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={`p-1.5 rounded transition-colors ${editor.isActive('codeBlock') ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`} title="Code"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg></button>
           <button type="button" onClick={() => editor.chain().focus().setHorizontalRule().run()} className="p-1.5 text-gray-300 hover:bg-gray-700 hover:text-white rounded transition-colors" title="Divider"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14" /></svg></button>
         </div>
+        <div className="h-5 w-px bg-gray-700 mx-1"></div>
+
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mr-1 hidden md:inline">Callout</span>
+          {CALLOUT_TYPES.map(c => (
+            <button
+              key={c.type}
+              type="button"
+              onClick={() => setCallout(c.type)}
+              title={c.title}
+              className={`w-6 h-6 flex items-center justify-center text-xs font-bold rounded transition-colors text-white ${c.color} ${editor.isActive('callout', { type: c.type }) ? 'ring-2 ring-white' : 'opacity-70 hover:opacity-100'}`}
+            >
+              {c.label}
+            </button>
+          ))}
+          {editor.isActive('callout') && (
+            <button type="button" onClick={() => editor.chain().focus().unsetCallout().run()} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors ml-1" title="Remove callout">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          )}
+        </div>
+        <div className="h-5 w-px bg-gray-700 mx-1"></div>
+
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={insertTable} className="p-1.5 text-gray-300 hover:bg-gray-700 hover:text-white rounded transition-colors" title="Insert Table">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18M9 4v16" /><rect x="3" y="4" width="18" height="16" rx="1" strokeWidth="2" /></svg>
+          </button>
+        </div>
 
         <div className="flex-1" />
         
@@ -227,6 +284,16 @@ export default function RichTextEditor({ content, onChange }) {
           </div>
         )}
         
+        {editor.isActive('table') && (
+          <div className="flex items-center gap-2 bg-indigo-900/40 px-3 py-1 rounded border border-indigo-700/50 mr-2 animate-fade-in">
+            <button type="button" onClick={() => editor.chain().focus().addRowAfter().run()} className="text-xs px-2 py-1 rounded text-indigo-300 hover:bg-indigo-800" title="Add row below">+ Row</button>
+            <button type="button" onClick={() => editor.chain().focus().addColumnAfter().run()} className="text-xs px-2 py-1 rounded text-indigo-300 hover:bg-indigo-800" title="Add column right">+ Col</button>
+            <button type="button" onClick={() => editor.chain().focus().deleteRow().run()} className="text-xs px-2 py-1 rounded text-indigo-300 hover:bg-indigo-800" title="Delete current row">&minus; Row</button>
+            <button type="button" onClick={() => editor.chain().focus().deleteColumn().run()} className="text-xs px-2 py-1 rounded text-indigo-300 hover:bg-indigo-800" title="Delete current column">&minus; Col</button>
+            <button type="button" onClick={() => editor.chain().focus().deleteTable().run()} className="text-xs px-2 py-1 rounded text-red-300 hover:bg-red-900/50" title="Delete table">Delete</button>
+          </div>
+        )}
+
         <button type="button" onClick={setVideo} className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-md text-gray-300 hover:bg-gray-700 hover:text-white transition-colors border border-transparent hover:border-gray-600" title="Embed YouTube Video">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
           <span className="hidden sm:inline">Video</span>

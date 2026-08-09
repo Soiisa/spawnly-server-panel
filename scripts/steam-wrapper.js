@@ -1,5 +1,5 @@
 // scripts/steam-wrapper.js
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const os = require('os');
 const express = require('express');
 const cors = require('cors');
@@ -32,8 +32,9 @@ if (['tf2'].includes(GAME_TYPE)) maxPlayers = 24;
 
 let playersOnline = '';
 
-let satPlayerMap = {}; 
+let satPlayerMap = {};
 let satActivePlayers = new Set();
+let seenArkGameLogLines = new Set();
 
 // ============================================================================
 // =================== SOURCE RCON PROTOCOL CLIENT ===========================
@@ -175,15 +176,18 @@ const gameConfigs = {
     },
     'cs2': {
         cmd: './game/bin/linuxsteamrt64/cs2',
-        args: ['-dedicated', '+map', 'de_dust2', '+servercfgfile', 'server.cfg', '-maxplayers', '16', '+sv_password', '', '-usercon', '+ip', '0.0.0.0', '+rcon_password', RCON_PASSWORD, '+rcon_port', '27015'],
+        args: ['-dedicated', '+map', 'de_dust2', '+servercfgfile', 'server.cfg', '-maxplayers', '16', '+sv_password', '', '-usercon', '+ip', '0.0.0.0', '+rcon_password', RCON_PASSWORD],
         cwd: '/home/spawnly/server',
-        isReady: (line) => line.includes('GC Connection established') || line.includes('Server is sleeping'),
+        isReady: (line) => line.includes('GC Connection established') || line.includes('Server is sleeping') || line.includes('Server is hibernating'),
         stopSequence: (proc) => {
             sendSourceRcon(27015, 'quit').catch(() => {});
             setTimeout(() => { if (proc) proc.kill('SIGKILL'); }, 2000);
         },
         logFile: null,
-        rconPort: 27015
+        rconPort: 27015,
+        // Nested deps of libserver.so (e.g. libv8.so) are resolved by the OS linker, not
+        // the engine's own loader, so they need LD_LIBRARY_PATH pointed at the lib dirs.
+        extraEnv: { LD_LIBRARY_PATH: '/home/spawnly/server/game/bin/linuxsteamrt64:/home/spawnly/server/bin/linuxsteamrt64' }
     },
     'gmod': {
         cmd: './srcds_run',
@@ -234,12 +238,10 @@ const gameConfigs = {
     'ark_se': {
         cmd: './ShooterGame/Binaries/Linux/ShooterGameServer',
         args: [
-            'TheIsland?listen', 
-            '-server', 
-            '-servergamelog', 
-            '-RCONEnabled=True', 
-            '-RCONPort=32330', 
-            '-ServerAdminPassword=' + RCON_PASSWORD
+            `TheIsland?listen?RCONEnabled=True?RCONPort=32330?ServerAdminPassword=${RCON_PASSWORD}`,
+            '-server',
+            '-log',
+            '-servergamelog'
         ],
         cwd: '/home/spawnly/server',
         isReady: (line) => false, // Handled exclusively by RCON Poller
@@ -247,7 +249,7 @@ const gameConfigs = {
             sendSourceRcon(32330, 'doexit').catch(() => {});
             setTimeout(() => { if (proc) proc.kill('SIGTERM'); }, 3000);
         },
-        logFile: null, // Disabled: EU4 Linux ghost log bug bypass
+        logFile: '/home/spawnly/server/ShooterGame/Saved/Logs/ShooterGame.log',
         rconPort: 32330
     },
     'ark_sa': {
@@ -270,7 +272,7 @@ const gameConfigs = {
         cmd: './ArmaReforgerServer',
         args: ['-config', '/home/spawnly/server/server.json', '-profile', '/home/spawnly/server/profile'],
         cwd: '/home/spawnly/server',
-        isReady: (line) => line.includes('World init time') || line.includes('Game server initialized'),
+        isReady: (line) => line.includes('World init time') || line.includes('Game successfully created.') || line.includes('Direct Join Code'),
         stopSequence: (proc) => proc.kill('SIGINT'),
         logFile: null
     },
@@ -305,10 +307,12 @@ const gameConfigs = {
         logFile: null
     },
     'conan_exiles': {
-        cmd: 'xvfb-run',
-        args: ['-a', 'wine', 'ConanSandboxServer-Win64-Test.exe', '-log'],
+        // Conan Exiles ships a genuine native Linux dedicated server binary - no Wine needed.
+        // Matches the invocation in the official ConanSandboxServer.sh launcher.
+        cmd: './ConanSandbox/Binaries/Linux/ConanSandboxServer-Linux-Shipping',
+        args: ['ConanSandbox', '-log'],
         cwd: '/home/spawnly/server',
-        isReady: (line) => line.includes('Server is running'),
+        isReady: (line) => line.includes('Server is running') || line.includes('IpNetDriver listening on port'),
         stopSequence: (proc) => proc.kill('SIGINT'),
         logFile: null
     },
@@ -565,6 +569,24 @@ const sendUpdate = async (statusOverride = null) => {
                     activePlayers = 0;
                     playersOnline = '';
                 }
+
+                // 3. Pull Live Game Log (tames, deaths, tribe events) - enabled by -servergamelog
+                const gameLog = await sendSourceRcon(config.rconPort, 'GetGameLog');
+                if (gameLog && gameLog.trim() && !gameLog.includes('Server received, But no response!!')) {
+                    // GetGameLog returns the full accumulated log each call, not just new entries,
+                    // so dedupe against what we've already pushed to avoid re-flooding every 2s.
+                    const lines = gameLog.split('\n').map(l => l.trim()).filter(Boolean);
+                    for (const line of lines) {
+                        if (!seenArkGameLogLines.has(line)) {
+                            seenArkGameLogLines.add(line);
+                            logBuffer.push(`[GameLog] ${line}`);
+                        }
+                    }
+                    // Cap memory on long-running sessions
+                    if (seenArkGameLogLines.size > 2000) {
+                        seenArkGameLogLines = new Set(Array.from(seenArkGameLogLines).slice(-1000));
+                    }
+                }
             } catch (e) {
                 // Safely ignore dropped packets during heavy server lag
             }
@@ -610,7 +632,8 @@ function launchGameProcess() {
         const sources64 = [
             '/home/spawnly/server/linux64/steamclient.so',
             '/home/spawnly/server/steamclient.so',
-            '/home/spawnly/Steam/steamapps/common/Steamworks SDK Redist/linux64/steamclient.so'
+            '/home/spawnly/Steam/steamapps/common/Steamworks SDK Redist/linux64/steamclient.so',
+            '/home/spawnly/.local/share/Steam/steamcmd/linux64/steamclient.so'
         ];
         for (const src of sources64) {
             if (fs.existsSync(src)) {
@@ -627,7 +650,8 @@ function launchGameProcess() {
         const sources32 = [
             '/home/spawnly/server/linux32/steamclient.so',
             '/home/spawnly/server/bin/steamclient.so', // TF2 puts it here
-            '/home/spawnly/Steam/steamapps/common/Steamworks SDK Redist/linux32/steamclient.so'
+            '/home/spawnly/Steam/steamapps/common/Steamworks SDK Redist/linux32/steamclient.so',
+            '/home/spawnly/.local/share/Steam/steamcmd/linux32/steamclient.so'
         ];
         for (const src of sources32) {
             if (fs.existsSync(src)) {
@@ -638,6 +662,128 @@ function launchGameProcess() {
         }
     }
     // --- END STEAMWORKS SDK LINKING ---
+
+    // --- START GENERIC WINE PREFIX WARM-UP ---
+    // On a completely fresh wineprefix, the very first `wine <exe>` call under xvfb-run can race
+    // Xvfb's own startup: wineboot's helper processes try to connect to the X display before it's
+    // fully up, wineboot times out waiting for its boot event, and the prefix is left with a
+    // kernel32.dll that fails to load ("could not load kernel32.dll, status c0000135"), which then
+    // kills the Xvfb connection ("X connection to :99 broken"). Running a standalone wineboot pass
+    // first (retrying once) reliably finishes prefix init before the real game exe ever touches it.
+    if (config.cmd === 'xvfb-run' && !fs.existsSync('/home/spawnly/.wine/system.reg')) {
+        logBuffer.push('[System] First boot: initializing Wine prefix...');
+        let wineBooted = false;
+        for (let attempt = 1; attempt <= 2 && !wineBooted; attempt++) {
+            try {
+                execSync('xvfb-run -a wineboot -u', {
+                    env: { ...process.env, HOME: '/home/spawnly' },
+                    stdio: 'ignore',
+                    timeout: 90000
+                });
+                wineBooted = fs.existsSync('/home/spawnly/.wine/system.reg');
+            } catch (e) {
+                logBuffer.push(`[System] Wine prefix init attempt ${attempt} failed, retrying...`);
+            }
+        }
+        logBuffer.push(wineBooted
+            ? '[System] Wine prefix initialized successfully.'
+            : '[System] Warning: Wine prefix initialization may be incomplete.');
+    }
+    // --- END GENERIC WINE PREFIX WARM-UP ---
+
+    // --- START SPACE ENGINEERS PRE-FLIGHT FIXES ---
+    if (GAME_TYPE === 'space_engineers') {
+        logBuffer.push("[Space Engineers] Running pre-flight overrides...");
+
+        // 0. Install Wine Mono into the prefix (one-time). SpaceEngineersDedicated.exe is a
+        // .NET app; without a CLR in the wineprefix it fails to start at all, which then kills
+        // the xvfb-run X display right after ("X connection to :99 broken").
+        const monoMarker = '/home/spawnly/.wine/drive_c/windows/mono';
+        const monoInstaller = '/tmp/wine-mono.msi';
+        if (!fs.existsSync(monoMarker) && fs.existsSync(monoInstaller)) {
+            logBuffer.push('[Space Engineers] Installing Wine Mono runtime (one-time, may take a minute)...');
+            try {
+                execSync(`wine msiexec /i "${monoInstaller}" /qn`, {
+                    cwd: config.cwd,
+                    env: { ...process.env, HOME: '/home/spawnly' },
+                    stdio: 'ignore',
+                    timeout: 120000
+                });
+                logBuffer.push('[Space Engineers] Wine Mono installed successfully.');
+            } catch (e) {
+                logBuffer.push('[Space Engineers] Warning: Wine Mono install failed - server will likely fail to boot.');
+            }
+        }
+
+        // 1. Force the Steam App ID into the working directory
+        fs.writeFileSync(path.join(config.cwd, 'steam_appid.txt'), '244850', 'utf8');
+
+        // 2. Hunt down and copy missing Steam DLLs to the game folder
+        try {
+            const targetDir = path.join(config.cwd, 'DedicatedServer64');
+            if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+            execSync(`find /home/spawnly -name "steamclient64.dll" -exec cp {} ${targetDir} \\;`);
+            execSync(`find /home/spawnly -name "tier0_s64.dll" -exec cp {} ${targetDir} \\;`);
+            execSync(`find /home/spawnly -name "vstdlib_s64.dll" -exec cp {} ${targetDir} \\;`);
+        } catch (err) {
+            logBuffer.push("[Space Engineers] Warning: Could not copy Steam DLLs.");
+        }
+
+        // 3. Auto-Heal the UTF-16 Configuration Bug
+        const dataDir = path.join(config.cwd, 'SpaceEngineers_Data');
+        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+        const configPath = path.join(dataDir, 'SpaceEngineers-Dedicated.cfg');
+        let needsRewrite = true;
+
+        if (fs.existsSync(configPath)) {
+            const content = fs.readFileSync(configPath);
+            // Check for null bytes (0x00) which indicates the game corrupted the file into UTF-16
+            if (content.indexOf(0x00) === -1) {
+                needsRewrite = false; // File is healthy UTF-8, leave it alone!
+            } else {
+                logBuffer.push("[Space Engineers] Corrupted UTF-16 config detected. Nuking and rebuilding...");
+                fs.unlinkSync(configPath);
+            }
+        }
+
+        // 4. Inject a rock-solid default UTF-8 config if missing or corrupted
+        if (needsRewrite) {
+            // NOTE: We use \r\n to force Windows Line Endings so the C# parser doesn't crash
+            const defaultConfig = `<?xml version="1.0"?>
+<MyConfigDedicated xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <SessionSettings>
+    <GameMode>Survival</GameMode>
+    <OnlineMode>PUBLIC</OnlineMode>
+    <MaxPlayers>10</MaxPlayers>
+  </SessionSettings>
+  <LoadWorld>Z:\\home\\spawnly\\server\\Saves\\SpawnlyWorld</LoadWorld>
+  <ServerName>Spawnly SE Server</ServerName>
+  <WorldName>SpawnlyWorld</WorldName>
+  <ServerPort>27016</ServerPort>
+  <ServerIP>0.0.0.0</ServerIP>
+  <IgnoreLastSession>false</IgnoreLastSession>
+</MyConfigDedicated>`.replace(/\n/g, '\r\n');
+
+            fs.writeFileSync(configPath, defaultConfig, 'utf8');
+            logBuffer.push("[Space Engineers] Clean UTF-8 Configuration Injected.");
+        }
+    }
+    // --- END SPACE ENGINEERS PRE-FLIGHT FIXES ---
+
+    // --- START ARK:SE STEAMWORKS APPID FIX ---
+    if (GAME_TYPE === 'ark_se') {
+        // ShooterGameServer calls SteamAPI_Init() using the client AppID (346110), not the
+        // dedicated-server-tool AppID (376030) it was installed under. Without a steam_appid.txt
+        // telling it which app it is, SteamAPI_Init() fails silently, which in turn prevents
+        // RCON from binding and stdout/log output from ever flowing.
+        const appIdPath = path.join(config.cwd, 'steam_appid.txt');
+        if (!fs.existsSync(appIdPath)) {
+            fs.writeFileSync(appIdPath, '346110', 'utf8');
+            logBuffer.push('[Wrapper] Injected steam_appid.txt (346110) for ARK:SE Steamworks init.');
+        }
+    }
+    // --- END ARK:SE STEAMWORKS APPID FIX ---
 
     if (GAME_TYPE === 'rust') {
         const cfgDir = '/home/spawnly/server/server/my_server_identity/cfg';
@@ -817,6 +963,14 @@ is_master = true
     }
     // --- END DON'T STARVE TOGETHER SETUP ---
 
+    // --- START CONAN EXILES PRE-FLIGHT FIX ---
+    if (GAME_TYPE === 'conan_exiles') {
+        // The official ConanSandboxServer.sh launcher chmod +x's the binary itself every run,
+        // since the executable bit doesn't always survive the SteamCMD download. Match that.
+        try { fs.chmodSync(path.join(config.cwd, config.cmd), 0o755); } catch (e) {}
+    }
+    // --- END CONAN EXILES PRE-FLIGHT FIX ---
+
     // --- START DYNAMIC ARGUMENT INJECTION ---
     let launchArgs = [...config.args]; // Make a copy so we don't permanently mutate the base config
     const argsPath = path.join(config.cwd, 'spawnly-args.json');
@@ -848,7 +1002,7 @@ is_master = true
     }
     
     // Spawn the process using the newly combined launchArgs
-    gameProcess = spawn(config.cmd, launchArgs, { cwd: config.cwd, env: { ...process.env, HOME: '/home/spawnly' } });
+    gameProcess = spawn(config.cmd, launchArgs, { cwd: config.cwd, env: { ...process.env, HOME: '/home/spawnly', ...(config.extraEnv || {}) } });
     // --- END DYNAMIC ARGUMENT INJECTION ---
 
     const processLine = (data) => {
@@ -964,19 +1118,43 @@ is_master = true
     gameProcess.stdout.on('data', processLine);
     gameProcess.stderr.on('data', processLine);
 
-    let tailProcess = null;
+    let tailInterval = null;
     if (config.logFile) {
         // Safe directory extraction and creation to prevent ENOENT crashes
         const logDir = path.dirname(config.logFile);
         if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-        
+
         if (!fs.existsSync(config.logFile)) fs.writeFileSync(config.logFile, '');
-        tailProcess = spawn('tail', ['-f', '-n', '0', config.logFile]);
-        tailProcess.stdout.on('data', processLine);
+
+        // Poll-based tail instead of `tail -f`: some engines (e.g. ARK:SE) write their
+        // log via mmap'd I/O, which never fires the inotify events `tail -f` relies on,
+        // so nothing appears until the file is closed at process exit. Polling the file
+        // size/content directly sidesteps inotify entirely.
+        let lastSize = fs.statSync(config.logFile).size;
+        let pendingLine = '';
+        tailInterval = setInterval(() => {
+            fs.stat(config.logFile, (err, stats) => {
+                if (err) return;
+                if (stats.size < lastSize) lastSize = 0; // truncated/rotated
+                if (stats.size === lastSize) return;
+
+                const stream = fs.createReadStream(config.logFile, { start: lastSize, end: stats.size - 1, encoding: 'utf8' });
+                let chunk = '';
+                stream.on('data', (d) => { chunk += d; });
+                stream.on('end', () => {
+                    lastSize = stats.size;
+                    pendingLine += chunk;
+                    const lines = pendingLine.split('\n');
+                    pendingLine = lines.pop();
+                    if (lines.length) processLine(lines.join('\n') + '\n');
+                });
+                stream.on('error', () => {});
+            });
+        }, 1500);
     }
 
     gameProcess.on('close', (code) => {
-        if (tailProcess) tailProcess.kill();
+        if (tailInterval) clearInterval(tailInterval);
         gameProcess = null;
         currentState = 'Stopped';
         
@@ -984,7 +1162,8 @@ is_master = true
         playersOnline = '';
         satPlayerMap = {};
         satActivePlayers.clear();
-        
+        seenArkGameLogLines.clear();
+
         sendUpdate('Stopped');
     });
 }
