@@ -5,17 +5,22 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import UserTable from '../../components/admin/UserTable';
 import ServerTable from '../../components/admin/ServerTable';
+import FleetAuditPanel from '../../components/admin/FleetAuditPanel';
+import GameCatalogPanel from '../../components/admin/GameCatalogPanel';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useTranslation } from 'next-i18next';
-import { 
-  ArrowLeftIcon, 
+import {
+  ArrowLeftIcon,
   ArrowTopRightOnSquareIcon,
   UsersIcon,
   ServerIcon,
   ChatBubbleLeftRightIcon,
   DocumentTextIcon,
   ChartBarIcon,
-  CloudArrowUpIcon // <-- Added Icon
+  CloudArrowUpIcon, // <-- Added Icon
+  BookOpenIcon,
+  ServerStackIcon,
+  CubeIcon
 } from "@heroicons/react/24/outline";
 
 export default function AdminDashboard() {
@@ -122,13 +127,35 @@ export default function AdminDashboard() {
           <button
             onClick={() => setActiveTab('servers')}
             className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-              activeTab === 'servers' 
-                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' 
+              activeTab === 'servers'
+                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
             }`}
           >
             <ServerIcon className="h-4 w-4" />
             Servers
+          </button>
+          <button
+            onClick={() => setActiveTab('fleet')}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+              activeTab === 'fleet'
+                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+          >
+            <ServerStackIcon className="h-4 w-4" />
+            Fleet Audit
+          </button>
+          <button
+            onClick={() => setActiveTab('games')}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+              activeTab === 'games'
+                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+          >
+            <CubeIcon className="h-4 w-4" />
+            Games
           </button>
         </div>
 
@@ -143,12 +170,20 @@ export default function AdminDashboard() {
                 <span className="hidden sm:inline">{updating ? 'Pushing OTA...' : 'Push OTA Update'}</span>
             </button>
 
-            <Link 
-                href="/admin/invoices" 
+            <Link
+                href="/admin/invoices"
                 className="bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
             >
                 <DocumentTextIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">Invoices</span>
+            </Link>
+
+            <Link
+                href="/admin/kb"
+                className="bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 dark:hover:bg-sky-900/50 text-sky-700 dark:text-sky-400 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
+            >
+                <BookOpenIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Knowledge Base</span>
             </Link>
 
             <Link 
@@ -212,8 +247,12 @@ export default function AdminDashboard() {
         <div className="w-full h-[calc(100vh-280px)] min-h-[500px] flex flex-col">
           {activeTab === 'users' ? (
              <UserTable />
-          ) : (
+          ) : activeTab === 'servers' ? (
              <ServerTable />
+          ) : activeTab === 'fleet' ? (
+             <FleetAuditPanel />
+          ) : (
+             <GameCatalogPanel />
           )}
         </div>
 

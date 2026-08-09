@@ -84,10 +84,10 @@ export default function KnowledgeBaseArticle({ article }) {
     year: 'numeric', month: 'long', day: 'numeric' 
   });
 
-  // Configure DOMPurify to allow YouTube iframes and Tiptap styles (text alignment, resizing)
+  // Configure DOMPurify to allow YouTube iframes and Tiptap styles (text alignment, resizing, callouts, tables)
   const cleanContent = DOMPurify.sanitize(article.content, {
     ADD_TAGS: ['iframe'],
-    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'style', 'data-align', 'class']
+    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'style', 'data-align', 'data-callout', 'class', 'colspan', 'rowspan', 'colwidth']
   });
 
   return (
@@ -160,8 +160,20 @@ export default function KnowledgeBaseArticle({ article }) {
 
         {/* Article Content */}
         {/* We use prose prose-invert (Tailwind Typography) to automatically style the Tiptap HTML */}
-        <article 
-          className="prose prose-invert prose-indigo max-w-none prose-img:rounded-xl prose-img:shadow-lg prose-a:text-indigo-400 hover:prose-a:text-indigo-300 prose-headings:text-slate-100 prose-p:text-slate-300 prose-strong:text-white"
+        <article
+          className="tiptap-content prose prose-invert prose-indigo max-w-none
+            prose-img:rounded-xl prose-img:shadow-lg
+            prose-a:text-indigo-400 hover:prose-a:text-indigo-300
+            prose-headings:text-slate-100 prose-headings:font-bold
+            prose-h2:mt-12 prose-h2:mb-4 prose-h2:pb-3 prose-h2:border-b prose-h2:border-slate-800/60 prose-h2:text-2xl
+            prose-h3:mt-8 prose-h3:mb-3 prose-h3:text-xl
+            prose-p:text-slate-300 prose-p:leading-relaxed
+            prose-strong:text-white
+            prose-li:text-slate-300 prose-li:marker:text-indigo-400
+            prose-blockquote:not-italic prose-blockquote:border-l-4 prose-blockquote:border-indigo-500 prose-blockquote:bg-slate-900/50 prose-blockquote:text-slate-300 prose-blockquote:rounded-r-lg prose-blockquote:py-1
+            prose-code:text-indigo-300 prose-code:bg-slate-900 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
+            prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800 prose-pre:rounded-xl prose-pre:shadow-inner
+            prose-hr:border-slate-800"
           dangerouslySetInnerHTML={{ __html: cleanContent }}
         />
 
