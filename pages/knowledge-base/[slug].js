@@ -12,6 +12,9 @@ import Navbar from '../../components/Navbar';
 import ServersHeader from '../../components/ServersHeader';
 import ServersFooter from '../../components/ServersFooter';
 import { getGamesList } from '../../lib/gamesList';
+import { i18n } from '../../next-i18next.config';
+
+const { locales } = i18n;
 
 export default function KnowledgeBaseArticle({ article }) {
   const router = useRouter();
@@ -90,20 +93,37 @@ export default function KnowledgeBaseArticle({ article }) {
     ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'style', 'data-align', 'data-callout', 'class', 'colspan', 'rowspan', 'colwidth']
   });
 
+  const currentLocale = router.locale || 'en';
+  const urlPrefix = currentLocale === 'en' ? '' : `/${currentLocale}`;
+  const canonicalUrl = `https://spawnly.net${urlPrefix}/knowledge-base/${article.slug}`;
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-950 selection:bg-indigo-500/30">
-      
+
       {/* Dynamic SEO Meta Tags */}
       <Head>
         <title>{article.title} | Spawnly Knowledge Base</title>
         <meta name="description" content={metaDescription} />
         <meta name="keywords" content={article.tags?.join(', ') || 'spawnly, game server, guide, tutorial'} />
-        
+        <link rel="canonical" href={canonicalUrl} />
+
+        {/* Hreflang alternates — same slug across every locale, differentiated by
+            the `language` column, matches the alternateRefs logic in server-sitemap.xml.js */}
+        {locales.map((loc) => (
+          <link
+            key={loc}
+            rel="alternate"
+            hrefLang={loc}
+            href={`https://spawnly.net${loc === 'en' ? '' : `/${loc}`}/knowledge-base/${article.slug}`}
+          />
+        ))}
+        <link rel="alternate" hrefLang="x-default" href={`https://spawnly.net/knowledge-base/${article.slug}`} />
+
         {/* Open Graph (For Discord/Twitter/Facebook sharing) */}
         <meta property="og:title" content={`${article.title} | Spawnly`} />
         <meta property="og:description" content={metaDescription} />
         <meta property="og:type" content="article" />
-        <meta property="og:url" content={`https://spawnly.net/knowledge-base/${article.slug}`} />
+        <meta property="og:url" content={canonicalUrl} />
       </Head>
 
       {/* Navigation */}
@@ -199,11 +219,15 @@ export async function getServerSideProps({ params, locale }) {
   const currentLocale = locale ?? 'en';
   const { slug } = params;
 
-  // Fetch the article that matches the slug AND is published
+  // Fetch the article that matches the slug, the current locale, AND is published.
+  // Every language shares the same slug (differentiated only by the `language`
+  // column) — see next-sitemap's server-sitemap.xml.js, which already assumed
+  // this and generates hreflang alternates on that basis.
   const { data: article, error } = await supabase
     .from('kb_articles')
     .select('*')
     .eq('slug', slug)
+    .eq('language', currentLocale)
     .eq('is_published', true)
     .single();
 
