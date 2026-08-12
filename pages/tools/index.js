@@ -91,7 +91,7 @@ export default function ToolsHub() {
         <meta property="og:url" content="https://spawnly.net/tools" />
         <meta property="og:title" content={t('hub.seo.og_title', 'Free Game Server Tools & Calculators | Spawnly')} />
         <meta property="og:description" content={t('hub.seo.og_desc', 'Free utilities for server admins and gamers. Network port checkers, server config generators, Rust raid calculators, and more.')} />
-        <meta property="og:image" content="https://spawnly.net/images/og-tools.jpg" />
+        <meta property="og:image" content="https://spawnly.net/logo.png" />
         
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('hub.seo.og_title', 'Free Game Server Tools & Calculators | Spawnly')} />

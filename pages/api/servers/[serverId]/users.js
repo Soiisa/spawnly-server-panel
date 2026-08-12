@@ -35,9 +35,33 @@ export default async function handler(req, res) {
 
   // POST: Invite User
   if (req.method === 'POST') {
-    const { email, permissions } = req.body;
-    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
-    const targetUser = users.find(u => u.email === email);
+    const { email, username, permissions } = req.body;
+
+    let targetUser = null;
+
+    if (username) {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .ilike('username', username)
+        .maybeSingle();
+
+      if (profile) {
+        const { data } = await supabaseAdmin.auth.admin.getUserById(profile.id);
+        targetUser = data?.user || null;
+      }
+    } else if (email) {
+      const target = email.toLowerCase();
+      const perPage = 1000;
+      for (let page = 1; !targetUser; page++) {
+        const { data, error: listError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+        if (listError) return res.status(500).json({ error: listError.message });
+        targetUser = data.users.find(u => u.email?.toLowerCase() === target) || null;
+        if (data.users.length < perPage) break;
+      }
+    } else {
+      return res.status(400).json({ error: 'Email or username is required.' });
+    }
 
     if (!targetUser) return res.status(404).json({ error: 'User not found. They must register first.' });
     if (targetUser.id === user.id) return res.status(400).json({ error: 'Cannot invite yourself.' });
@@ -57,7 +81,7 @@ export default async function handler(req, res) {
       server_id: serverId,
       user_id: user.id,
       action_type: 'user_invite',
-      details: `Invited user ${email}`,
+      details: `Invited user ${targetUser.email}`,
       created_at: new Date().toISOString()
     });
 

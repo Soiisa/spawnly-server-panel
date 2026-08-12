@@ -1,4 +1,5 @@
 import { useEffect, useState, createContext, useContext } from 'react';
+import Head from 'next/head';
 import { appWithTranslation } from 'next-i18next';
 import { useRouter } from 'next/router';
 import { ThemeProvider, useTheme } from 'next-themes'; // 1. Import next-themes
@@ -31,21 +32,33 @@ function DarkModeBridge({ children }) {
 
 const ALLOWED_PAGES = ['/', '/terms', '/privacy', '/aup', '/imprint', '/refund-policy', '/login'];
 
+// Evaluated once at module load (NEXT_PUBLIC_ vars are inlined at build time),
+// so it's available identically during SSR/SSG and on the client — no need to
+// wait for an effect to know whether the gate even applies.
+const IS_MAINTENANCE_ENABLED = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
+
 function App({ Component, pageProps }) {
   const router = useRouter();
+  // Only pages that actually need the admin-auth check should render behind
+  // a loading spinner. Gating every page here — including on the very first
+  // server-rendered paint — meant crawlers and social-link unfurlers only
+  // ever saw a spinner div: no <title>, no meta description, no content, on
+  // every route, regardless of maintenance mode. Skipping the gate outright
+  // when it doesn't apply lets the real page (and its SEO tags) render in
+  // the initial HTML instead of waiting on a client-side effect.
+  const needsAuthCheck = IS_MAINTENANCE_ENABLED && !ALLOWED_PAGES.includes(router.pathname);
+
   const [isMaintenance, setIsMaintenance] = useState(false);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [loadingAuth, setLoadingAuth] = useState(needsAuthCheck);
 
   useEffect(() => {
-    const checkMaintenanceAndAdmin = async () => {
-      const isMaintenanceEnabled = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
+    if (!needsAuthCheck) {
+      setIsMaintenance(false);
+      setLoadingAuth(false);
+      return;
+    }
 
-      if (!isMaintenanceEnabled || ALLOWED_PAGES.includes(router.pathname)) {
-        setIsMaintenance(false);
-        setLoadingAuth(false);
-        return;
-      }
-
+    const checkAdmin = async () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const user = sessionData?.session?.user;
 
@@ -63,12 +76,15 @@ function App({ Component, pageProps }) {
       setLoadingAuth(false);
     };
 
-    checkMaintenanceAndAdmin();
-  }, [router.pathname]);
+    checkAdmin();
+  }, [needsAuthCheck]);
 
   return (
     // 4. Wrap everything in ThemeProvider
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </Head>
       <DarkModeBridge>
         {loadingAuth ? (
           <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">

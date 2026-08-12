@@ -1,11 +1,11 @@
 // pages/games/index.js
 import React, { useMemo } from 'react';
-import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
+import SEO from '../../components/SEO';
 import { getGamesList } from '../../lib/gamesList';
 
 export default function GamesList() {
@@ -14,10 +14,11 @@ export default function GamesList() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-300 font-sans">
-      <Head>
-        <title>{t('games.seo.title', 'Supported Games | Spawnly')}</title>
-        <meta name="description" content={t('games.seo.description', 'Browse our full catalog of supported dedicated servers including Minecraft, Rust, Palworld, and more.')} />
-      </Head>
+      <SEO
+        title={t('games.seo.title', 'Supported Games | Spawnly')}
+        description={t('games.seo.description', 'Browse our full catalog of supported dedicated servers including Minecraft, Rust, Palworld, and more.')}
+        path="/games"
+      />
 
       <Navbar />
 

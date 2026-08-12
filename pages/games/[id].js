@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
-import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
+import SEO from '../../components/SEO';
 import { getGamesList } from '../../lib/gamesList';
 
 export default function GameDetailPage() {
@@ -26,10 +26,12 @@ export default function GameDetailPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-300 font-sans">
-      <Head>
-        <title>{t('game_detail.meta_title', { game: game.name, defaultValue: `${game.name} Server Hosting | Spawnly` })}</title>
-        <meta name="description" content={t('game_detail.meta_description', { game: game.name, description: game.description, defaultValue: `Premium ${game.name} dedicated server hosting. ${game.description}` })} />
-      </Head>
+      <SEO
+        title={t('game_detail.meta_title', { game: game.name, defaultValue: `${game.name} Server Hosting | Spawnly` })}
+        description={t('game_detail.meta_description', { game: game.name, description: game.description, defaultValue: `Premium ${game.name} dedicated server hosting. ${game.description}` })}
+        path={`/games/${game.id}`}
+        image={game.image ? (game.image.startsWith('http') ? game.image : `https://spawnly.net${game.image}`) : undefined}
+      />
 
       <Navbar />
 

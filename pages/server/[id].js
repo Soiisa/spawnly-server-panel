@@ -823,7 +823,7 @@ export default function ServerDetailPage({ initialServer }) {
               {activeTab === 'mods' && myPerms.mods && (isMinecraft ? <ModsPluginsTab server={server} /> : <ModsPluginsTabSteam server={server} />)}
               {activeTab === 'world' && isMinecraft && myPerms.world && (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                  {isVpsRunning ? (fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating')}</p>) : <div className="text-center py-10 text-gray-500">{t('world.start_to_manage', 'Please start the server to manage worlds.')}</div>}
+                  {fileToken ? <WorldTab server={server} token={fileToken} /> : <p className="text-center text-gray-500 dark:text-gray-400">{t('status.authenticating')}</p>}
                 </div>
               )}
               {activeTab === 'files' && myPerms.files && (

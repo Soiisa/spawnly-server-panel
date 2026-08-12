@@ -1,7 +1,7 @@
 // pages/terms.js
-import Head from "next/head";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import SEO from "../components/SEO";
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
 export default function TermsOfService() {
@@ -9,9 +9,11 @@ export default function TermsOfService() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
-      <Head>
-        <title>Terms of Service | Spawnly</title>
-      </Head>
+      <SEO
+        title="Terms of Service | Spawnly"
+        description="The terms and conditions governing use of Spawnly's game server hosting services."
+        path="/terms"
+      />
       <Navbar />
       <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
