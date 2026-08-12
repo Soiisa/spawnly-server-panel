@@ -157,7 +157,7 @@ export default function WorldTab({ server, token }) {
     setIsLoading(true);
     try {
       const nbtBuffer = await write(levelData, { compression: 'gzip', endian: 'big', name: '' });
-      const response = await fetch(`/api/servers/${server.id}/files?path=world/level.dat`, {
+      const response = await fetch(`/api/servers/${server.id}/file?path=world/level.dat`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
         body: nbtBuffer,

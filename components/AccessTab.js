@@ -23,7 +23,7 @@ export default function AccessTab({ server }) {
   const [loading, setLoading] = useState(true);
   
   // Form State
-  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteIdentifier, setInviteIdentifier] = useState('');
   const [editingUser, setEditingUser] = useState(null); 
   
   const defaultPerms = {
@@ -89,17 +89,20 @@ export default function AccessTab({ server }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const { data: { session } } = await supabase.auth.getSession();
-    
+
     const method = editingUser ? 'PUT' : 'POST';
-    const body = editingUser 
+    const identifier = inviteIdentifier.trim();
+    const body = editingUser
       ? { permissionId: editingUser.id, permissions: perms }
-      : { email: inviteEmail, permissions: perms };
+      : identifier.includes('@')
+        ? { email: identifier, permissions: perms }
+        : { username: identifier, permissions: perms };
 
     const res = await fetch(`/api/servers/${server.id}/users`, {
       method,
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}` 
+        Authorization: `Bearer ${session.access_token}`
       },
       body: JSON.stringify(body)
     });
@@ -108,19 +111,20 @@ export default function AccessTab({ server }) {
       resetForm();
       fetchUsers();
     } else {
-      alert(t('access.operation_failed')); // Translated alert
+      const data = await res.json().catch(() => null);
+      alert(data?.error || t('access.operation_failed'));
     }
   };
 
   const startEdit = (u) => {
     setEditingUser(u);
-    setInviteEmail(u.email);
+    setInviteIdentifier(u.email);
     setPerms({ ...defaultPerms, ...u.permissions });
   };
 
   const resetForm = () => {
     setEditingUser(null);
-    setInviteEmail('');
+    setInviteIdentifier('');
     setPerms(defaultPerms);
   };
 
@@ -163,12 +167,12 @@ export default function AccessTab({ server }) {
         <form onSubmit={handleSubmit} className="mb-8 bg-gray-50 dark:bg-slate-900 p-4 rounded-xl border border-gray-200 dark:border-slate-700">
           <div className="flex gap-4 mb-4">
             <input
-              type="email"
+              type="text"
               required
-              placeholder={t('access.email_placeholder')}
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              disabled={!!editingUser} 
+              placeholder={t('access.identifier_placeholder')}
+              value={inviteIdentifier}
+              onChange={(e) => setInviteIdentifier(e.target.value)}
+              disabled={!!editingUser}
               className="flex-1 rounded-lg border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white disabled:opacity-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none p-2"
             />
             <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-medium transition-colors">
