@@ -417,7 +417,13 @@ export default function ServerDetailPage({ initialServer }) {
     const val = e.target.value === 'personal' ? null : e.target.value;
     setSavingPool(true);
     try {
-        await supabase.from('servers').update({ pool_id: val }).eq('id', server.id);
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/servers/${server.id}/billing`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+          body: JSON.stringify({ action: 'set_pool', poolId: val })
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed to update billing source');
         let newPoolData = null;
         if (val) newPoolData = (await supabase.from('credit_pools').select('*').eq('id', val).single()).data;
         setServer(prev => ({ ...prev, pool_id: val, pool: newPoolData }));
@@ -484,9 +490,15 @@ export default function ServerDetailPage({ initialServer }) {
     if (!getAvailableRamTiers().includes(newRam)) return setError(t('errors.ram_range'));
     setActionLoading(true);
     try {
-      const newHourlyCost = getHourlyCreditCost(newRam);
-      await supabase.from('servers').update({ ram: newRam, cost_per_hour: newHourlyCost }).eq('id', server.id);
-      setServer(prev => ({ ...prev, ram: newRam, cost_per_hour: newHourlyCost })); setEditingRam(false);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/servers/${server.id}/billing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ action: 'set_ram', ram: newRam })
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || t('errors.ram_range'));
+      setServer(prev => ({ ...prev, ram: body.ram, cost_per_hour: body.cost_per_hour })); setEditingRam(false);
     } catch (e) { setError(e.message); } finally { setActionLoading(false); }
   };
   const handleSaveMotd = async () => {
@@ -797,10 +809,10 @@ export default function ServerDetailPage({ initialServer }) {
                     <div className="flex items-center gap-8 mt-auto pt-2">
                         {server.billing_type === 'monthly' ? (
                             <>
-                                <div><p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.flat_monthly_cost')}</p><p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{Math.round((server.cost_per_hour || 0) * 720)} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.credits_mo')}</span></p></div>
+                                <div><p className="text-sm text-gray-500 dark:text-gray-400">{t('billing.flat_monthly_cost')}</p><p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{getMonthlyCreditCost(server.ram)} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('billing.credits_mo')}</span></p></div>
                                 <div className="h-10 w-px bg-gray-200 dark:bg-slate-700"></div>
                                 <div><p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1"><CalendarIcon className="w-3.5 h-3.5" />{t('billing.next_billing')}</p><p className="text-lg font-bold text-gray-900 dark:text-gray-100 pt-0.5">{getNextBillingDate()}</p></div>
-                                {isOwner && !server.pool_id && (<button onClick={() => router.push(`/credits?auto_add=${Math.round((server.cost_per_hour || 0) * 720)}`)} className="ml-auto flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-xl text-sm font-bold border border-indigo-200 dark:border-indigo-800 transition-all"><ArrowPathIcon className="w-4 h-4" />{t('billing.setup_autopay')}</button>)}
+                                {isOwner && !server.pool_id && (<button onClick={() => router.push(`/credits?auto_add=${getMonthlyCreditCost(server.ram)}`)} className="ml-auto flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-xl text-sm font-bold border border-indigo-200 dark:border-indigo-800 transition-all"><ArrowPathIcon className="w-4 h-4" />{t('billing.setup_autopay')}</button>)}
                             </>
                         ) : (
                             <>

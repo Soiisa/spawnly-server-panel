@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { verifyServerAccess } from '../../../../lib/accessControl';
-import { getMonthlyCreditCost, getHetznerType, getHourlyCreditCost } from '../../../../lib/config';
+import { getMonthlyCreditCost, getHetznerType, getServerHourlyRate } from '../../../../lib/config';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -124,7 +124,7 @@ export default async function handler(req, res) {
     
     await supabaseAdmin.from(transactionTable).insert([txPayload]);
 
-    const hourlyCost = getHourlyCreditCost(newRam);
+    const hourlyCost = getServerHourlyRate(newRam, server.billing_type);
     await supabaseAdmin.from('servers').update({
         ram: newRam,
         instance_type: newInstanceType,

@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import AWS from 'aws-sdk';
 import crypto from 'crypto';
-import { GAME_REGISTRY, getHetznerType } from '../../../lib/config';
+import { GAME_REGISTRY, getHetznerType, getServerHourlyRate } from '../../../lib/config';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -107,7 +107,7 @@ export default async function handler(req, res) {
   const authenticatedUserId = user.id;
 
   // Set default location to EU
-  let { name, game = 'minecraft', software, version, ram = 4, costPerHour = 0, subdomain, billing_type = 'hourly', location = 'EU' } = req.body;
+  let { name, game = 'minecraft', software, version, ram = 4, subdomain, billing_type = 'hourly', location = 'EU' } = req.body;
   
   if (!name) return res.status(400).json({ error: 'Missing required fields: name' });
 
@@ -160,7 +160,7 @@ export default async function handler(req, res) {
       version: finalVersion,
       ram,
       status: 'Stopped',
-      cost_per_hour: costPerHour,
+      cost_per_hour: getServerHourlyRate(ram, finalBillingType),
       hetzner_id: null,
       ipv4: null,
       subdomain: finalSubdomain,

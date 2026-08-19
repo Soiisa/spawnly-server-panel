@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { getMonthlyCreditCost } from '../../../lib/config';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -172,7 +173,9 @@ export default async function handler(req, res) {
           const daysSinceBilled = (now - lastBilled) / (1000 * 60 * 60 * 24);
 
           if (daysSinceBilled >= 30) {
-              const monthlyCost = Math.round(server.cost_per_hour * 720);
+              // Priced straight off the RAM tier so a bad cost_per_hour can never
+              // inflate the fee (PRICING_MATRIX is the single source of truth).
+              const monthlyCost = getMonthlyCreditCost(Number(server.ram || 4));
               const desc = `Monthly Reserved Fee: Server ${server.id}`;
               
               try {

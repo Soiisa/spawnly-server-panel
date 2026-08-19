@@ -5,7 +5,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
 import { verifyServerAccess } from '../../../lib/accessControl'; 
-import { getMonthlyCreditCost, getHourlyCreditCost, getHetznerType } from '../../../lib/config';
+import { getMonthlyCreditCost, getServerHourlyRate, getHetznerType } from '../../../lib/config';
 import { logEventAsync, EVENTS } from '../../../lib/serverAnalytics';
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
@@ -277,7 +277,7 @@ async function provisionSteamServer(serverRow, version, ssh_keys, res) {
 
         const isFirstTimeMonthly = serverRow.billing_type === 'monthly' && !serverRow.last_billed_at;
         const monthlyCost = isFirstTimeMonthly ? getMonthlyCreditCost(serverRamGb) : 0;
-        const hourlyCost = serverRow.billing_type === 'monthly' ? getHourlyCreditCost(serverRamGb) : serverRamGb;
+        const hourlyCost = getServerHourlyRate(serverRamGb, serverRow.billing_type);
 
         let requiredCredits = isFirstTimeMonthly ? monthlyCost : 0.1;
 
@@ -983,7 +983,7 @@ async function provisionServer(serverRow, version, ssh_keys, res) {
 
     const isFirstTimeMonthly = serverRow.billing_type === 'monthly' && !serverRow.last_billed_at;
     const monthlyCost = isFirstTimeMonthly ? getMonthlyCreditCost(serverRam) : 0;
-    const hourlyCost = serverRow.billing_type === 'monthly' ? getHourlyCreditCost(serverRam) : serverRam;
+    const hourlyCost = getServerHourlyRate(serverRam, serverRow.billing_type);
 
     let chargedFrom = null;
     if (isFirstTimeMonthly) {
