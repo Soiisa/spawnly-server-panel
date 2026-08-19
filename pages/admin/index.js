@@ -17,6 +17,7 @@ import {
   ChatBubbleLeftRightIcon,
   DocumentTextIcon,
   ChartBarIcon,
+  FunnelIcon,
   CloudArrowUpIcon, // <-- Added Icon
   BookOpenIcon,
   ServerStackIcon,
@@ -194,12 +195,20 @@ export default function AdminDashboard() {
                 <span className="hidden sm:inline">Support</span>
             </Link>
 
-            <Link 
-                href="/admin/reports" 
+            <Link
+                href="/admin/reports"
                 className="bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
             >
                 <ChartBarIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">Reports</span>
+            </Link>
+
+            <Link
+                href="/admin/funnel"
+                className="bg-violet-100 dark:bg-violet-900/30 hover:bg-violet-200 dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-400 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
+            >
+                <FunnelIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Funnel</span>
             </Link>
 
             <Link 

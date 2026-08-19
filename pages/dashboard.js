@@ -25,6 +25,7 @@ import {
 } from '@heroicons/react/24/outline';
 // Import the central config
 import { GAME_REGISTRY } from "../lib/config";
+import { track, EVENTS } from "../lib/analytics";
 // --- Helper for Displaying Software/Version ---
 const getDisplayInfo = (server, t) => {
   if (!server) return { software: t('software.unknown'), version: t('software.unknown') };
@@ -89,10 +90,18 @@ export default function Dashboard() {
         if (profile) {
             setCredits(profile.credits || 0);
         }
+        // The single most important funnel row: how many credits does someone
+        // actually have when they land here, and have they got a server yet?
+        track(EVENTS.DASHBOARD_VIEWED, {
+          credits: Number(profile?.credits || 0),
+          has_credits: Number(profile?.credits || 0) > 0,
+          tutorial_completed: !!profile?.tutorial_completed,
+        });
         // --- Verify Username Exists ---
         const hasUsername = data.session.user.user_metadata?.username || profile?.username;
         if (!hasUsername) {
             setShowUsernameModal(true);
+            track(EVENTS.USERNAME_PROMPT_SHOWN, {});
             // Delay the tour if they also need to complete it
             if (profile && !profile.tutorial_completed) {
                 setTourPending(true);
@@ -282,6 +291,15 @@ export default function Dashboard() {
       setSavingUsername(false);
     }
   };
+  const openCreateModal = (source) => {
+    track(EVENTS.CREATE_MODAL_OPENED, {
+      source,
+      server_count: servers.length,
+      credits: Number(credits),
+      has_credits: Number(credits) > 0,
+    });
+    setShowModal(true);
+  };
   const handleCreateServer = async (serverData) => {
     if (!user) return;
     const cost = parseFloat(serverData.costPerHour);
@@ -305,25 +323,36 @@ export default function Dashboard() {
     };
     setServers((prev) => [optimisticServer, ...prev]);
     setShowModal(false);
+    const analyticsBase = {
+      game: serverData.game,
+      billing_type: serverData.billing_type,
+      ram: serverData.ram,
+      location: serverData.location,
+      credits: Number(credits),
+      is_first_server: servers.length === 0,
+    };
+    track(EVENTS.CREATE_SERVER_SUBMITTED, analyticsBase);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
       const token = session.access_token;
       const resp = await fetch('/api/servers/create', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ ...serverData, userId: user.id }),
       });
       const json = await resp.json();
       if (!resp.ok) throw new Error(json.error || 'Failed to create');
       const newServerId = json.server?.id;
+      track(EVENTS.CREATE_SERVER_SUCCEEDED, { ...analyticsBase, server_id: newServerId });
       if (newServerId) router.push(`/server/${newServerId}`);
     } catch (err) {
       setServers((prev) => prev.filter((s) => s.id !== tempServerId));
-      setError(`${t('messages.error_create')}: ${err.message}`); 
+      setError(`${t('messages.error_create')}: ${err.message}`);
+      track(EVENTS.CREATE_SERVER_FAILED, { ...analyticsBase, reason: err.message });
     }
   };
   const handleDeleteServer = async (serverId) => {
@@ -341,12 +370,35 @@ export default function Dashboard() {
         body: JSON.stringify({ serverId, action: 'delete' }),
       });
       setServers(prev => prev.filter(s => s.id !== serverId));
+      const deleted = servers.find(s => s.id === serverId);
+      track(EVENTS.SERVER_DELETED, {
+        server_id: serverId,
+        game: deleted?.game,
+        billing_type: deleted?.billing_type,
+        // Was it ever actually started? Deletes of never-provisioned servers
+        // are the churn signal we care about.
+        was_provisioned: !!deleted?.hetzner_id,
+        age_minutes: deleted?.created_at
+          ? Math.round((Date.now() - new Date(deleted.created_at).getTime()) / 60000)
+          : undefined,
+      });
     } catch (err) {
-      setError(t('messages.error_delete')); 
+      setError(t('messages.error_delete'));
     }
   };
   const handleStartServer = async (server) => {
     const isProvisioning = !server.hetzner_id;
+    const startProps = {
+      server_id: server.id,
+      game: server.game,
+      billing_type: server.billing_type,
+      ram: server.ram,
+      credits: Number(credits),
+      // First start = full Hetzner provision, which is where the credit check
+      // and the long install live. Later starts are just a boot.
+      is_first_provision: isProvisioning,
+    };
+    track(EVENTS.SERVER_START_CLICKED, startProps);
     // Optimistic UI lock
     setServers(prev => prev.map(s => s.id === server.id ? { 
         ...s, 
@@ -354,6 +406,7 @@ export default function Dashboard() {
         game_status: isProvisioning ? 'Installing' : 'Starting',
         isLocalProvisioning: isProvisioning 
     } : s));
+    let failureTracked = false;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
@@ -368,9 +421,30 @@ export default function Dashboard() {
         },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        // These routes answer with { error }, so pull the message out instead
+        // of throwing the raw JSON string at the user (and at analytics).
+        const raw = await res.text();
+        let reason = raw;
+        try { reason = JSON.parse(raw)?.error || raw; } catch (e) {}
+        track(EVENTS.SERVER_START_FAILED, {
+          ...startProps,
+          status_code: res.status,
+          reason: reason || `HTTP ${res.status}`,
+          // 402 is the credit wall — the prime suspect for "created but never
+          // started".
+          is_credit_wall: res.status === 402,
+        });
+        failureTracked = true;
+        throw new Error(reason || `HTTP ${res.status}`);
+      }
+      track(EVENTS.SERVER_START_ACCEPTED, startProps);
     } catch (err) {
-      setError(`${t('messages.error_start')}: ${err.message}`); 
+      // Network drop / expired session never reached the HTTP branch above.
+      if (!failureTracked) {
+        track(EVENTS.SERVER_START_FAILED, { ...startProps, reason: err.message, status_code: 0 });
+      }
+      setError(`${t('messages.error_start')}: ${err.message}`);
       setServers(prev => prev.map(s => s.id === server.id ? { ...s, isLocalProvisioning: false } : s));
       // Rollback on error (fetchServers replaces rows fully, which also
       // drops the non-DB isLocalProvisioning field — this is the real fix
@@ -505,7 +579,7 @@ export default function Dashboard() {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('headers.your_servers')}</h2> 
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => openCreateModal('header_button')}
             className="tour-create-server flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-medium shadow-sm transition-all hover:-translate-y-0.5"
           >
             <PlusIcon className="w-5 h-5" />
@@ -521,7 +595,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">{t('empty_state.title')}</h3> 
             <p className="text-gray-500 dark:text-gray-400 mt-1 mb-6">{t('empty_state.description')}</p> 
-            <button onClick={() => setShowModal(true)} className="text-indigo-600 font-medium hover:underline">{t('empty_state.button')} &rarr;</button> 
+            <button onClick={() => openCreateModal('empty_state')} className="text-indigo-600 font-medium hover:underline">{t('empty_state.button')} &rarr;</button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -588,10 +662,16 @@ export default function Dashboard() {
                       <p className="font-semibold text-gray-900 dark:text-gray-100">{server.ram} {t('units.gb')}</p>
                     </div>
                     <div>
-                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.address')}</p> 
+                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.address')}</p>
                       <p className="font-mono text-gray-700 dark:text-gray-300 truncate" title={`${server.name}.spawnly.net`}>{server.name}.spawnly.net</p>
                     </div>
                   </div>
+                  {isGameRunning && server.ipv4 && (
+                    <div className="mt-3 text-sm">
+                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase font-medium">{t('server_card.direct_ip', 'Direct IP')}</p>
+                      <p className="font-mono text-gray-700 dark:text-gray-300 truncate" title={t('server_card.direct_ip_hint', "Use this if the hostname isn't connecting yet")}>{server.ipv4}</p>
+                    </div>
+                  )}
                 </div>
                 <div className="p-4 bg-gray-50 dark:bg-slate-700 flex items-center gap-2 mt-auto">
                   {isGameStopped ? (

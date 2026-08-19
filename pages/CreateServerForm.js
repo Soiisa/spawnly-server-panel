@@ -1,6 +1,6 @@
 // pages/CreateServerForm.js
-import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabaseClient"; 
+import { useState, useEffect, useRef } from "react";
+import { supabase } from "../lib/supabaseClient";
 import { useTranslation } from "next-i18next"; 
 import { GAME_REGISTRY, getAvailableRamTiers, getMonthlyCreditCost } from "../lib/config";
 import { 
@@ -13,6 +13,7 @@ import {
   CurrencyDollarIcon
 } from "@heroicons/react/24/outline";
 import { CheckCircleIcon as CheckCircleIconSolid } from "@heroicons/react/24/solid";
+import { track, EVENTS } from "../lib/analytics";
 
 export default function CreateServerForm({ onClose, onCreate, credits }) {
   const { t } = useTranslation('create_server'); 
@@ -30,6 +31,33 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
   const [userId, setUserId] = useState(null);
 
   const monthlyTiers = getAvailableRamTiers();
+
+  // Abandonment tracking. A ref (not state) so the unmount cleanup below reads
+  // the values as they were at close time without re-running the effect on
+  // every keystroke.
+  const openedAtRef = useRef(Date.now());
+  const submittedRef = useRef(false);
+  const formStateRef = useRef({});
+  formStateRef.current = { name, game, billingType, ram, location, nameError, credits };
+
+  useEffect(() => {
+    return () => {
+      if (submittedRef.current) return;
+      const s = formStateRef.current;
+      track(EVENTS.CREATE_MODAL_ABANDONED, {
+        seconds_open: Math.round((Date.now() - openedAtRef.current) / 1000),
+        game: s.game,
+        billing_type: s.billingType,
+        ram: s.ram,
+        location: s.location,
+        // Distinguishes "closed immediately" from "filled it in and gave up",
+        // and shows whether a validation error was the last thing on screen.
+        typed_name: !!s.name?.trim(),
+        name_error: s.nameError || undefined,
+        credits: Number(s.credits),
+      });
+    };
+  }, []);
 
   const estimatedCost = billingType === 'hourly' 
     ? ram 
@@ -141,6 +169,7 @@ export default function CreateServerForm({ onClose, onCreate, credits }) {
     validateName(name);
     if (!name.trim() || nameError) return;
 
+    submittedRef.current = true;
     setLoading(true);
 
     const gameConfig = GAME_REGISTRY[game] || GAME_REGISTRY.minecraft;

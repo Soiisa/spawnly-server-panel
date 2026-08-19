@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient';
 import '../styles/globals.css';
 import CookieBanner from '../components/CookieBanner';
 import SupportWidget from '../components/SupportWidget';
+import { trackPageView } from '../lib/analytics';
 
 // 2. Keep the existing context and hook so other components don't crash
 export const DarkModeContext = createContext();
@@ -50,6 +51,15 @@ function App({ Component, pageProps }) {
 
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(needsAuthCheck);
+
+  // First-party pageviews: one for the initial load, then one per client-side
+  // route change (the effect body doesn't re-run on Next's shallow nav).
+  useEffect(() => {
+    trackPageView(router.asPath);
+    const onRouteChange = (url) => trackPageView(url);
+    router.events.on('routeChangeComplete', onRouteChange);
+    return () => router.events.off('routeChangeComplete', onRouteChange);
+  }, [router.events]);
 
   useEffect(() => {
     if (!needsAuthCheck) {

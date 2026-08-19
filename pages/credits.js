@@ -21,7 +21,8 @@ import {
   PencilIcon
 } from '@heroicons/react/24/outline';
 import { useTranslation } from "next-i18next"; 
-import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { track, flushAnalytics, EVENTS } from "../lib/analytics";
 
 // --- STRIPE IMPORTS ---
 import { loadStripe } from "@stripe/stripe-js";
@@ -219,9 +220,18 @@ export default function CreditsPage() {
         setRecurringAmount(currentRecurring);
         setSubscriptionId(currentSubId);
 
+        // Where did they arrive from? ?auto_add means they were bounced here
+        // by an "out of credits" prompt rather than choosing to top up.
+        track(EVENTS.CREDITS_VIEWED, {
+          credits: Number(profile?.credits || 0),
+          has_subscription: !!currentSubId,
+          from_auto_add: !!router.query.auto_add,
+        });
+
         // Logic for handling ?auto_add and ?payment_success
         let urlCleaned = false;
         if (router.query.payment_success) {
+            track(EVENTS.TOPUP_COMPLETED, { flow: 'stripe_redirect' });
             urlCleaned = true;
         }
 
@@ -277,7 +287,8 @@ export default function CreditsPage() {
   const handleInitiatePayment = async () => {
     if (depositAmount < 3 || depositAmount > 50) return;
     if (!agreedToRefundWaiver) return;
-    
+
+    track(EVENTS.TOPUP_STARTED, { flow: 'one_time', amount_eur: depositAmount });
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -302,6 +313,7 @@ export default function CreditsPage() {
 
     } catch (err) {
       console.error("Payment Init Error:", err);
+      track(EVENTS.TOPUP_FAILED, { flow: 'one_time', amount_eur: depositAmount, reason: err.message });
       alert(t('errors.payment_init_failed', { defaultValue: 'Payment initialization failed' }) + ": " + err.message);
     }
   };
@@ -310,6 +322,7 @@ export default function CreditsPage() {
   const handleSubscribe = async () => {
     if (selectedSubAmount < 5 || selectedSubAmount > 200) return;
     setSubCheckoutLoading(true);
+    track(EVENTS.TOPUP_STARTED, { flow: 'subscription', amount_eur: selectedSubAmount });
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -321,11 +334,13 @@ export default function CreditsPage() {
       
       const data = await res.json();
       if (data.url) {
-        window.location.href = data.url; 
+        flushAnalytics(); // full-page redirect to Stripe follows
+        window.location.href = data.url;
       } else {
         throw new Error(data.error || t('errors.sub_create_failed', { defaultValue: 'Failed to create subscription session' }));
       }
     } catch (e) {
+      track(EVENTS.TOPUP_FAILED, { flow: 'subscription', amount_eur: selectedSubAmount, reason: e.message });
       alert(e.message);
       setSubCheckoutLoading(false);
     }

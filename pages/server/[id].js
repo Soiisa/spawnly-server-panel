@@ -212,6 +212,7 @@ export default function ServerDetailPage({ initialServer }) {
   const [autoStopCountdown, setAutoStopCountdown] = useState(null);
   const [savingAutoStop, setSavingAutoStop] = useState(false);
   const [copiedIp, setCopiedIp] = useState(false);
+  const [copiedDirectIp, setCopiedDirectIp] = useState(false);
   const [isEditingMotd, setIsEditingMotd] = useState(false);
   const [motdText, setMotdText] = useState(initialServer?.motd || '');
   const [savingMotd, setSavingMotd] = useState(false);
@@ -382,6 +383,11 @@ export default function ServerDetailPage({ initialServer }) {
     if (!server?.name) return;
     navigator.clipboard.writeText(`${server.name}.spawnly.net`);
     setCopiedIp(true); setTimeout(() => setCopiedIp(false), 2000);
+  };
+  const handleCopyDirectIp = () => {
+    if (!server?.ipv4) return;
+    navigator.clipboard.writeText(server.ipv4);
+    setCopiedDirectIp(true); setTimeout(() => setCopiedDirectIp(false), 2000);
   };
   const handleSoftwareChange = (newConfig) => setServer(prev => ({ ...prev, ...newConfig }));
   const handleAutoStopChange = async (e) => {
@@ -661,6 +667,16 @@ export default function ServerDetailPage({ initialServer }) {
                       <p className="text-xl font-mono font-bold text-gray-900 dark:text-gray-100 break-all">{server.name}.spawnly.net</p>
                       <p className="text-xs text-indigo-600 mt-2 font-medium opacity-0 group-hover:opacity-100 transition-opacity">{copiedIp ? t('actions.copied') : t('actions.copy_ip')}</p>
                     </div>
+                    {isVpsRunning && server.ipv4 && (
+                      <div onClick={handleCopyDirectIp} className="group cursor-pointer bg-gray-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 border border-gray-200 dark:border-slate-600 hover:border-indigo-200 dark:hover:border-indigo-600 rounded-xl p-3 text-center transition-all mt-2">
+                        <p className="text-xs text-gray-500 dark:text-gray-300 mb-1">{t('connection.direct_ip')}</p>
+                        <p className="text-base font-mono font-bold text-gray-900 dark:text-gray-100 break-all">{server.ipv4}</p>
+                        <p className="text-[11px] text-indigo-600 mt-1 font-medium opacity-0 group-hover:opacity-100 transition-opacity">{copiedDirectIp ? t('actions.copied') : t('actions.copy_ip')}</p>
+                      </div>
+                    )}
+                    {isVpsRunning && server.ipv4 && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 px-1">{t('connection.direct_ip_hint')}</p>
+                    )}
                   </div>
                   <div className="mt-6 pt-6 border-t border-gray-100 dark:border-slate-700">
                     <div className="flex justify-between items-center mb-2"><span className="text-sm text-gray-600 dark:text-gray-300">{isMinecraft ? t('connection.software') : t('connection.game', 'Game')}</span><span className="text-sm font-medium text-gray-900 dark:text-gray-100 capitalize truncate max-w-[150px] text-right" title={isMinecraft ? displaySoftware : server.game}>{isMinecraft ? displaySoftware : server.game}</span></div>

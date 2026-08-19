@@ -7,7 +7,8 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { EnvelopeIcon, LockClosedIcon, UserIcon } from "@heroicons/react/24/outline"; 
 import { useTranslation, Trans } from "next-i18next"; 
-import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; 
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { track, EVENTS } from "../lib/analytics";
 
 export default function Register() {
   const { t } = useTranslation('auth'); 
@@ -22,6 +23,7 @@ export default function Register() {
     e.preventDefault();
     setBusy(true);
     setMessage("");
+    track(EVENTS.SIGNUP_STARTED, { method: 'email' });
 
     // --- NEW: Check if username is already taken to avoid duplicate names
     const { data: existingUser } = await supabase
@@ -32,6 +34,7 @@ export default function Register() {
 
     if (existingUser) {
       setMessage(t('username_taken', 'This username is already taken. Please choose another.'));
+      track(EVENTS.SIGNUP_FAILED, { method: 'email', reason: 'username_taken' });
       setBusy(false);
       return;
     }
@@ -50,20 +53,32 @@ export default function Register() {
 
     if (error) {
       setMessage(error.message);
+      track(EVENTS.SIGNUP_FAILED, { method: 'email', reason: error.message });
     } else {
-      setMessage(t('success_check_email')); 
+      setMessage(t('success_check_email'));
+      // Email signups still need confirmation, so this is "account created",
+      // not "account usable" — the gap between this and login_completed is
+      // exactly the email-confirmation drop-off.
+      track(EVENTS.SIGNUP_COMPLETED, {
+        method: 'email',
+        needs_email_confirmation: !data?.session,
+      });
       setTimeout(() => router.push("/login"), 3000);
     }
   };
 
   const handleGoogleRegister = async () => {
+    track(EVENTS.SIGNUP_STARTED, { method: 'google' });
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/dashboard`,
       },
     });
-    if (error) setMessage(error.message);
+    if (error) {
+      setMessage(error.message);
+      track(EVENTS.SIGNUP_FAILED, { method: 'google', reason: error.message });
+    }
   };
 
   return (

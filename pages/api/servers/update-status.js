@@ -1,5 +1,6 @@
 // pages/api/servers/update-status.js
 import { createClient } from '@supabase/supabase-js';
+import { logEventAsync, EVENTS } from '../../../lib/serverAnalytics';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN;
@@ -181,6 +182,23 @@ export default async function handler(req, res) {
     if (nextStatus === 'Running') {
       if (!server.running_since) {
         updates.running_since = now.toISOString();
+        // Transition into Running — the last step of the activation funnel.
+        // Guarded by !running_since so a heartbeat every few seconds doesn't
+        // log thousands of duplicates.
+        logEventAsync(EVENTS.SERVER_RUNNING, {
+          userId: server.user_id,
+          props: {
+            server_id: serverId,
+            game: server.game,
+            billing_type: server.billing_type,
+            ram: server.ram,
+            is_first_run: !server.last_billed_at,
+            // How long from clicking start to actually playable.
+            seconds_to_running: server.started_at
+              ? Math.max(0, Math.floor((now - new Date(server.started_at)) / 1000))
+              : undefined,
+          },
+        });
         if (!server.last_billed_at) updates.last_billed_at = now.toISOString();
         if (server.runtime_accumulated_seconds == null) updates.runtime_accumulated_seconds = 0;
       }

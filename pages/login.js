@@ -8,6 +8,7 @@ import Footer from "../components/Footer";
 import { EnvelopeIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import { useTranslation } from "next-i18next"; // <--- IMPORTED
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations'; // <--- IMPORTED
+import { track, flushAnalytics, EVENTS } from "../lib/analytics";
 
 export default function Login() {
   const { t } = useTranslation('auth'); // <--- INITIALIZED
@@ -29,20 +30,30 @@ export default function Login() {
 
     if (error) {
       setMessage(error.message);
+      // "Email not confirmed" showing up here in volume means the confirmation
+      // mail is the bottleneck, not the form.
+      track(EVENTS.LOGIN_FAILED, { method: 'email', reason: error.message });
       setBusy(false);
     } else {
+      track(EVENTS.LOGIN_COMPLETED, { method: 'email' });
       router.push("/dashboard");
     }
   };
 
   const handleGoogleLogin = async () => {
+    // Full page redirect follows, so push whatever is queued out now.
+    track(EVENTS.LOGIN_COMPLETED, { method: 'google', pending_redirect: true });
+    flushAnalytics();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/dashboard`,
       },
     });
-    if (error) setMessage(error.message);
+    if (error) {
+      setMessage(error.message);
+      track(EVENTS.LOGIN_FAILED, { method: 'google', reason: error.message });
+    }
   };
 
   return (

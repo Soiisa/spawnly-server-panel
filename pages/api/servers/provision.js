@@ -5,7 +5,8 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import AWS from 'aws-sdk';
 import { verifyServerAccess } from '../../../lib/accessControl'; 
-import { getMonthlyCreditCost, getHourlyCreditCost, getHetznerType } from '../../../lib/config'; 
+import { getMonthlyCreditCost, getHourlyCreditCost, getHetznerType } from '../../../lib/config';
+import { logEventAsync, EVENTS } from '../../../lib/serverAnalytics';
 
 const HETZNER_API_BASE = 'https://api.hetzner.cloud/v1';
 const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN;
@@ -287,6 +288,20 @@ async function provisionSteamServer(serverRow, version, ssh_keys, res) {
         const currentBalance = balanceTarget.data?.balance || balanceTarget.data?.credits || 0;
 
         if (currentBalance < requiredCredits) {
+            logEventAsync(EVENTS.SERVER_START_FAILED, {
+              userId: serverRow.user_id,
+              props: {
+                server_id: serverRow.id,
+                game: gameType,
+                billing_type: serverRow.billing_type,
+                ram: serverRamGb,
+                reason: 'insufficient_credits',
+                is_credit_wall: true,
+                required_credits: requiredCredits,
+                available_credits: currentBalance,
+                balance_is_zero: currentBalance === 0,
+              },
+            });
             return res.status(402).json({ error: isFirstTimeMonthly ? 'Insufficient credits for the first month. Please top up.' : 'Insufficient credits' });
         }
 
@@ -1673,6 +1688,23 @@ runcmd:
             friendlyError = `Server creation failed: ${rawError}`;
         }
 
+        // Infrastructure-side failures (usually Hetzner capacity). Separated
+        // from the credit wall so the funnel can tell "we said no" apart from
+        // "the cloud said no".
+        logEventAsync(EVENTS.SERVER_PROVISION_FAILED, {
+          userId: serverRow.user_id,
+          props: {
+            server_id: serverRow.id,
+            game: 'minecraft',
+            billing_type: serverRow.billing_type,
+            ram: serverRam,
+            server_type: serverType,
+            reason: 'hetzner_create_failed',
+            is_capacity: friendlyError !== rawError,
+            detail: rawError,
+          },
+        });
+
         return res.status(400).json({ error: 'Provisioning Failed', detail: friendlyError });
     }
 
@@ -1770,7 +1802,25 @@ export default async function handler(req, res) {
   }
 
   const balanceTarget = serverRow.pool_id ? await supabaseAdmin.from('credit_pools').select('balance').eq('id', serverRow.pool_id).single() : await supabaseAdmin.from('profiles').select('credits').eq('id', serverRow.user_id).single();
-  if ((balanceTarget.data?.balance || balanceTarget.data?.credits || 0) < requiredCredits) {
+  const availableCredits = balanceTarget.data?.balance || balanceTarget.data?.credits || 0;
+  if (availableCredits < requiredCredits) {
+      logEventAsync(EVENTS.SERVER_START_FAILED, {
+        userId: serverRow.user_id,
+        props: {
+          server_id: serverId,
+          game: 'minecraft',
+          billing_type: serverRow.billing_type,
+          ram: serverRamGb,
+          reason: 'insufficient_credits',
+          is_credit_wall: true,
+          required_credits: requiredCredits,
+          available_credits: availableCredits,
+          // A brand-new account sitting on exactly 0 is a different story from
+          // someone who burned through a top-up.
+          balance_is_zero: availableCredits === 0,
+          action_source: actionSource || 'USER',
+        },
+      });
       return res.status(402).json({ error: isFirstTimeMonthly ? 'Insufficient credits for the first month. Please top up.' : 'Insufficient credits' });
   }
 
