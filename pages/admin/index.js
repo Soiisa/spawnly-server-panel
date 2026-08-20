@@ -7,6 +7,7 @@ import UserTable from '../../components/admin/UserTable';
 import ServerTable from '../../components/admin/ServerTable';
 import FleetAuditPanel from '../../components/admin/FleetAuditPanel';
 import GameCatalogPanel from '../../components/admin/GameCatalogPanel';
+import PartnersPanel from '../../components/admin/PartnersPanel';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import { useTranslation } from 'next-i18next';
 import {
@@ -21,7 +22,8 @@ import {
   CloudArrowUpIcon, // <-- Added Icon
   BookOpenIcon,
   ServerStackIcon,
-  CubeIcon
+  CubeIcon,
+  TicketIcon
 } from "@heroicons/react/24/outline";
 
 export default function AdminDashboard() {
@@ -158,6 +160,17 @@ export default function AdminDashboard() {
             <CubeIcon className="h-4 w-4" />
             Games
           </button>
+          <button
+            onClick={() => setActiveTab('partners')}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+              activeTab === 'partners'
+                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+          >
+            <TicketIcon className="h-4 w-4" />
+            Partners
+          </button>
         </div>
 
         <div className="flex items-center gap-3">
@@ -260,6 +273,8 @@ export default function AdminDashboard() {
              <ServerTable />
           ) : activeTab === 'fleet' ? (
              <FleetAuditPanel />
+          ) : activeTab === 'partners' ? (
+             <div className="overflow-y-auto pr-1"><PartnersPanel /></div>
           ) : (
              <GameCatalogPanel />
           )}
